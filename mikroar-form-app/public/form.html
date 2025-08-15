@@ -1,61 +1,24 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="tr">
 <head>
-<meta charset="UTF-8">
-<title>Anket</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Anket</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f6f7fb;margin:0}
+    .wrap{max-width:860px;margin:40px auto;background:#fff;padding:28px;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.06)}
+    .q{margin:18px 0}.q h3{margin:0 0 8px}
+    .opt{display:block;margin:6px 0;padding:8px 10px;border:1px solid #eee;border-radius:10px}
+    button{padding:12px 18px;border:0;border-radius:10px;background:#1a73e8;color:#fff;font-weight:700;cursor:pointer}
+    #status{margin-left:12px}
+  </style>
+  <script src="/form.js" defer></script>
 </head>
 <body>
-<div id="form"></div>
-<script>
-(async ()=>{
-    const params = new URLSearchParams(location.search);
-    const slug = params.get('slug');
-    const res = await fetch(`/api/forms/${slug}`);
-    const form = await res.json();
-
-    const container = document.getElementById('form');
-    container.innerHTML = `<h1>${form.title}</h1>`;
-
-    const formEl = document.createElement('form');
-    form.schema.forEach((q,i)=>{
-        const div = document.createElement('div');
-        div.innerHTML = `<p>${q.text}</p>`;
-        if(q.type === 'likert5'){
-            const opts = ["Kesinlikle katılıyorum","Katılıyorum","Kararsızım","Katılmıyorum","Kesinlikle katılmıyorum"];
-            opts.forEach(opt=>{
-                div.innerHTML += `<label><input type="radio" name="q${i}" value="${opt}">${opt}</label><br>`;
-            });
-        } else if(q.type === 'radio'){
-            q.options.forEach(opt=>{
-                div.innerHTML += `<label><input type="radio" name="q${i}" value="${opt}">${opt}</label><br>`;
-            });
-        } else {
-            div.innerHTML += `<input type="text" name="q${i}">`;
-        }
-        formEl.appendChild(div);
-    });
-
-    const btn = document.createElement('button');
-    btn.textContent = 'Gönder';
-    formEl.appendChild(btn);
-
-    formEl.onsubmit = async (e)=>{
-        e.preventDefault();
-        const data = { slug, answers: {} };
-        new FormData(formEl).forEach((val,key)=>{
-            data.answers[key] = val;
-        });
-        const res = await fetch('/api/response', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-        if(res.ok) location.href = '/thanks.html';
-        else alert('Zaten yanıtladınız veya hata oluştu.');
-    };
-
-    container.appendChild(formEl);
-})();
-</script>
+  <div class="wrap">
+    <h2 id="title">Yükleniyor…</h2>
+    <form id="form"></form>
+    <div id="status"></div>
+  </div>
 </body>
 </html>
