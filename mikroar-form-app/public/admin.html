@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Admin Panel — Anket Oluştur</title>
+  <title>Admin • Form Oluştur</title>
   <style>
     :root { --bg:#f6f7fb; --card:#fff; --ink:#111; --muted:#667085; --line:#e6e8ef; --pri:#2563eb; }
     *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto}
@@ -12,31 +12,27 @@
     label{display:block;font-weight:600;margin:14px 0 6px}
     input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;font:inherit}
     textarea{resize:vertical}
-    .row{display:flex;gap:10px;align-items:center}
     .muted{color:var(--muted)}
     .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
     .q-item{margin:14px 0}
     .q-head{display:flex;gap:8px;align-items:center}
-    .q-head > *{flex:0 0 auto}
-    .q-head .q-text{flex:1 1 auto}
+    .q-head .q-text{flex:1}
     .icon{border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 10px;cursor:pointer}
-    .icon:hover{background:#fafafa}
     .btn{background:var(--pri);color:#fff;border:none;border-radius:12px;padding:10px 16px;font-weight:600;cursor:pointer}
-    .btn:disabled{opacity:.5;cursor:not-allowed}
     .ghost{background:#fff;border:1px solid var(--line);color:var(--ink)}
     .bar{display:flex;gap:10px;align-items:center;margin-top:16px}
   </style>
 </head>
 <body>
   <main class="container">
-    <h1>Admin Panel — Anket Oluştur</h1>
+    <h1>Admin • Form Oluştur</h1>
 
     <div class="card">
       <label for="slug">Form Slug</label>
-      <input id="slug" placeholder="örn. deneme5" />
+      <input id="slug" placeholder="deneme5" />
 
       <label for="title">Başlık</label>
-      <input id="title" placeholder="örn. deneme5 anket değerlendirme" />
+      <input id="title" placeholder="deneme5 anket değerlendirme" />
     </div>
 
     <h2 style="margin:18px 0 8px">Sorular</h2>
@@ -66,9 +62,9 @@
           <option value="true">Zorunlu</option>
           <option value="false">Zorunlu değil</option>
         </select>
-        <button class="icon btn-up"   title="Yukarı">↑</button>
-        <button class="icon btn-down" title="Aşağı">↓</button>
-        <button class="icon btn-del"  title="Sil">Sil</button>
+        <button class="icon btn-up"   type="button">↑</button>
+        <button class="icon btn-down" type="button">↓</button>
+        <button class="icon btn-del"  type="button">Sil</button>
       </div>
 
       <div class="opt-wrap" style="margin-top:10px;display:none">
@@ -76,7 +72,7 @@
         <textarea class="q-opts" rows="4" placeholder="Evet&#10;Hayır"></textarea>
       </div>
 
-      <div class="linear-wrap row" style="display:none;margin-top:8px">
+      <div class="linear-wrap" style="display:none;gap:8px;margin-top:8px;display:none">
         <div>
           <label>Min</label>
           <input type="number" class="q-min" value="1" style="width:110px">
@@ -85,11 +81,11 @@
           <label>Max</label>
           <input type="number" class="q-max" value="5" style="width:110px">
         </div>
-        <div style="flex:1">
+        <div>
           <label>Sol Etiket</label>
           <input class="q-minlab" placeholder="Örn. Kötü">
         </div>
-        <div style="flex:1">
+        <div>
           <label>Sağ Etiket</label>
           <input class="q-maxlab" placeholder="Örn. İyi">
         </div>
@@ -97,137 +93,6 @@
     </div>
   </template>
 
-  <script>
-    // ==== kısa yardımcılar
-    const qs = (s, r=document)=>r.querySelector(s);
-    const qa = (s, r=document)=>[...r.querySelectorAll(s)];
-
-    const slugEl   = qs('#slug');
-    const titleEl  = qs('#title');
-    const qList    = qs('#qList');
-    const addBtn   = qs('#addBtn');
-    const saveBtn  = qs('#saveBtn');
-    const statusEl = qs('#saveStatus');
-    const tpl      = qs('#qTemplate');
-
-    function toggleBlocks(block){
-      const type = qs('.q-type', block).value;
-      const opt  = qs('.opt-wrap', block);
-      const lin  = qs('.linear-wrap', block);
-      opt.style.display = 'none';
-      lin.style.display = 'none';
-      if (['radio','checkbox','dropdown'].includes(type)) opt.style.display = 'block';
-      if (type === 'linear') lin.style.display = 'flex';
-    }
-
-    function addQuestion(prefill){
-      const node = tpl.content.cloneNode(true);
-      const block = node.querySelector('.q-item');
-
-      // prefill varsa doldur
-      if (prefill){
-        qs('.q-text', block).value = prefill.label || '';
-        qs('.q-type', block).value = prefill.type || 'short_text';
-        qs('.q-req',  block).value = prefill.required ? 'true':'false';
-        if (Array.isArray(prefill.options)) {
-          qs('.q-opts', block).value = prefill.options.join('\\n');
-        }
-        if (prefill.type === 'linear'){
-          qs('.q-min', block).value    = prefill.min ?? 1;
-          qs('.q-max', block).value    = prefill.max ?? 5;
-          qs('.q-minlab', block).value = prefill.minLabel || '';
-          qs('.q-maxlab', block).value = prefill.maxLabel || '';
-        }
-      }
-
-      qs('.q-type', block).addEventListener('change', ()=>toggleBlocks(block));
-      toggleBlocks(block);
-
-      qList.appendChild(block);
-    }
-
-    // + Soru Ekle
-    addBtn.addEventListener('click', ()=> addQuestion());
-
-    // Sil / Yukarı / Aşağı
-    qList.addEventListener('click', (e)=>{
-      const btn  = e.target.closest('button');
-      if (!btn) return;
-      const item = e.target.closest('.q-item');
-      if (!item) return;
-
-      if (btn.classList.contains('btn-del')) {
-        item.remove();
-      } else if (btn.classList.contains('btn-up')) {
-        const prev = item.previousElementSibling;
-        if (prev) qList.insertBefore(item, prev);
-      } else if (btn.classList.contains('btn-down')) {
-        const next = item.nextElementSibling;
-        if (next) qList.insertBefore(next, item);
-      }
-    });
-
-    function collectQuestions(){
-      return qa('.q-item', qList).map(block=>{
-        const label    = qs('.q-text', block).value.trim();
-        const type     = qs('.q-type', block).value;
-        const required = qs('.q-req',  block).value === 'true';
-        if (!label) return null;
-
-        const q = { label, type, required };
-        if (['radio','checkbox','dropdown'].includes(type)){
-          q.options = (qs('.q-opts', block).value || '')
-            .split('\\n').map(s=>s.trim()).filter(Boolean);
-        }
-        if (type === 'linear'){
-          q.min      = Number(qs('.q-min', block).value || 1);
-          q.max      = Number(qs('.q-max', block).value || 5);
-          q.minLabel = qs('.q-minlab', block).value.trim();
-          q.maxLabel = qs('.q-maxlab', block).value.trim();
-        }
-        return q;
-      }).filter(Boolean);
-    }
-
-    async function save(){
-      try{
-        statusEl.textContent = 'Kaydediliyor…';
-        const slug  = slugEl.value.trim();
-        const title = titleEl.value.trim();
-        if (!slug || !title){ alert('Slug ve Başlık zorunlu.'); return; }
-
-        const questions = collectQuestions();
-        const payload = { slug, title, active:true, schema:{ questions } };
-
-        const res = await fetch('/admin/api/forms', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify(payload)
-        });
-        if (!res.ok) throw new Error(await res.text());
-        statusEl.textContent = 'Kaydedildi ✓';
-      }catch(err){
-        console.error(err);
-        alert('Kaydedilemedi: ' + err.message);
-        statusEl.textContent = '';
-      }
-    }
-    saveBtn.addEventListener('click', save);
-
-    // ?slug=... verilirse formu otomatik getir
-    (async function autoLoad(){
-      const params = new URLSearchParams(location.search);
-      const s = params.get('slug');
-      if (!s) return;
-      try {
-        const res = await fetch('/api/forms/'+encodeURIComponent(s));
-        if (!res.ok) throw new Error('Bulunamadı');
-        const data = await res.json();
-        slugEl.value  = data.form.slug;
-        titleEl.value = data.form.title || '';
-        (data.form.schema?.questions || []).forEach(q => addQuestion(q));
-      } catch(_){}
-    })();
-  </script>
+  <script src="/admin.js" defer></script>
 </body>
 </html>
