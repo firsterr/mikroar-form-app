@@ -1,69 +1,100 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="tr">
-  <head>
-    <meta charset="utf-8"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <title>Genel Görüş Anketi</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <style>
-      :root{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
-      body{margin:0;background:#f6f7fb}
-      .wrap{max-width:860px;margin:40px auto;background:#fff;padding:28px;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.06)}
-      h1{margin:0 0 12px;font-size:32px}
-      .q{margin:22px 0}
-      .q h3{margin:0 0 8px;font-size:18px}
-      .likert{display:grid;gap:10px;margin-top:8px}
-      .likert label{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;cursor:pointer}
-      .row{display:flex;gap:12px;flex-wrap:wrap}
-      input[type=text]{padding:10px;border:1px solid #e5e7eb;border-radius:10px;flex:1}
-      button{margin-top:18px;padding:12px 18px;border:0;border-radius:10px;background:#1a73e8;color:#fff;font-weight:700;cursor:pointer}
-      #status{margin-left:12px;color:#444}
-    </style>
-    <script src="/app.js" defer></script>
-  </head>
-  <body>
-    <div class="wrap">
-      <h1>Genel Görüş Anketi</h1>
+<head>
+<meta charset="UTF-8">
+<title>Anket</title>
+<style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: auto; }
+    h1 { text-align: center; }
+    label { display: block; margin-top: 10px; font-weight: bold; }
+    input, textarea, select { width: 100%; padding: 5px; margin-top: 5px; }
+    button { margin-top: 15px; padding: 10px 20px; }
+    .question { margin-bottom: 15px; border-bottom: 1px solid #ccc; padding-bottom: 10px; }
+</style>
+</head>
+<body>
 
-      <form id="form">
-        <div class="row">
-          <label>Ad Soyad</label>
-          <input type="text" name="ad" required placeholder="Adını yaz">
-        </div>
+<h1 id="form-title">Yükleniyor...</h1>
 
-        <!-- Soru 1 -->
-        <div class="q">
-          <h3>CHP Türkiye’yi yönetmeye hazır bir parti midir?</h3>
-          <div class="likert">
-            <label><input type="radio" name="q1" value="Kesinlikle katılıyorum" required>Kesinlikle katılıyorum</label>
-            <label><input type="radio" name="q1" value="Katılıyorum">Katılıyorum</label>
-            <label><input type="radio" name="q1" value="Kararsızım">Kararsızım</label>
-            <label><input type="radio" name="q1" value="Katılmıyorum">Katılmıyorum</label>
-            <label><input type="radio" name="q1" value="Kesinlikle katılmıyorum">Kesinlikle katılmıyorum</label>
-          </div>
-        </div>
+<form id="surveyForm">
+    <div id="questions"></div>
+    <button type="submit">Gönder</button>
+</form>
 
-        <!-- Soru 2 (örnek) -->
-        <div class="q">
-          <h3>Ekonomi yönetiminden memnun musunuz?</h3>
-          <div class="likert">
-            <label><input type="radio" name="q2" value="Kesinlikle katılıyorum" required>Kesinlikle katılıyorum</label>
-            <label><input type="radio" name="q2" value="Katılıyorum">Katılıyorum</label>
-            <label><input type="radio" name="q2" value="Kararsızım">Kararsızım</label>
-            <label><input type="radio" name="q2" value="Katılmıyorum">Katılmıyorum</label>
-            <label><input type="radio" name="q2" value="Kesinlikle katılmıyorum">Kesinlikle katılmıyorum</label>
-          </div>
-        </div>
+<script>
+async function loadForm() {
+    const slug = new URLSearchParams(window.location.search).get("form") || "anket-2025";
+    const res = await fetch(`/api/forms/${slug}`);
+    const data = await res.json();
 
-        <!-- Soru 3 (açık uçlu örnek) -->
-        <div class="q">
-          <h3>Eklemek istediğiniz bir yorum var mı?</h3>
-          <input type="text" name="yorum" placeholder="İsteğe bağlı">
-        </div>
+    if (!data.ok) {
+        document.body.innerHTML = "<h2>Form bulunamadı.</h2>";
+        return;
+    }
 
-        <button type="submit">Gönder</button>
-        <span id="status"></span>
-      </form>
-    </div>
-  </body>
+    document.getElementById("form-title").innerText = data.form.title;
+
+    const qContainer = document.getElementById("questions");
+    qContainer.innerHTML = "";
+
+    data.form.schema.forEach((q, idx) => {
+        const qDiv = document.createElement("div");
+        qDiv.className = "question";
+        qDiv.innerHTML = `<label>${idx+1}. ${q.text}</label>`;
+
+        if (q.type === "text") {
+            qDiv.innerHTML += `<input type="text" name="q${idx}">`;
+        } 
+        else if (q.type === "radio") {
+            q.options.forEach(opt => {
+                qDiv.innerHTML += `
+                    <label><input type="radio" name="q${idx}" value="${opt}"> ${opt}</label>
+                `;
+            });
+        } 
+        else if (q.type === "checkbox") {
+            q.options.forEach(opt => {
+                qDiv.innerHTML += `
+                    <label><input type="checkbox" name="q${idx}" value="${opt}"> ${opt}</label>
+                `;
+            });
+        }
+
+        qContainer.appendChild(qDiv);
+    });
+
+    document.getElementById("surveyForm").onsubmit = async (e) => {
+        e.preventDefault();
+
+        const formData = new FormData(e.target);
+        const answers = {};
+
+        data.form.schema.forEach((q, idx) => {
+            if (q.type === "checkbox") {
+                answers[`q${idx}`] = formData.getAll(`q${idx}`);
+            } else {
+                answers[`q${idx}`] = formData.get(`q${idx}`);
+            }
+        });
+
+        const sendRes = await fetch(`/submit/${slug}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(answers)
+        });
+
+        const sendData = await sendRes.json();
+        if (sendData.ok) {
+            alert("Cevaplarınız kaydedildi. Teşekkürler!");
+            window.location.href = "/thanks.html";
+        } else {
+            alert("Bir hata oluştu, lütfen tekrar deneyin.");
+        }
+    };
+}
+
+loadForm();
+</script>
+
+</body>
 </html>
