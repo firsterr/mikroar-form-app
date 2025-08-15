@@ -5,22 +5,21 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Admin • Form Oluştur</title>
   <style>
-    :root { --bg:#f6f7fb; --card:#fff; --ink:#111; --muted:#667085; --line:#e6e8ef; --pri:#2563eb; }
+    :root{--bg:#f6f7fb;--card:#fff;--ink:#111;--muted:#667085;--line:#e6e8ef;--pri:#2563eb}
     *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto}
     .container{max-width:980px;margin:28px auto;padding:0 16px}
     h1{font-size:24px;margin:0 0 20px}
     label{display:block;font-weight:600;margin:14px 0 6px}
-    input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;font:inherit}
-    textarea{resize:vertical}
     .muted{color:var(--muted)}
+    input,select,textarea{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:#fff;font:15px/1.3 inherit}
+    textarea{resize:vertical}
     .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
-    .q-item{margin:14px 0}
-    .q-head{display:flex;gap:8px;align-items:center}
-    .q-head .q-text{flex:1}
-    .icon{border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 10px;cursor:pointer}
+    .row{display:flex;gap:10px;align-items:center}
     .btn{background:var(--pri);color:#fff;border:none;border-radius:12px;padding:10px 16px;font-weight:600;cursor:pointer}
     .ghost{background:#fff;border:1px solid var(--line);color:var(--ink)}
+    .icon{border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 12px;cursor:pointer}
     .bar{display:flex;gap:10px;align-items:center;margin-top:16px}
+    .q-item{margin:14px 0}
   </style>
 </head>
 <body>
@@ -29,10 +28,10 @@
 
     <div class="card">
       <label for="slug">Form Slug</label>
-      <input id="slug" placeholder="deneme5" />
+      <input id="slug" placeholder="örn: deneme6" />
 
       <label for="title">Başlık</label>
-      <input id="title" placeholder="deneme5 anket değerlendirme" />
+      <input id="title" placeholder="örn: deneme6 anket değerlendirme" />
     </div>
 
     <h2 style="margin:18px 0 8px">Sorular</h2>
@@ -48,9 +47,11 @@
   <!-- Soru şablonu -->
   <template id="qTemplate">
     <div class="q-item card">
-      <div class="q-head">
-        <input class="q-text" placeholder="Soru metni" />
-        <select class="q-type" title="Yanıt tipi">
+      <label>Soru Metni</label>
+      <input class="q-text" placeholder="Buraya SORUYU yazın (örn: Bu hizmetten memnun musunuz?)" />
+
+      <div class="row" style="margin-top:10px">
+        <select class="q-type" title="Yanıt tipi" style="flex:1">
           <option value="short_text">Kısa yanıt</option>
           <option value="paragraph">Paragraf</option>
           <option value="radio">Tek seçenek (radio)</option>
@@ -58,36 +59,38 @@
           <option value="dropdown">Açılır liste</option>
           <option value="linear">Lineer ölçek</option>
         </select>
-        <select class="q-req" title="Zorunluluk">
+
+        <select class="q-req" title="Zorunluluk" style="width:160px">
           <option value="true">Zorunlu</option>
           <option value="false">Zorunlu değil</option>
         </select>
-        <button class="icon btn-up"   type="button">↑</button>
-        <button class="icon btn-down" type="button">↓</button>
-        <button class="icon btn-del"  type="button">Sil</button>
+
+        <button class="icon btn-up"   type="button" title="Yukarı">↑</button>
+        <button class="icon btn-down" type="button" title="Aşağı">↓</button>
+        <button class="icon btn-del"  type="button" title="Sil">Sil</button>
       </div>
 
-      <div class="opt-wrap" style="margin-top:10px;display:none">
-        <label>Seçenekler (her satır bir seçenek yaz):</label>
+      <div class="opt-wrap" style="margin-top:12px;display:none">
+        <label>Seçenekler (her satır bir seçenek):</label>
         <textarea class="q-opts" rows="4" placeholder="Evet&#10;Hayır"></textarea>
       </div>
 
-      <div class="linear-wrap" style="display:none;gap:8px;margin-top:8px;display:none">
+      <div class="linear-wrap" style="display:none;margin-top:12px;gap:10px" class="row">
         <div>
           <label>Min</label>
-          <input type="number" class="q-min" value="1" style="width:110px">
+          <input type="number" class="q-min" value="1" style="width:120px">
         </div>
         <div>
           <label>Max</label>
-          <input type="number" class="q-max" value="5" style="width:110px">
+          <input type="number" class="q-max" value="5" style="width:120px">
         </div>
         <div>
           <label>Sol Etiket</label>
-          <input class="q-minlab" placeholder="Örn. Kötü">
+          <input class="q-minlab" placeholder="Kötü">
         </div>
         <div>
           <label>Sağ Etiket</label>
-          <input class="q-maxlab" placeholder="Örn. İyi">
+          <input class="q-maxlab" placeholder="İyi">
         </div>
       </div>
     </div>
