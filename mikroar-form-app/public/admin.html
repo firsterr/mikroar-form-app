@@ -2,63 +2,90 @@
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
-<title>Admin Panel - Anket Yönetimi</title>
+<title>Admin Panel - Anket Oluştur</title>
 <style>
-  body { font-family: Arial, sans-serif; max-width: 800px; margin: auto; }
-  h1 { text-align: center; }
-  .question { border: 1px solid #ccc; padding: 10px; margin: 10px 0; }
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: auto; }
+    h1 { text-align: center; }
+    label { display: block; margin-top: 10px; font-weight: bold; }
+    textarea, input { width: 100%; padding: 5px; margin-top: 5px; }
+    button { margin-top: 15px; padding: 10px 20px; }
+    .question { margin-bottom: 15px; border-bottom: 1px solid #ccc; padding-bottom: 10px; }
 </style>
 </head>
 <body>
-<h1>Anket Yönetimi</h1>
-<label>Form Slug: <input id="slug" type="text"></label><br>
-<label>Başlık: <input id="title" type="text"></label><br>
 
+<h1>Admin Panel - Anket Oluştur</h1>
+
+<label>Form Slug (benzersiz isim)</label>
+<input type="text" id="slug" placeholder="anket-2025">
+
+<label>Başlık</label>
+<input type="text" id="title" placeholder="Anket Başlığı">
+
+<h3>Sorular</h3>
 <div id="questions"></div>
-<button onclick="addQuestion()">Soru Ekle</button><br><br>
+<button onclick="addQuestion()">Soru Ekle</button>
+
 <button onclick="saveForm()">Kaydet</button>
 
 <script>
 let questions = [];
 
 function addQuestion() {
-    const qIndex = questions.length;
-    const div = document.createElement('div');
-    div.className = 'question';
-    div.innerHTML = `
-        <label>Soru: <input type="text" id="qtext${qIndex}"></label><br>
-        <label>Tip:
-            <select id="qtype${qIndex}">
-                <option value="likert5">Likert 5</option>
-                <option value="radio">Radio</option>
-                <option value="text">Metin</option>
-            </select>
-        </label><br>
-        <label>Seçenekler (virgülle): <input type="text" id="qoptions${qIndex}"></label>
+    const index = questions.length;
+    const qDiv = document.createElement("div");
+    qDiv.className = "question";
+    qDiv.innerHTML = `
+        <label>Soru ${index+1}</label>
+        <input type="text" placeholder="Soru metni" class="q-text">
+        <label>Cevap Tipi</label>
+        <select class="q-type">
+            <option value="text">Metin</option>
+            <option value="radio">Tek Seçim</option>
+            <option value="checkbox">Çoklu Seçim</option>
+        </select>
+        <label>Seçenekler (virgülle ayırın)</label>
+        <input type="text" class="q-options" placeholder="Evet,Hayır,Belki">
     `;
-    document.getElementById('questions').appendChild(div);
+    document.getElementById("questions").appendChild(qDiv);
     questions.push({});
 }
 
 async function saveForm() {
-    const slug = document.getElementById('slug').value;
-    const title = document.getElementById('title').value;
+    const slug = document.getElementById("slug").value.trim();
+    const title = document.getElementById("title").value.trim();
     const schema = [];
-    for (let i = 0; i < questions.length; i++) {
+
+    document.querySelectorAll(".question").forEach(q => {
         schema.push({
-            text: document.getElementById(`qtext${i}`).value,
-            type: document.getElementById(`qtype${i}`).value,
-            options: document.getElementById(`qoptions${i}`).value.split(',').map(o=>o.trim())
+            text: q.querySelector(".q-text").value,
+            type: q.querySelector(".q-type").value,
+            options: q.querySelector(".q-options").value.split(",").map(o => o.trim()).filter(o => o)
         });
-    }
-    const res = await fetch('/api/forms', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug, title, schema })
     });
-    if (res.ok) alert('Kaydedildi');
-    else alert('Hata oluştu');
+
+    const res = await fetch("/admin/api/forms", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Basic " + btoa(prompt("Admin kullanıcı adı:") + ":" + prompt("Admin şifre:"))
+        },
+        body: JSON.stringify({
+            slug,
+            title,
+            schema,
+            active: true
+        })
+    });
+
+    const data = await res.json();
+    if (data.ok) {
+        alert("Form kaydedildi!");
+    } else {
+        alert("Hata oluştu.");
+    }
 }
 </script>
+
 </body>
 </html>
