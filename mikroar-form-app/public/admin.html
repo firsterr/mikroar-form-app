@@ -1,91 +1,37 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="tr">
 <head>
-<meta charset="UTF-8">
-<title>Admin Panel - Anket Oluştur</title>
-<style>
-    body { font-family: Arial, sans-serif; max-width: 800px; margin: auto; }
-    h1 { text-align: center; }
-    label { display: block; margin-top: 10px; font-weight: bold; }
-    textarea, input { width: 100%; padding: 5px; margin-top: 5px; }
-    button { margin-top: 15px; padding: 10px 20px; }
-    .question { margin-bottom: 15px; border-bottom: 1px solid #ccc; padding-bottom: 10px; }
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin Panel - Anket Oluştur</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:980px;margin:40px auto}
+    h1{text-align:center}
+    label{display:block;margin:10px 0 4px;font-weight:600}
+    input,select,textarea{width:100%;padding:10px;border:1px solid #ddd;border-radius:10px}
+    .row{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0}
+    .q{border:1px solid #eee;border-radius:12px;background:#fafafa;padding:12px;margin:10px 0}
+    button{padding:10px 16px;border:0;border-radius:10px;background:#1a73e8;color:#fff;font-weight:700;cursor:pointer}
+    #status{margin-left:10px;color:#444}
+  </style>
+  <script src="/admin.js" defer></script>
 </head>
 <body>
+  <h1>Admin Panel - Anket Oluştur</h1>
 
-<h1>Admin Panel - Anket Oluştur</h1>
+  <label>Form Slug (benzersiz isim)</label>
+  <input type="text" id="slug" placeholder="ayvalik-genel">
 
-<label>Form Slug (benzersiz isim)</label>
-<input type="text" id="slug" placeholder="anket-2025">
+  <label>Başlık</label>
+  <input type="text" id="title" placeholder="Ayvalık'ın sorunu nedir?">
 
-<label>Başlık</label>
-<input type="text" id="title" placeholder="Anket Başlığı">
+  <h3>Sorular</h3>
+  <div id="questions"></div>
 
-<h3>Sorular</h3>
-<div id="questions"></div>
-<button onclick="addQuestion()">Soru Ekle</button>
-
-<button onclick="saveForm()">Kaydet</button>
-
-<script>
-let questions = [];
-
-function addQuestion() {
-    const index = questions.length;
-    const qDiv = document.createElement("div");
-    qDiv.className = "question";
-    qDiv.innerHTML = `
-        <label>Soru ${index+1}</label>
-        <input type="text" placeholder="Soru metni" class="q-text">
-        <label>Cevap Tipi</label>
-        <select class="q-type">
-            <option value="text">Metin</option>
-            <option value="radio">Tek Seçim</option>
-            <option value="checkbox">Çoklu Seçim</option>
-        </select>
-        <label>Seçenekler (virgülle ayırın)</label>
-        <input type="text" class="q-options" placeholder="Evet,Hayır,Belki">
-    `;
-    document.getElementById("questions").appendChild(qDiv);
-    questions.push({});
-}
-
-async function saveForm() {
-    const slug = document.getElementById("slug").value.trim();
-    const title = document.getElementById("title").value.trim();
-    const schema = [];
-
-    document.querySelectorAll(".question").forEach(q => {
-        schema.push({
-            text: q.querySelector(".q-text").value,
-            type: q.querySelector(".q-type").value,
-            options: q.querySelector(".q-options").value.split(",").map(o => o.trim()).filter(o => o)
-        });
-    });
-
-    const res = await fetch("/admin/api/forms", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "Authorization": "Basic " + btoa(prompt("Admin kullanıcı adı:") + ":" + prompt("Admin şifre:"))
-        },
-        body: JSON.stringify({
-            slug,
-            title,
-            schema,
-            active: true
-        })
-    });
-
-    const data = await res.json();
-    if (data.ok) {
-        alert("Form kaydedildi!");
-    } else {
-        alert("Hata oluştu.");
-    }
-}
-</script>
-
+  <div class="row">
+    <button id="addQ">Soru Ekle</button>
+    <button id="save">Kaydet</button>
+    <span id="status"></span>
+  </div>
 </body>
 </html>
