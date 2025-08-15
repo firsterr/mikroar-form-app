@@ -130,22 +130,35 @@ app.get('/admin/api/forms', adminOnly, async (_req, res) => {
 });
 
 // === Admin: form oluştur/güncelle ===
-// Body: { slug, title, active(true/false), schema(json) }
+// Body kabul ettiği formatlar:
+// A) { slug, title, active, schema:{questions:[...] } }
+// B) { slug, title, active, questions:[...] }   // <-- yanlış da gelse biz dönüştürüyoruz
 app.post('/admin/api/forms', adminOnly, async (req, res) => {
-  const { slug, title, active = true, schema } = req.body || {};
-  if (!slug || !title) {
-    return res.status(400).json({ ok: false, error: 'slug ve title gerekli' });
-  }
   try {
+    let { slug, title, active = true, schema, questions } = req.body || {};
+    if (!slug || !title) {
+      return res.status(400).json({ ok: false, error: 'slug ve title gerekli' });
+    }
+
+    // GÖNDERİLENİ NORMALİZE ET
+    if (!schema && Array.isArray(questions)) {
+      schema = { questions };            // admin yanlış gönderse bile toparla
+    }
+    if (!schema || !Array.isArray(schema.questions)) {
+      schema = { questions: [] };        // en azından boş dizi olsun
+    }
+
     await pool.query(
       `INSERT INTO forms (slug, title, active, schema)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (slug) DO UPDATE
        SET title=EXCLUDED.title, active=EXCLUDED.active, schema=EXCLUDED.schema`,
-      [slug, title, active, schema || null]
+      [slug, title, active, schema]
     );
+
     res.json({ ok: true });
   } catch (e) {
+    console.error(e);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
