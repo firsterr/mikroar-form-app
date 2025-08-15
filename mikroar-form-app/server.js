@@ -1,3 +1,11 @@
+// --- DOSYA İŞLEMLERİ İÇİN ESM UYUMLU IMPORTLAR ---
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// ESM ortamında __dirname üretimi
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
 // server.js — MikroAR Anket Sunucusu (tam sürüm)
 import express from 'express';
 import dotenv from 'dotenv';
