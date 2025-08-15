@@ -5,7 +5,6 @@ import cors from 'cors';
 import morgan from 'morgan';
 import basicAuth from 'basic-auth';
 import pkg from 'pg';
-import { RateLimiterMemory } from 'rate-limiter-flexible';
 
 dotenv.config();
 const { Pool } = pkg;
@@ -19,11 +18,6 @@ app.use(cors({ origin: process.env.CORS_ORIGIN || '*'}));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static('public'));
 
-const rateLimiter = new RateLimiterMemory({ points: 30, duration: 60 });
-app.use(async (req, res, next) => {
-  try { await rateLimiter.consume(req.ip); next(); }
-  catch { return res.status(429).json({ ok: false, error: 'Çok fazla istek' }); }
-});
 
 function adminOnly(req, res, next) {
   const user = basicAuth(req);
