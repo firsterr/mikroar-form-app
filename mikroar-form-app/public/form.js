@@ -1,199 +1,138 @@
-const qs = (s, r=document) => r.querySelector(s);
+(async () => {
+  const $ = s => document.querySelector(s);
+  const root = $('#root');
+  const btn  = $('#send');
+  const actions = $('#actions');
+  const slug = new URLSearchParams(location.search).get('slug');
 
-const params = new URLSearchParams(location.search);
-const slug = params.get('slug');
+  if(!slug){ root.innerHTML = '<div class="error">Slug yok.</div>'; return; }
 
-const area = qs('#formArea');
-const titleEl = qs('#title');
-const statusEl = qs('#status');
-
-let formDef = null;   // { title, schema: { questions:[...] } }
-
-(async function init(){
-  if(!slug){
-    area.innerHTML = `<p class="muted">slug eksik (?slug=...)</p>`;
+  let res, txt, json;
+  try{
+    res = await fetch(`/api/forms/${encodeURIComponent(slug)}`, {cache:'no-store'});
+    txt = await res.text();
+  }catch(e){
+    root.innerHTML = '<div class="error">İstek hatası: '+e.message+'</div>';
     return;
   }
-  try{
-    const res = await fetch(`/api/forms/${slug}`);
-    if(!res.ok){
-      const t = await res.text();
-      throw new Error(`Form alınamadı: ${t}`);
-    }
-    const data = await res.json();
 
-    // API dönüşünü normalize et:
-    // - senin server.js -> { ok:true, form:{ title, schema } }
-    // - eski basit sürüm -> { title, questions } veya { schema:{questions} }
-    let formObj = data?.form || data || {};
-    let schema = formObj.schema || formObj; // schema yoksa kök objeyi dene
+  try{ json = JSON.parse(txt); }
+  catch{ root.innerHTML = '<div class="error">JSON parse hatası — sunucu cevabı:\n\n'+txt+'</div>'; return; }
 
-    // title belirle
-    const title = formObj.title || schema.title || 'Anket';
-    titleEl.textContent = title;
-
-    // questions
-    const questions = schema.questions || [];
-    if(!Array.isArray(questions) || questions.length === 0){
-      area.innerHTML = `<p class="muted">Bu ankette henüz soru yok.</p>`;
-      return;
-    }
-
-    formDef = { slug, title, questions };
-    renderQuestions(questions);
-  }catch(e){
-    console.error(e);
-    area.innerHTML = `<p class="muted">${e.message}</p>`;
+  if(!json || json.ok !== true){
+    root.innerHTML = '<div class="error">API hata: ' + (json && json.error || 'bilinmeyen') + '</div>';
+    return;
   }
+
+  const form = json.form || {};
+  $('#title').textContent = form.title || 'Anket';
+
+  let schema = form.schema;
+  try{ if(typeof schema === 'string') schema = JSON.parse(schema); }catch(_){}
+  const questions = Array.isArray(schema)
+      ? schema
+      : (schema && Array.isArray(schema.questions) ? schema.questions : []);
+
+  if(!questions.length){
+    root.innerHTML = '<div class="muted">Bu ankette henüz soru yok.</div>';
+    return;
+  }
+
+  root.innerHTML = '';
+  questions.forEach((q, i) => {
+    const card = document.createElement('div'); card.className = 'card';
+    const title = document.createElement('div'); title.className = 'q';
+    const label = q.label || q.text || `Soru ${i+1}`;
+    title.textContent = `${i+1}. ${label}` + (q.required ? ' *' : '');
+    card.appendChild(title);
+
+    const t = String(q.type || 'radio').toLowerCase();
+    const name = `q_${i}`;
+
+    if (t === 'checkbox'){
+      (q.options || []).forEach(opt => {
+        const row = document.createElement('label'); row.className='opt';
+        const inp = document.createElement('input'); inp.type='checkbox'; inp.name=name; inp.value=opt;
+        row.appendChild(inp); row.appendChild(document.createTextNode(opt));
+        card.appendChild(row);
+      });
+
+    } else if (t === 'radio' || t === 'çoktan seçmeli' || t === 'coktan secmeli'){
+      (q.options || []).forEach(opt => {
+        const row = document.createElement('label'); row.className='opt';
+        const inp = document.createElement('input'); inp.type='radio'; inp.name=name; inp.value=opt;
+        row.appendChild(inp); row.appendChild(document.createTextNode(opt));
+        card.appendChild(row);
+      });
+
+    } else if (t === 'dropdown' || t === 'select'){
+      const row = document.createElement('div'); row.className='opt';
+      const sel = document.createElement('select'); sel.name=name;
+      (q.options || []).forEach(opt => { const o=document.createElement('option'); o.value=opt; o.textContent=opt; sel.appendChild(o); });
+      row.appendChild(sel); card.appendChild(row);
+
+    } else if (t === 'text'){
+      const row = document.createElement('div'); row.className='opt';
+      const inp = document.createElement('input'); inp.type='text'; inp.name=name;
+      row.appendChild(inp); card.appendChild(row);
+
+    } else if (t === 'textarea'){
+      const row = document.createElement('div'); row.className='opt';
+      const ta = document.createElement('textarea'); ta.name=name;
+      row.appendChild(ta); card.appendChild(row);
+
+    } else {
+      const row = document.createElement('div'); row.className='opt';
+      const inp = document.createElement('input'); inp.type='text'; inp.name=name;
+      row.appendChild(inp); card.appendChild(row);
+    }
+
+    root.appendChild(card);
+  });
+
+  actions.style.display = 'block';
+  btn.onclick = async () => {
+    const answers = {};
+    for (let i=0;i<questions.length;i++){
+      const q = questions[i];
+      const name = `q_${i}`;
+      const t = String(q.type||'radio').toLowerCase();
+      let val = null;
+
+      if (t==='checkbox'){
+        val = [...root.querySelectorAll(`input[name="${name}"]:checked`)].map(x=>x.value);
+      } else if (t==='radio' || t==='çoktan seçmeli' || t==='coktan secmeli'){
+        const el = root.querySelector(`input[name="${name}"]:checked`);
+        val = el ? el.value : null;
+      } else if (t==='dropdown' || t==='select'){
+        const el = root.querySelector(`select[name="${name}"]`);
+        val = el ? el.value : null;
+      } else if (t==='text' || t==='textarea'){
+        const el = root.querySelector(`[name="${name}"]`);
+        val = el ? el.value : null;
+      }
+
+      if (q.required){
+        const empty = (val==null) || (Array.isArray(val)&&val.length===0) || (typeof val==='string' && val.trim()==='');
+        if (empty){ alert(`${i+1}. soru zorunlu`); return; }
+      }
+
+      const key = q.label || q.text || `Soru ${i+1}`;
+      answers[key] = val;
+    }
+
+    btn.disabled = true;
+    try{
+      const r = await fetch(`/api/forms/${encodeURIComponent(slug)}/submit`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({answers})
+      });
+      const j = await r.json().catch(()=> ({}));
+      if(j && j.ok){ location.href='/thanks.html'; }
+      else{ alert('Kaydetme hatası: ' + (j.error||'bilinmeyen')); btn.disabled=false; }
+    }catch(e){
+      alert('İstek hatası: '+e.message); btn.disabled=false;
+    }
+  };
 })();
-
-function renderQuestions(questions){
-  area.innerHTML = '';
-  questions.forEach((q, idx) => {
-    const wrap = document.createElement('div');
-    wrap.className = 'q';
-    wrap.dataset.key = `q_${idx}`;
-
-    const lab = document.createElement('label');
-    lab.textContent = q.label + (q.required ? ' *' : '');
-    wrap.appendChild(lab);
-
-    let field;
-    switch(q.type){
-      case 'short_text': {
-        field = document.createElement('input');
-        field.type = 'text';
-        if(q.required) field.required = true;
-        break;
-      }
-      case 'paragraph': {
-        field = document.createElement('textarea');
-        if(q.required) field.required = true;
-        break;
-      }
-      case 'radio': {
-        field = renderOptions('radio', `q_${idx}`, q.options || []);
-        break;
-      }
-      case 'checkbox': {
-        field = renderOptions('checkbox', `q_${idx}`, q.options || []);
-        break;
-      }
-      case 'dropdown': {
-        field = document.createElement('select');
-        (q.options||[]).forEach(o=>{
-          const opt = document.createElement('option');
-          opt.value = opt.textContent = o;
-          field.appendChild(opt);
-        });
-        if(q.required) field.required = true;
-        break;
-      }
-      case 'linear': {
-        field = renderLinear(`q_${idx}`, q);
-        break;
-      }
-      default: {
-        field = document.createElement('input');
-        field.type='text';
-        if(q.required) field.required = true;
-      }
-    }
-
-    wrap.appendChild(field);
-    area.appendChild(wrap);
-  });
-}
-
-function renderOptions(kind, name, options){
-  const box = document.createElement('div');
-  box.className = 'opts';
-  (options||[]).forEach((o)=>{
-    const row = document.createElement('div');
-    const inp = document.createElement('input');
-    inp.type = kind;
-    inp.name = name;
-    inp.value = o;
-    const lab = document.createElement('span');
-    lab.textContent = ' ' + o;
-    row.appendChild(inp); row.appendChild(lab);
-    box.appendChild(row);
-  });
-  return box;
-}
-
-function renderLinear(name, q){
-  const box = document.createElement('div');
-  const min = Number(q.min ?? 1);
-  const max = Number(q.max ?? 5);
-  const row = document.createElement('div');
-  row.className = 'opts';
-
-  for(let i=min;i<=max;i++){
-    const r = document.createElement('div');
-    const inp = document.createElement('input');
-    inp.type='radio'; inp.name=name; inp.value=String(i);
-    const lab = document.createElement('span'); lab.textContent = ' '+i;
-    r.appendChild(inp); r.appendChild(lab);
-    row.appendChild(r);
-  }
-  const hint = document.createElement('div');
-  hint.className = 'muted';
-  hint.textContent = `${q.minLabel ?? ''}  —  ${q.maxLabel ?? ''}`;
-  box.appendChild(row); box.appendChild(hint);
-  return box;
-}
-
-function collectAnswers(){
-  const answers = [];
-  const nodes = [...area.querySelectorAll('.q')];
-
-  nodes.forEach((wrap, idx) => {
-    const q = formDef.questions[idx];
-    let value = null;
-
-    if(['short_text','paragraph','dropdown'].includes(q.type)){
-      const el = wrap.querySelector('input,textarea,select');
-      value = el.value.trim();
-    } else if(q.type==='radio'){
-      const el = wrap.querySelector('input[type=radio]:checked');
-      value = el ? el.value : '';
-    } else if(q.type==='checkbox'){
-      value = [...wrap.querySelectorAll('input[type=checkbox]:checked')].map(i=>i.value);
-    } else if(q.type==='linear'){
-      const el = wrap.querySelector('input[type=radio]:checked');
-      value = el ? el.value : '';
-    }
-
-    if(q.required){
-      const empty = (q.type==='checkbox') ? (value.length===0) : (value==='' || value==null);
-      if(empty){ throw new Error(`Lütfen "${q.label}" sorusunu cevaplayın.`); }
-    }
-
-    answers.push({ label:q.label, type:q.type, value });
-  });
-
-  return answers;
-}
-
-qs('#sendBtn').addEventListener('click', async ()=>{
-  try{
-    const answers = collectAnswers();
-    statusEl.textContent = 'Gönderiliyor…';
-
-    // dosyaya yazan endpoint (ilk çözüm)
-    const res = await fetch('/api/responses', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ slug, answers })
-    });
-    const out = await res.json();
-    if(!res.ok) throw new Error(out.error || 'Hata');
-
-    statusEl.textContent = 'Kaydedildi ✓';
-    location.href = '/thanks.html';
-  }catch(e){
-    statusEl.textContent = e.message;
-    alert(e.message);
-  }
-});
