@@ -1,24 +1,41 @@
 <!doctype html>
 <html lang="tr">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Anket</title>
   <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f6f7fb;margin:0}
-    .wrap{max-width:860px;margin:40px auto;background:#fff;padding:28px;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.06)}
-    .q{margin:18px 0}.q h3{margin:0 0 8px}
-    .opt{display:block;margin:6px 0;padding:8px 10px;border:1px solid #eee;border-radius:10px}
-    button{padding:12px 18px;border:0;border-radius:10px;background:#1a73e8;color:#fff;font-weight:700;cursor:pointer}
-    #status{margin-left:12px}
+    :root{--bg:#f6f7fb;--card:#fff;--ink:#0f172a;--muted:#6b7280;--pri:#2563eb}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);
+      font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto}
+    .wrap{max-width:900px;margin:28px auto;padding:0 16px}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:20px;margin:16px 0}
+    h1{margin:0 0 18px;font-size:32px}
+    .q{margin:16px 0}
+    .q label{display:block;margin:0 0 8px;font-weight:600}
+    .muted{color:var(--muted)}
+    input[type=text],textarea,select{width:100%;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px}
+    textarea{min-height:90px;resize:vertical}
+    .opts div{margin:8px 0}
+    .btn{display:inline-block;background:var(--pri);color:#fff;border:0;padding:12px 18px;
+      border-radius:12px;font-weight:600;cursor:pointer}
   </style>
-  <script src="/form.js" defer></script>
 </head>
 <body>
   <div class="wrap">
-    <h2 id="title">Yükleniyor…</h2>
-    <form id="form"></form>
-    <div id="status"></div>
+    <div class="card">
+      <h1 id="title">Anket</h1>
+      <p id="desc" class="muted"></p>
+    </div>
+
+    <form id="formArea" class="card"></form>
+
+    <div class="card">
+      <button id="sendBtn" class="btn" type="button">Gönder</button>
+      <span id="status" class="muted" style="margin-left:10px"></span>
+    </div>
   </div>
+
+  <script src="/form.js"></script>
 </body>
 </html>
