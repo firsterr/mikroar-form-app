@@ -1,23 +1,48 @@
 const qs = (s, r=document) => r.querySelector(s);
 
-const slug = new URLSearchParams(location.search).get('slug');
-if(!slug){ alert('slug eksik (?slug=xxx)'); }
+const params = new URLSearchParams(location.search);
+const slug = params.get('slug');
 
 const area = qs('#formArea');
 const titleEl = qs('#title');
 const statusEl = qs('#status');
 
-let schema = null;
+let formDef = null;   // { title, schema: { questions:[...] } }
 
 (async function init(){
+  if(!slug){
+    area.innerHTML = `<p class="muted">slug eksik (?slug=...)</p>`;
+    return;
+  }
   try{
     const res = await fetch(`/api/forms/${slug}`);
-    if(!res.ok){ throw new Error('Form bulunamadı'); }
-    schema = await res.json();
+    if(!res.ok){
+      const t = await res.text();
+      throw new Error(`Form alınamadı: ${t}`);
+    }
+    const data = await res.json();
 
-    titleEl.textContent = schema.title || 'Anket';
-    renderQuestions(schema.questions || []);
+    // API dönüşünü normalize et:
+    // - senin server.js -> { ok:true, form:{ title, schema } }
+    // - eski basit sürüm -> { title, questions } veya { schema:{questions} }
+    let formObj = data?.form || data || {};
+    let schema = formObj.schema || formObj; // schema yoksa kök objeyi dene
+
+    // title belirle
+    const title = formObj.title || schema.title || 'Anket';
+    titleEl.textContent = title;
+
+    // questions
+    const questions = schema.questions || [];
+    if(!Array.isArray(questions) || questions.length === 0){
+      area.innerHTML = `<p class="muted">Bu ankette henüz soru yok.</p>`;
+      return;
+    }
+
+    formDef = { slug, title, questions };
+    renderQuestions(questions);
   }catch(e){
+    console.error(e);
     area.innerHTML = `<p class="muted">${e.message}</p>`;
   }
 })();
@@ -29,45 +54,50 @@ function renderQuestions(questions){
     wrap.className = 'q';
     wrap.dataset.key = `q_${idx}`;
 
-    // etiket
     const lab = document.createElement('label');
     lab.textContent = q.label + (q.required ? ' *' : '');
     wrap.appendChild(lab);
 
-    // alan
     let field;
     switch(q.type){
-      case 'short_text':
+      case 'short_text': {
         field = document.createElement('input');
         field.type = 'text';
+        if(q.required) field.required = true;
         break;
-      case 'paragraph':
+      }
+      case 'paragraph': {
         field = document.createElement('textarea');
+        if(q.required) field.required = true;
         break;
-      case 'radio':
+      }
+      case 'radio': {
         field = renderOptions('radio', `q_${idx}`, q.options || []);
         break;
-      case 'checkbox':
+      }
+      case 'checkbox': {
         field = renderOptions('checkbox', `q_${idx}`, q.options || []);
         break;
-      case 'dropdown':
+      }
+      case 'dropdown': {
         field = document.createElement('select');
         (q.options||[]).forEach(o=>{
           const opt = document.createElement('option');
           opt.value = opt.textContent = o;
           field.appendChild(opt);
         });
+        if(q.required) field.required = true;
         break;
-      case 'linear':
+      }
+      case 'linear': {
         field = renderLinear(`q_${idx}`, q);
         break;
-      default:
-        field = document.createElement('input'); field.type='text';
-    }
-
-    if(q.required){
-      // radio/checkbox için submitte kontrol edeceğiz
-      if(!['radio','checkbox'].includes(q.type)) field.required = true;
+      }
+      default: {
+        field = document.createElement('input');
+        field.type='text';
+        if(q.required) field.required = true;
+      }
     }
 
     wrap.appendChild(field);
@@ -78,7 +108,7 @@ function renderQuestions(questions){
 function renderOptions(kind, name, options){
   const box = document.createElement('div');
   box.className = 'opts';
-  options.forEach((o,i)=>{
+  (options||[]).forEach((o)=>{
     const row = document.createElement('div');
     const inp = document.createElement('input');
     inp.type = kind;
@@ -119,7 +149,7 @@ function collectAnswers(){
   const nodes = [...area.querySelectorAll('.q')];
 
   nodes.forEach((wrap, idx) => {
-    const q = schema.questions[idx];
+    const q = formDef.questions[idx];
     let value = null;
 
     if(['short_text','paragraph','dropdown'].includes(q.type)){
@@ -135,7 +165,6 @@ function collectAnswers(){
       value = el ? el.value : '';
     }
 
-    // required kontrolü
     if(q.required){
       const empty = (q.type==='checkbox') ? (value.length===0) : (value==='' || value==null);
       if(empty){ throw new Error(`Lütfen "${q.label}" sorusunu cevaplayın.`); }
@@ -147,11 +176,12 @@ function collectAnswers(){
   return answers;
 }
 
-// gönder
 qs('#sendBtn').addEventListener('click', async ()=>{
   try{
     const answers = collectAnswers();
     statusEl.textContent = 'Gönderiliyor…';
+
+    // dosyaya yazan endpoint (ilk çözüm)
     const res = await fetch('/api/responses', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
