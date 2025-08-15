@@ -1,40 +1,58 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Admin Panel - Anket Oluştur</title>
+  <meta charset="UTF-8" />
+  <title>Admin Paneli</title>
   <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:980px;margin:40px auto}
-    h1{text-align:center}
-    label{display:block;margin:10px 0 4px;font-weight:600}
-    input,select,textarea{width:100%;padding:10px;border:1px solid #ddd;border-radius:10px}
-    .row{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0}
-    .q{border:1px solid #eee;border-radius:12px;background:#fafafa;padding:12px;margin:10px 0}
-    .muted{color:#666;font-size:12px}
-    .right{margin-left:auto}
-    button{padding:10px 16px;border:0;border-radius:10px;background:#1a73e8;color:#fff;font-weight:700;cursor:pointer}
-    .danger{background:#e53935}
-    #status{margin-left:10px;color:#444}
+    body { font-family: Arial; margin: 20px; }
+    input, select, textarea, button { display: block; margin: 10px 0; padding: 8px; }
+    textarea { width: 300px; height: 100px; }
   </style>
-  <script src="/admin.js" defer></script>
 </head>
 <body>
-  <h1>Admin Panel - Anket Oluştur</h1>
+  <h1>Yeni Soru Ekle</h1>
+  <form id="questionForm">
+    <label>Soru Metni:</label>
+    <input type="text" id="question" required />
 
-  <label>Form Slug (benzersiz isim)</label>
-  <input type="text" id="slug" placeholder="ayvalik-genel">
+    <label>Yanıt Tipi:</label>
+    <select id="type" required>
+      <option value="radio">Tek Seçenek</option>
+      <option value="checkbox">Çoklu Seçenek</option>
+      <option value="text">Açık Uçlu</option>
+    </select>
 
-  <label>Başlık</label>
-  <input type="text" id="title" placeholder="Ayvalık'ın sorunu nedir?">
+    <label>Seçenekler (her satıra bir seçenek yaz):</label>
+    <textarea id="options"></textarea>
 
-  <h3>Sorular</h3>
-  <div id="questions"></div>
+    <button type="submit">Kaydet</button>
+  </form>
 
-  <div class="row">
-    <button id="addQ">Soru Ekle</button>
-    <button id="save">Kaydet</button>
-    <span id="status"></span>
-  </div>
+  <script>
+    document.getElementById("questionForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const question = document.getElementById("question").value;
+      const type = document.getElementById("type").value;
+      const options = document.getElementById("options").value
+        .split("\n")
+        .map(opt => opt.trim())
+        .filter(opt => opt !== "");
+
+      const res = await fetch("/add-question", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question, type, options })
+      });
+
+      const data = await res.json();
+      if (data.ok) {
+        alert("Soru eklendi!");
+        document.getElementById("questionForm").reset();
+      } else {
+        alert("Hata oluştu!");
+      }
+    });
+  </script>
 </body>
 </html>
