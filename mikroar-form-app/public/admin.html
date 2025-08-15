@@ -1,1 +1,64 @@
-<h1>Admin Paneli</h1><ul><li><a href='/admin/forms/genel-anket/responses.json'>Yanıtlar</a></li></ul>
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>Admin Panel - Anket Yönetimi</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 800px; margin: auto; }
+  h1 { text-align: center; }
+  .question { border: 1px solid #ccc; padding: 10px; margin: 10px 0; }
+</style>
+</head>
+<body>
+<h1>Anket Yönetimi</h1>
+<label>Form Slug: <input id="slug" type="text"></label><br>
+<label>Başlık: <input id="title" type="text"></label><br>
+
+<div id="questions"></div>
+<button onclick="addQuestion()">Soru Ekle</button><br><br>
+<button onclick="saveForm()">Kaydet</button>
+
+<script>
+let questions = [];
+
+function addQuestion() {
+    const qIndex = questions.length;
+    const div = document.createElement('div');
+    div.className = 'question';
+    div.innerHTML = `
+        <label>Soru: <input type="text" id="qtext${qIndex}"></label><br>
+        <label>Tip:
+            <select id="qtype${qIndex}">
+                <option value="likert5">Likert 5</option>
+                <option value="radio">Radio</option>
+                <option value="text">Metin</option>
+            </select>
+        </label><br>
+        <label>Seçenekler (virgülle): <input type="text" id="qoptions${qIndex}"></label>
+    `;
+    document.getElementById('questions').appendChild(div);
+    questions.push({});
+}
+
+async function saveForm() {
+    const slug = document.getElementById('slug').value;
+    const title = document.getElementById('title').value;
+    const schema = [];
+    for (let i = 0; i < questions.length; i++) {
+        schema.push({
+            text: document.getElementById(`qtext${i}`).value,
+            type: document.getElementById(`qtype${i}`).value,
+            options: document.getElementById(`qoptions${i}`).value.split(',').map(o=>o.trim())
+        });
+    }
+    const res = await fetch('/api/forms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug, title, schema })
+    });
+    if (res.ok) alert('Kaydedildi');
+    else alert('Hata oluştu');
+}
+</script>
+</body>
+</html>
