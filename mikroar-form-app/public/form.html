@@ -1,41 +1,86 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Anket</title>
   <style>
-    :root{--bg:#f6f7fb;--card:#fff;--ink:#0f172a;--muted:#6b7280;--pri:#2563eb}
-    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);
-      font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto}
-    .wrap{max-width:900px;margin:28px auto;padding:0 16px}
-    .card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:20px;margin:16px 0}
-    h1{margin:0 0 18px;font-size:32px}
-    .q{margin:16px 0}
-    .q label{display:block;margin:0 0 8px;font-weight:600}
-    .muted{color:var(--muted)}
-    input[type=text],textarea,select{width:100%;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px}
-    textarea{min-height:90px;resize:vertical}
-    .opts div{margin:8px 0}
-    .btn{display:inline-block;background:var(--pri);color:#fff;border:0;padding:12px 18px;
-      border-radius:12px;font-weight:600;cursor:pointer}
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+    .question { margin-bottom: 20px; }
+    .options label { display: block; margin-bottom: 5px; }
+    button { padding: 10px 20px; font-size: 16px; }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="card">
-      <h1 id="title">Anket</h1>
-      <p id="desc" class="muted"></p>
-    </div>
+  <h1 id="formTitle">Anket</h1>
+  <div id="questions"></div>
+  <button id="submitBtn">Gönder</button>
 
-    <form id="formArea" class="card"></form>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const slug = params.get("slug");
+    if (!slug) {
+      document.body.innerHTML = "<p>Slug belirtilmemiş.</p>";
+    }
 
-    <div class="card">
-      <button id="sendBtn" class="btn" type="button">Gönder</button>
-      <span id="status" class="muted" style="margin-left:10px"></span>
-    </div>
-  </div>
+    // Soruları yükle
+    fetch(`/api/forms/${slug}`)
+      .then(res => res.json())
+      .then(data => {
+        if (!data.ok) {
+          document.body.innerHTML = `<p>Form yüklenemedi: ${data.error}</p>`;
+          return;
+        }
+        document.getElementById("formTitle").textContent = data.form.title;
 
-  <script src="/form.js"></script>
+        const container = document.getElementById("questions");
+        data.form.schema.forEach((q, qi) => {
+          const qDiv = document.createElement("div");
+          qDiv.className = "question";
+          qDiv.innerHTML = `<p><strong>${qi+1}. ${q.text}</strong></p>`;
+
+          const optDiv = document.createElement("div");
+          optDiv.className = "options";
+          q.options.forEach((opt, oi) => {
+            const id = `q${qi}_opt${oi}`;
+            optDiv.innerHTML += `
+              <label>
+                <input type="radio" name="q${qi}" value="${opt}" /> ${opt}
+              </label>
+            `;
+          });
+          qDiv.appendChild(optDiv);
+          container.appendChild(qDiv);
+        });
+      });
+
+    // Gönderme
+    document.getElementById("submitBtn").addEventListener("click", () => {
+      const answers = [];
+      const qBlocks = document.querySelectorAll(".question");
+      qBlocks.forEach((q, qi) => {
+        const selected = q.querySelector("input[type=radio]:checked");
+        answers.push({
+          question: q.querySelector("strong").textContent,
+          answer: selected ? selected.value : null
+        });
+      });
+
+      fetch(`/api/forms/${slug}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(answers)
+      })
+      .then(res => res.json())
+      .then(resp => {
+        if (resp.ok) {
+          document.body.innerHTML = "<h2>Teşekkürler!</h2>";
+        } else {
+          alert("Hata: " + resp.error);
+        }
+      })
+      .catch(err => alert("İstek hatası: " + err.message));
+    });
+  </script>
 </body>
 </html>
