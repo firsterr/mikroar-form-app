@@ -1,4 +1,4 @@
-// ==== yardımcılar
+// ===== kısayollar
 const qs = (s, r=document) => r.querySelector(s);
 const qa = (s, r=document) => [...r.querySelectorAll(s)];
 
@@ -10,7 +10,7 @@ const saveBtn  = qs('#saveBtn');
 const statusEl = qs('#saveStatus');
 const tpl      = qs('#qTemplate');
 
-// Basic Auth header (bir kez sor, sessionStorage'da tut)
+// Basic Auth header (bir kere sor, sakla)
 function getAuth() {
   let a = sessionStorage.getItem('admAuth');
   if (!a) {
@@ -22,6 +22,7 @@ function getAuth() {
   return a;
 }
 
+// Türlere göre alan göster/gizle
 function toggleBlocks(block){
   const type = qs('.q-type', block).value;
   const opt  = qs('.opt-wrap', block);
@@ -57,7 +58,7 @@ function addQuestion(prefill){
 // + Soru Ekle
 addBtn.addEventListener('click', ()=> addQuestion());
 
-// Sil / Yukarı / Aşağı (event delegation)
+// Sil / yukarı / aşağı
 qList.addEventListener('click', (e)=>{
   const btn  = e.target.closest('button');
   if (!btn) return;
@@ -75,6 +76,7 @@ qList.addEventListener('click', (e)=>{
   }
 });
 
+// Soruları topla
 function collectQuestions(){
   return qa('.q-item', qList).map(block=>{
     const label    = qs('.q-text', block).value.trim();
@@ -122,12 +124,11 @@ saveBtn.addEventListener('click', async () => {
     console.error(err);
     alert('Kaydedilemedi: ' + err.message);
     statusEl.textContent = '';
-    // yanlış şifre girildiyse tekrar sorabilmek için:
-    sessionStorage.removeItem('admAuth');
+    sessionStorage.removeItem('admAuth'); // şifre yanlışsa yeniden sorabilsin
   }
 });
 
-// ?slug=... verilirse formu otomatik getir
+// ?slug=... verilirse yükle
 (async function autoLoad(){
   const s = new URLSearchParams(location.search).get('slug');
   if (!s) return;
