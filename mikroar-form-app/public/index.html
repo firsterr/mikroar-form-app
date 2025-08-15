@@ -1,28 +1,66 @@
 <!doctype html>
 <html lang="tr">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <title>Genel Görüş Anketi</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
     <style>
       :root{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
       body{margin:0;background:#f6f7fb}
-      .wrap{max-width:720px;margin:40px auto;background:#fff;padding:24px;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.06)}
+      .wrap{max-width:860px;margin:40px auto;background:#fff;padding:28px;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.06)}
       h1{margin:0 0 12px;font-size:32px}
-      label{display:block;font-weight:600;margin:12px 0 6px}
-      input{width:100%;padding:12px;border:1px solid #ddd;border-radius:10px;font-size:16px}
-      button{margin-top:14px;padding:12px 18px;border:0;border-radius:10px;background:#1a73e8;color:#fff;font-weight:700;cursor:pointer}
-      #status{margin-left:10px;color:#444}
+      .q{margin:22px 0}
+      .q h3{margin:0 0 8px;font-size:18px}
+      .likert{display:grid;gap:10px;margin-top:8px}
+      .likert label{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;cursor:pointer}
+      .row{display:flex;gap:12px;flex-wrap:wrap}
+      input[type=text]{padding:10px;border:1px solid #e5e7eb;border-radius:10px;flex:1}
+      button{margin-top:18px;padding:12px 18px;border:0;border-radius:10px;background:#1a73e8;color:#fff;font-weight:700;cursor:pointer}
+      #status{margin-left:12px;color:#444}
     </style>
-    <!-- Inline script yok; harici dosya çağrılıyor -->
     <script src="/app.js" defer></script>
   </head>
   <body>
     <div class="wrap">
       <h1>Genel Görüş Anketi</h1>
+
       <form id="form">
-        <label>Ad Soyad</label>
-        <input type="text" name="ad" required placeholder="Adını yaz" />
+        <div class="row">
+          <label>Ad Soyad</label>
+          <input type="text" name="ad" required placeholder="Adını yaz">
+        </div>
+
+        <!-- Soru 1 -->
+        <div class="q">
+          <h3>CHP Türkiye’yi yönetmeye hazır bir parti midir?</h3>
+          <div class="likert">
+            <label><input type="radio" name="q1" value="Kesinlikle katılıyorum" required>Kesinlikle katılıyorum</label>
+            <label><input type="radio" name="q1" value="Katılıyorum">Katılıyorum</label>
+            <label><input type="radio" name="q1" value="Kararsızım">Kararsızım</label>
+            <label><input type="radio" name="q1" value="Katılmıyorum">Katılmıyorum</label>
+            <label><input type="radio" name="q1" value="Kesinlikle katılmıyorum">Kesinlikle katılmıyorum</label>
+          </div>
+        </div>
+
+        <!-- Soru 2 (örnek) -->
+        <div class="q">
+          <h3>Ekonomi yönetiminden memnun musunuz?</h3>
+          <div class="likert">
+            <label><input type="radio" name="q2" value="Kesinlikle katılıyorum" required>Kesinlikle katılıyorum</label>
+            <label><input type="radio" name="q2" value="Katılıyorum">Katılıyorum</label>
+            <label><input type="radio" name="q2" value="Kararsızım">Kararsızım</label>
+            <label><input type="radio" name="q2" value="Katılmıyorum">Katılmıyorum</label>
+            <label><input type="radio" name="q2" value="Kesinlikle katılmıyorum">Kesinlikle katılmıyorum</label>
+          </div>
+        </div>
+
+        <!-- Soru 3 (açık uçlu örnek) -->
+        <div class="q">
+          <h3>Eklemek istediğiniz bir yorum var mı?</h3>
+          <input type="text" name="yorum" placeholder="İsteğe bağlı">
+        </div>
+
         <button type="submit">Gönder</button>
         <span id="status"></span>
       </form>
