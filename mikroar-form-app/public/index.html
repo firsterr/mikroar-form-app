@@ -1,0 +1,18 @@
+<!doctype html>
+<html><body><h1>Genel Görüş Anketi</h1>
+<form id="form">
+<label>Ad Soyad</label><input name="ad" required>
+<button type="submit">Gönder</button>
+</form>
+<script>
+document.getElementById('form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const payload = { ad: e.target.ad.value };
+  const res = await fetch('/api/forms/genel-anket/submit', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+  });
+  const json = await res.json();
+  if(json.ok) location.href='/thanks.html';
+  else alert('Hata: ' + json.error);
+});
+</script></body></html>
