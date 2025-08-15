@@ -169,7 +169,51 @@ app.get('/admin/forms/:slug/stats', adminOnly, async (req, res) => {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
+// 1) responses.json dosyası yolu
+const RESP_FILE = path.join(__dirname, 'responses.json');
 
+// 2) Dosyadan okuma fonksiyonu
+function readResponses(){
+  if(!fs.existsSync(RESP_FILE)) return [];
+  return JSON.parse(fs.readFileSync(RESP_FILE));
+}
+
+// 3) Dosyaya yazma fonksiyonu
+function saveResponses(list){
+  fs.writeFileSync(RESP_FILE, JSON.stringify(list, null, 2));
+}
+
+// 4) Yeni endpoint: Cevap kaydetme
+app.post('/api/responses', (req, res) => {
+  try {
+    const { slug, answers } = req.body || {};
+    
+    // Zorunlu kontrol
+    if(!slug || !Array.isArray(answers)) {
+      return res.status(400).json({ error: 'Eksik veri' });
+    }
+    
+    // Mevcut kayıtları oku
+    const list = readResponses();
+    
+    // Yeni cevabı ekle
+    list.push({
+      slug,
+      answers,
+      ip: (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').toString(),
+      user_agent: req.headers['user-agent'] || '',
+      created_at: new Date().toISOString()
+    });
+    
+    // Kaydet
+    saveResponses(list);
+    
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
 // --- Sunucu başlat ---
 app.listen(PORT, () => {
   console.log(`MikroAR Form API ${PORT} portunda çalışıyor`);
