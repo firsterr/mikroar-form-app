@@ -1,140 +1,176 @@
-import express from "express";
-import fetch from "node-fetch";
-import path from "path";
-import { fileURLToPath } from "url";
-import bodyParser from "body-parser";
-import basicAuth from "express-basic-auth";
-import cors from "cors";
+// server.js — MikroAR Anket Sunucusu (tam sürüm)
+import express from 'express';
+import dotenv from 'dotenv';
+import helmet from 'helmet';
+import cors from 'cors';
+import morgan from 'morgan';
+import basicAuth from 'basic-auth';
+import pkg from 'pg';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+dotenv.config();
+const { Pool } = pkg;
 
-const app = express();
-app.use(cors());
-app.use(bodyParser.json());
-app.use(express.static(path.join(__dirname, "public")));
-
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_KEY;
-const AUTH_USER = process.env.ADMIN_USER || "admin";
-const AUTH_PASS = process.env.ADMIN_PASS || "password";
-
-app.use(
-  "/admin",
-  basicAuth({
-    users: { [AUTH_USER]: AUTH_PASS },
-    challenge: true,
-  })
-);
-
-// Anasayfa
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public/index.html"));
-});
-
-// Teşekkür sayfası
-app.get("/thanks", (req, res) => {
-  res.sendFile(path.join(__dirname, "public/thanks.html"));
-});
-
-// Form kaydetme
-app.post("/submit", async (req, res) => {
-  const { form_slug, responses } = req.body;
-  const ip = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
-
-  // IP bazlı kontrol
-  const checkResp = await fetch(`${SUPABASE_URL}/rest/v1/responses?form_slug=eq.${form_slug}&ip=eq.${ip}`, {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`
-    }
-  });
-  const existing = await checkResp.json();
-  if (existing.length > 0) {
-    return res.status(409).json({ ok: false, message: "Bu formu zaten doldurdunuz." });
-  }
-
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/responses`, {
-    method: "POST",
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      form_slug,
-      responses,
-      ip
-    })
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    console.error("Supabase error:", errText);
-    return res.status(500).json({ ok: false });
-  }
-
-  res.json({ ok: true });
-});
-
-// Form detayını çek (anket soruları)
-app.get("/api/forms/:slug", async (req, res) => {
-  const slug = req.params.slug;
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/forms?slug=eq.${slug}&select=*`, {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`
-    }
-  });
-  const data = await response.json();
-  if (data.length === 0) {
-    return res.status(404).json({ ok: false, message: "Form bulunamadı" });
-  }
-  res.json({ ok: true, form: data[0] });
-});
-
-// Admin - form listeleme
-app.get("/admin/api/forms", async (req, res) => {
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/forms?select=*`, {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`
-    }
-  });
-  const data = await response.json();
-  res.json({ ok: true, forms: data });
-});
-
-// Admin - form oluşturma/güncelleme
-app.post("/admin/api/forms", async (req, res) => {
-  const { slug, title, schema, active } = req.body;
-
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/forms`, {
-    method: "POST",
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      "Content-Type": "application/json",
-      Prefer: "resolution=merge-duplicates"
-    },
-    body: JSON.stringify({
-      slug,
-      title,
-      schema,
-      active
-    })
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    console.error("Supabase error:", errText);
-    return res.status(500).json({ ok: false });
-  }
-
-  res.json({ ok: true });
-});
-
+// --- Ortam değişkenleri ---
 const PORT = process.env.PORT || 3000;
+const DATABASE_URL = process.env.DATABASE_URL;
+const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
+const ADMIN_USER = process.env.ADMIN_USER || 'admin';
+const ADMIN_PASS = process.env.ADMIN_PASS || 'password';
+
+if (!DATABASE_URL) {
+  console.error('DATABASE_URL tanımlı değil!');
+  process.exit(1);
+}
+
+// --- DB havuzu ---
+const pool = new Pool({ connectionString: DATABASE_URL });
+
+// --- App kurulumu ---
+const app = express();
+app.set('trust proxy', true); // Render / proxy arkasında gerçek IP için
+app.use(helmet());
+app.use(morgan('combined'));
+app.use(cors({ origin: CORS_ORIGIN, credentials: false }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static('public'));
+
+// --- Admin koruması ---
+function adminOnly(req, res, next) {
+  const user = basicAuth(req);
+  if (!user || user.name !== ADMIN_USER || user.pass !== ADMIN_PASS) {
+    res.set('WWW-Authenticate', 'Basic realm="MikroAR Admin"');
+    return res.status(401).send('Yetkisiz');
+  }
+  next();
+}
+
+// --- Sağlık kontrolü ---
+app.get('/health', async (_req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// === Public: form şemasını getir ===
+// forms tablosu: slug (PK/UNIQUE), title, active (bool), schema (jsonb)
+app.get('/api/forms/:slug', async (req, res) => {
+  const { slug } = req.params;
+  try {
+    const { rows } = await pool.query(
+      'SELECT slug, title, active, schema FROM forms WHERE slug=$1',
+      [slug]
+    );
+    if (!rows.length) return res.status(404).json({ ok: false, error: 'Form bulunamadı' });
+    if (rows[0].active === false) return res.status(403).json({ ok: false, error: 'Form pasif' });
+    res.json({ ok: true, form: rows[0] });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// === Public: yanıt kaydet (IP bazlı tek oy) ===
+// responses tablosu: form_slug, payload(jsonb), user_agent, ip, created_at
+// DB’de unique index önerilir: UNIQUE(form_slug, ip)
+app.post('/api/forms/:slug/submit', async (req, res) => {
+  const { slug } = req.params;
+  const payload = req.body || {};
+  // Gerçek istemci IP'sini al
+  const xff = req.headers['x-forwarded-for'];
+  const forwardedIp = Array.isArray(xff) ? xff[0] : (typeof xff === 'string' ? xff.split(',')[0].trim() : null);
+  const ip = forwardedIp || req.ip || req.connection?.remoteAddress || null;
+
+  try {
+    // Form var ve aktif mi?
+    const form = await pool.query(
+      'SELECT 1 FROM forms WHERE slug=$1 AND (active IS DISTINCT FROM false)',
+      [slug]
+    );
+    if (form.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: 'Form bulunamadı veya pasif' });
+    }
+
+    // Ekle (UNIQUE ihlalinde 23505 döner)
+    await pool.query(
+      'INSERT INTO responses (form_slug, payload, user_agent, ip) VALUES ($1, $2, $3, $4)',
+      [slug, payload, req.get('user-agent') || null, ip]
+    );
+
+    res.json({ ok: true });
+  } catch (e) {
+    if (e.code === '23505') {
+      // uniq_response_per_ip_per_form index’i tetiklendi
+      return res.status(409).json({ ok: false, error: 'Bu IP’den zaten yanıt gönderilmiş.' });
+    }
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// === Admin: form listele (özet) ===
+app.get('/admin/api/forms', adminOnly, async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT slug, title, active, created_at FROM forms ORDER BY created_at DESC'
+    );
+    res.json({ ok: true, rows });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// === Admin: form oluştur/güncelle ===
+// Body: { slug, title, active(true/false), schema(json) }
+app.post('/admin/api/forms', adminOnly, async (req, res) => {
+  const { slug, title, active = true, schema } = req.body || {};
+  if (!slug || !title) {
+    return res.status(400).json({ ok: false, error: 'slug ve title gerekli' });
+  }
+  try {
+    await pool.query(
+      `INSERT INTO forms (slug, title, active, schema)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (slug) DO UPDATE
+       SET title=EXCLUDED.title, active=EXCLUDED.active, schema=EXCLUDED.schema`,
+      [slug, title, active, schema || null]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// === Admin: yanıtları listele (kontrol için) ===
+app.get('/admin/forms/:slug/responses.json', adminOnly, async (req, res) => {
+  const { slug } = req.params;
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, payload, user_agent, ip, created_at FROM responses WHERE form_slug=$1 ORDER BY created_at DESC',
+      [slug]
+    );
+    res.json({ ok: true, rows });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// === Admin: sayım ===
+app.get('/admin/forms/:slug/stats', adminOnly, async (req, res) => {
+  const { slug } = req.params;
+  try {
+    const { rows } = await pool.query(
+      'SELECT COUNT(*)::int AS count FROM responses WHERE form_slug=$1',
+      [slug]
+    );
+    res.json({ ok: true, count: rows[0].count });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// --- Sunucu başlat ---
 app.listen(PORT, () => {
-  console.log(`Server çalışıyor: ${PORT}`);
+  console.log(`MikroAR Form API ${PORT} portunda çalışıyor`);
 });
