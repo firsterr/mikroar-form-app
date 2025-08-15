@@ -1,58 +1,51 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="tr">
 <head>
-  <meta charset="UTF-8" />
-  <title>Admin Paneli</title>
-  <style>
-    body { font-family: Arial; margin: 20px; }
-    input, select, textarea, button { display: block; margin: 10px 0; padding: 8px; }
-    textarea { width: 300px; height: 100px; }
-  </style>
+<meta charset="utf-8" />
+<title>Admin Panel – Form Oluştur</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<style>
+  :root{--bg:#f6f7fb;--card:#fff;--ink:#0f172a;--muted:#6b7280;--pri:#2563eb}
+  *{box-sizing:border-box} html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto}
+  .wrap{max-width:1000px;margin:32px auto;padding:0 20px}
+  h1{margin:0 0 20px;font-size:28px}
+  .row{display:grid;grid-template-columns:160px 1fr;gap:12px;align-items:center;margin:10px 0}
+  input[type=text],input[type=number],select,textarea{width:100%;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;background:#fff}
+  textarea{min-height:90px;resize:vertical}
+  .card{background:var(--card);border:1px solid #e5e7eb;border-radius:14px;padding:16px;margin:16px 0;box-shadow:0 1px 0 rgba(0,0,0,.02)}
+  .muted{color:var(--muted)}
+  .btn{display:inline-flex;gap:8px;align-items:center;border:1px solid #d1d5db;background:#fff;color:#111;padding:10px 14px;border-radius:12px;cursor:pointer}
+  .btn.pri{background:var(--pri);border-color:var(--pri);color:#fff}
+  .btn.danger{border-color:#fecaca;background:#fee2e2;color:#991b1b}
+  .q-head{display:flex;gap:10px;align-items:center;margin-bottom:8px}
+  .q-actions{margin-left:auto;display:flex;gap:6px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .hidden{display:none}
+  .footer{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
+  .pill{font-size:12px;padding:2px 8px;border-radius:999px;background:#eef2ff;color:#3730a3}
+</style>
 </head>
 <body>
-  <h1>Yeni Soru Ekle</h1>
-  <form id="questionForm">
-    <label>Soru Metni:</label>
-    <input type="text" id="question" required />
+<div class="wrap">
+  <h1>Admin Panel – <span class="pill">Google Forms tarzı</span></h1>
 
-    <label>Yanıt Tipi:</label>
-    <select id="type" required>
-      <option value="radio">Tek Seçenek</option>
-      <option value="checkbox">Çoklu Seçenek</option>
-      <option value="text">Açık Uçlu</option>
-    </select>
+  <div class="card">
+    <div class="row"><label>Form Slug</label><input id="slug" type="text" placeholder="ornek-anket" /></div>
+    <div class="row"><label>Başlık</label><input id="title" type="text" placeholder="Belediye Genel Değerlendirme" /></div>
+  </div>
 
-    <label>Seçenekler (her satıra bir seçenek yaz):</label>
-    <textarea id="options"></textarea>
+  <div id="questions"></div>
 
-    <button type="submit">Kaydet</button>
-  </form>
+  <div class="footer">
+    <button class="btn" id="addQuestion">+ Soru Ekle</button>
+    <button class="btn pri" id="saveForm">Kaydet</button>
+  </div>
 
-  <script>
-    document.getElementById("questionForm").addEventListener("submit", async (e) => {
-      e.preventDefault();
+  <p id="status" class="muted"></p>
+</div>
 
-      const question = document.getElementById("question").value;
-      const type = document.getElementById("type").value;
-      const options = document.getElementById("options").value
-        .split("\n")
-        .map(opt => opt.trim())
-        .filter(opt => opt !== "");
-
-      const res = await fetch("/add-question", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, type, options })
-      });
-
-      const data = await res.json();
-      if (data.ok) {
-        alert("Soru eklendi!");
-        document.getElementById("questionForm").reset();
-      } else {
-        alert("Hata oluştu!");
-      }
-    });
-  </script>
+<script src="admin.js"></script>
 </body>
 </html>
