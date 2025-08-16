@@ -54,6 +54,11 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false // bazı tarayıcı kısıtlarını gevşet
 }));
 
+// “/” kök adresine geleni tek bir forma yönlendir
+app.get('/', (req, res) => {
+  res.redirect(301, '/form.html?slug=deneme9');
+});
+
 // CORS
 app.use(cors({ origin: CORS_ORIGIN, credentials: false }));
 app.use(express.json({ limit: '1mb' }));
@@ -228,10 +233,7 @@ app.get('/admin/forms/:slug/export.csv', adminOnly, async (req, res) => {
   res.attachment(`${slug}_export.csv`);
   res.send(csv);
 });
-// “/” kök adresine geleni tek bir forma yönlendir
-app.get('/', (req, res) => {
-  res.redirect(301, '/form.html?slug=deneme9');
-});
+
 // --- Start ---
 app.listen(PORT, () => {
   console.log(`MikroAR Form API ${PORT} portunda çalışıyor`);
