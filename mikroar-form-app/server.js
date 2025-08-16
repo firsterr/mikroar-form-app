@@ -80,30 +80,31 @@ app.get(['/form', '/form.html'], async (req, res, next) => {
   }
 });
 // <<< SON
-// .env'de ayarlanabilir, yoksa 'formayvalik'
+// CORS + body parsers + logs + static
+app.use(cors({ origin: CORS_ORIGIN, credentials: false }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true }));
+app.use(morgan('combined'));
+
+// .env yoksa varsayılan
 const DEFAULT_FORM_SLUG = process.env.DEFAULT_FORM_SLUG || 'formayvalik';
 
-// KÖK YÖNLENDİRME — MUTLAKA express.static'ten ÖNCE OLMALI
+// >>> KÖK YÖNLENDİRME — MUTLAKA express.static'ten ÖNCE <<<
 app.get('/', (req, res) => {
   const host = (req.headers.host || '').toLowerCase();
 
-  // Admin alan adı: anket.mikroar.com → admin
+  // Admin alan adı: anket.mikroar.com → admin.html
   if (host.startsWith('anket.')) {
     return res.redirect(302, '/admin.html');
   }
 
-  // Form alan adı (veya diğerleri) → form.html?slug=...
+  // Form alan adı (ve diğerleri) → form.html?slug=DEFAULT
   return res.redirect(
     302,
     `/form.html?slug=${encodeURIComponent(DEFAULT_FORM_SLUG)}`
   );
 });
 
-// CORS + body parsers + logs + static
-app.use(cors({ origin: CORS_ORIGIN, credentials: false }));
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true }));
-app.use(morgan('combined'));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ---- Yardımcılar
