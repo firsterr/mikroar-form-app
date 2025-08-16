@@ -1,54 +1,211 @@
 <!doctype html>
 <html lang="tr">
 <head>
-  <meta charset="utf-8" />
-  <title>Anket Sonuçları (Grid)</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    :root { --bg:#0b1020; --fg:#e8ecf3; --muted:#9aa3b2; --line:#223; --pill:#1c2a4a; --accent:#3b82f6;}
-    body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
-    header{display:flex;gap:8px;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line);position:sticky;top:0;background:linear-gradient(180deg,var(--bg),rgba(11,16,32,.94))}
-    h1{font-size:16px;margin:0 12px 0 0}
-    input,button,select{font:14px inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#0f1630;color:var(--fg)}
-    button{cursor:pointer}
-    button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-    .muted{color:var(--muted)}
-    .grow{flex:1}
-    .wrap{padding:14px 16px}
-    .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:10px}
-    table{border-collapse:collapse;min-width:900px;width:100%}
-    th,td{border-bottom:1px solid var(--line);padding:8px 10px;vertical-align:top}
-    th{position:sticky;top:58px;background:#0f1630;text-align:left;font-weight:600}
-    td .pill{display:inline-block;background:var(--pill);padding:2px 8px;border-radius:999px;margin:2px 6px 2px 0;border:1px solid #2a3a63}
-    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-    .tools{display:flex;gap:8px;align-items:center;margin:10px 0 14px}
-    .hint{font-size:12px}
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Anket Sonuçları</title>
+<style>
+  :root{
+    --bg:#0f1220; --card:#14182b; --muted:#8a93b2; --text:#e9ecf8;
+    --accent:#3b82f6; --accent-2:#1e293b; --ok:#10b981;
+    --row:#0f1326; --row-alt:#111735; --border:#1f2543;
+  }
+  html,body{height:100%}
+  body{
+    margin:0; font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu;
+    color:var(--text); background:var(--bg);
+  }
+  .wrap{max-width:1280px;margin:0 auto;padding:20px}
+  .bar{
+    display:flex;gap:12px;align-items:center;flex-wrap:wrap;
+    margin-bottom:16px
+  }
+  .bar h1{font-size:20px;margin:0 12px 0 0}
+  .pill{background:var(--card);border:1px solid var(--border);
+    color:var(--text);padding:8px 10px;border-radius:10px}
+  select,input,button{
+    background:var(--card); color:var(--text);
+    border:1px solid var(--border); border-radius:8px;
+    height:36px; padding:0 10px
+  }
+  button.primary{background:var(--accent); border-color:transparent}
+  button.ghost{background:var(--card)}
+  .hint{color:var(--muted);margin:8px 0 14px}
+
+  .table-wrap{
+    background:var(--card);border:1px solid var(--border);
+    border-radius:12px; overflow:auto; /* yatay kaydırma */
+  }
+  table{border-collapse:separate;border-spacing:0;min-width:900px;width:100%}
+  thead th{
+    position:sticky; top:0; z-index:2;
+    background:var(--accent-2);
+    color:#cfe0ff;
+  }
+  th,td{
+    padding:12px 14px; border-bottom:1px solid var(--border);
+    vertical-align:top; text-align:left;
+  }
+  tbody tr:nth-child(odd){background:var(--row)}
+  tbody tr:nth-child(even){background:var(--row-alt)}
+  th:first-child, td:first-child{position:sticky;left:0;z-index:1;background:inherit}
+  /* uzun metinler taşmasın */
+  th,td{word-break:break-word; overflow-wrap:anywhere; white-space:normal}
+  /* dar kolonları biraz daraltalım */
+  .col-date{width:180px}
+  .col-ip{width:160px}
+  .tools{margin-left:auto;display:flex;gap:8px}
+  .muted{color:var(--muted)}
+</style>
 </head>
 <body>
-  <header>
+<div class="wrap">
+  <div class="bar">
     <h1>Sonuçlar</h1>
-    <label>Slug</label>
-    <input id="slug" placeholder="örn. formayvalik" />
-    <button id="loadBtn">Yükle</button>
-    <span class="muted" id="meta"></span>
-    <span class="grow"></span>
-    <button id="copyBtn">Kopyala (TSV)</button>
-    <button id="csvBtn" class="primary">CSV indir</button>
-  </header>
-
-  <div class="wrap">
+    <label class="pill">
+      Slug
+      <select id="slug" style="margin-left:8px"></select>
+    </label>
+    <button id="load" class="ghost">Yükle</button>
+    <span id="meta" class="muted">kayıt: 0, sütun: 0</span>
     <div class="tools">
-      <span class="hint">Not: Bu sayfa Basic Auth ister (admin kullanıcı/şifre).</span>
-    </div>
-    <div class="table-wrap">
-      <table id="grid">
-        <thead></thead>
-        <tbody></tbody>
-      </table>
+      <button id="copy" class="ghost">Kopyala (TSV)</button>
+      <button id="csv" class="primary">CSV indir</button>
     </div>
   </div>
+  <div class="hint">Not: Bu sayfa Basic Auth ister (admin kullanıcı/şifre).</div>
 
-  <script src="results.js"></script>
+  <div class="table-wrap">
+    <table id="grid">
+      <thead><tr id="hdr"></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const $ = (q)=>document.querySelector(q);
+const api = (p)=>fetch(p,{credentials:'include'}).then(r=>r.json());
+
+/* Slug listesi: forms tablosundan kısa bir endpoint varsa onu kullanın.
+   Yoksa input manuel bırakılabilir. Burada, son açılanı select'e koyuyoruz. */
+const knownSlugs = (localStorage.getItem('slugs')||'').split(',').filter(Boolean);
+const slugSel = $('#slug');
+slugSel.innerHTML = knownSlugs.map(s=>`<option>${s}</option>`).join('');
+if(!slugSel.value) slugSel.innerHTML = `<option>formayvalik</option><option>deneme9</option>`;
+
+$('#load').onclick = ()=> load(slugSel.value);
+slugSel.onchange   = ()=> load(slugSel.value);
+$('#copy').onclick = ()=> copyTSV();
+$('#csv').onclick  = ()=> downloadCSV();
+
+/** çek -> pivot -> yaz */
+async function load(slug){
+  try{
+    // forms şemasını al
+    const form = await api(`/api/forms/${encodeURIComponent(slug)}`);
+    if(!form.ok || !form.form) throw new Error('Form bulunamadı');
+    const questions = (form.form.schema && form.form.schema.questions) ? form.form.schema.questions : [];
+
+    // cevapları al
+    const res = await api(`/admin/forms/${encodeURIComponent(slug)}/responses.json`);
+    if(!res.ok) throw new Error('Yanıtlar alınamadı');
+
+    // kolon başlıkları
+    const cols = ['Tarih','IP', ...questions.map(q => q.label || 'Soru')];
+
+    // tabloları temizle
+    const thead = $('#hdr'); thead.innerHTML='';
+    const tbody = $('#rows'); tbody.innerHTML='';
+
+    // başlık satırı (THEAD!)
+    cols.forEach((c,i)=>{
+      const th = document.createElement('th');
+      th.textContent = c;
+      if(i===0) th.className = 'col-date';
+      if(i===1) th.className = 'col-ip';
+      thead.appendChild(th);
+    });
+
+    // verileri pivotla
+    const rows = res.rows.map(r=>{
+      const a = r.payload?.answers || {};
+      const arr = [fmtDate(r.created_at), r.ip];
+      questions.forEach(q=>{
+        const v = a[q.label] ?? a[q.key] ?? a[q.name];
+        arr.push(Array.isArray(v) ? v.join(', ') : (v ?? ''));
+      });
+      return arr;
+    });
+
+    // yaz
+    for(const r of rows){
+      const tr = document.createElement('tr');
+      r.forEach((val,i)=>{
+        const td = document.createElement('td');
+        td.textContent = val ?? '';
+        if(i===0) td.className = 'col-date';
+        if(i===1) td.className = 'col-ip';
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    }
+
+    // meta
+    $('#meta').textContent = `kayıt: ${rows.length}, sütun: ${cols.length}`;
+
+    // slug’ı hatırla (selector kolaylığı için)
+    rememberSlug(slug);
+  }catch(err){
+    alert(err.message || err);
+  }
+}
+
+function fmtDate(iso){
+  try{
+    const d = new Date(iso);
+    return d.toLocaleString('tr-TR',{timeZone:'Europe/Istanbul'});
+  }catch{ return iso }
+}
+
+function rememberSlug(s){
+  const set = new Set( (localStorage.getItem('slugs')||'').split(',').filter(Boolean) );
+  set.add(s);
+  localStorage.setItem('slugs', Array.from(set).join(','));
+  slugSel.innerHTML = Array.from(set).map(x=>`<option ${x===s?'selected':''}>${x}</option>`).join('');
+}
+
+/* TSV kopyala */
+function copyTSV(){
+  const tsv = makeDelimited('\t');
+  navigator.clipboard.writeText(tsv).then(()=>alert('Panoya kopyalandı (TSV).'));
+}
+/* CSV indir */
+function downloadCSV(){
+  const csv = makeDelimited(',');
+  const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${slugSel.value}_export.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+function makeDelimited(sep){
+  const head = Array.from($('#hdr').children).map(th=>th.textContent);
+  const lines = [head.join(sep)];
+  Array.from($('#rows').children).forEach(tr=>{
+    const row = Array.from(tr.children).map(td=>{
+      const v = (td.textContent||'').replaceAll('"','""');
+      // Excel güvenli CSV
+      return sep===',' ? `"${v}"` : v;
+    });
+    lines.push(row.join(sep));
+  });
+  return lines.join('\n');
+}
+
+/* ilk yükleme */
+load(slugSel.value || 'formayvalik');
+</script>
 </body>
 </html>
