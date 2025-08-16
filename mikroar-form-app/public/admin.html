@@ -1,53 +1,59 @@
 <!doctype html>
 <html lang="tr">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Anket Oluştur / Düzenle</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MikroAR – Anket Admin</title>
   <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto; margin:0; padding:24px;}
-    .row{display:grid;grid-template-columns:1fr 1fr 1fr; gap:16px; align-items:center}
-    input,select,button,textarea{font:inherit; padding:10px; border-radius:10px; border:1px solid #ddd}
-    button{background:#f4f6ff; cursor:pointer}
-    button.primary{background:#1f73ff; color:white}
-    .qcard{border:1px solid #ececec; border-radius:14px; padding:14px; margin:14px 0}
-    .muted{color:#667}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:24px}
+    .row{display:flex;gap:12px;align-items:center;margin:8px 0}
+    input[type="text"],select,textarea{padding:10px;border:1px solid #d0d0d0;border-radius:8px;font-size:15px}
+    input[type="text"]{min-width:300px}
+    textarea{width:100%;border-radius:10px}
+    .btn{padding:10px 14px;border:1px solid #d0d0d0;border-radius:8px;background:#fff;cursor:pointer}
+    .btn.primary{background:#1677ff;color:#fff;border-color:#1677ff}
+    .btn.danger{background:#fff0f0;border-color:#ffb3b3;color:#c20000}
+    .q-card{border:1px solid #e6e6e6;border-radius:12px;padding:12px;margin:14px 0}
+    .q-row{display:flex;gap:12px;align-items:center;margin:8px 0}
+    .section-title{font-size:22px;font-weight:700;margin:18px 0}
   </style>
-
-  <!-- ÖNEMLİ: JS harici dosyada ve defer ile -->
-  <script src="/admin.js?v=2" defer></script>
 </head>
 <body>
-  <h1>🔧 Anket Oluştur / Düzenle</h1>
+  <h1>🛠️ Anket Oluştur / Düzenle</h1>
 
-  <div class="row" style="margin-bottom:12px">
+  <div class="row">
     <div>
       <div>Slug</div>
-      <input id="slug" placeholder="örn: formayvalik"/>
+      <input id="slug" type="text" placeholder="örn: formayvalik" />
     </div>
+
     <div>
       <div>Başlık</div>
-      <input id="title" placeholder="Anket başlığı"/>
+      <input id="title" type="text" placeholder="Anket başlığı" />
     </div>
+
     <div>
       <div>Durum</div>
       <select id="active">
-        <option value="true" selected>Aktif</option>
-        <option value="false">Pasif</option>
+        <option>Aktif</option>
+        <option>Pasif</option>
       </select>
+    </div>
+
+    <div style="margin-top:22px;display:flex;gap:8px">
+      <button id="btnLoad" class="btn">Yükle</button>
+      <button id="btnNew" class="btn">Yeni (sıfır)</button>
+      <button id="btnAdd" class="btn">Soru Ekle</button>
+      <button id="btnSave" class="btn primary">Kaydet</button>
     </div>
   </div>
 
-  <div style="display:flex; gap:12px; align-items:center; margin-bottom:10px">
-    <button id="btnLoad">Yükle</button>
-    <button id="btnNew">Yeni (sıfır)</button>
-    <div class="muted">“Yükle” mevcut formu getirir; sonra düzenleyip “Kaydet” dersen üzerine yazar.</div>
-    <div style="flex:1"></div>
-    <button id="btnAddQuestion">Soru Ekle</button>
-    <button id="btnSave" class="primary">Kaydet</button>
-  </div>
+  <p>“Yükle” mevcut formu getirir; düzenleyip “Kaydet” dersen üzerine yazar.</p>
 
-  <h2>Sorular</h2>
+  <div class="section-title">Sorular</div>
   <div id="questions"></div>
+
+  <!-- Tek JS dosyamız: -->
+  <script src="/admin.js" defer></script>
 </body>
 </html>
