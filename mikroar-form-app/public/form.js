@@ -1,138 +1,122 @@
-(async () => {
-  const $ = s => document.querySelector(s);
-  const root = $('#root');
-  const btn  = $('#send');
-  const actions = $('#actions');
-  const slug = new URLSearchParams(location.search).get('slug');
+/* MikroAR – Katılımcı Formu */
+const $ = s => document.querySelector(s);
+const toast=(m, type='')=>{
+  const t=$('#toast'); t.textContent=m; t.style.display='block';
+  t.style.borderColor = type==='err' ? '#ef4444' : 'var(--line)';
+  setTimeout(()=>t.style.display='none',2000);
+};
 
-  if(!slug){ root.innerHTML = '<div class="error">Slug yok.</div>'; return; }
+const els = {
+  title: $('#title'),
+  form:  $('#form'),
+  send:  $('#btnSend'),
+  card:  $('#formCard'),
+  thanks:$('#thanks'),
+};
 
-  let res, txt, json;
+const slug = new URLSearchParams(location.search).get('slug');
+
+if(!slug){
+  toast('Slug eksik','err');
+} else {
+  load();
+}
+
+async function load(){
   try{
-    res = await fetch(`/api/forms/${encodeURIComponent(slug)}`, {cache:'no-store'});
-    txt = await res.text();
-  }catch(e){
-    root.innerHTML = '<div class="error">İstek hatası: '+e.message+'</div>';
-    return;
-  }
+    const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`);
+    const j = await r.json();
+    if(!j.ok) throw new Error(j.error||'Bulunamadı');
+    const form = j.form;
+    els.title.textContent = form.title || slug;
+    render(form.schema?.questions || []);
+  }catch(e){ toast('Yüklenemedi: '+e.message,'err'); }
+}
 
-  try{ json = JSON.parse(txt); }
-  catch{ root.innerHTML = '<div class="error">JSON parse hatası — sunucu cevabı:\n\n'+txt+'</div>'; return; }
+function el(tag, attrs={}, html=''){
+  const n = document.createElement(tag);
+  Object.entries(attrs).forEach(([k,v])=> n.setAttribute(k,v));
+  if(html) n.innerHTML = html;
+  return n;
+}
 
-  if(!json || json.ok !== true){
-    root.innerHTML = '<div class="error">API hata: ' + (json && json.error || 'bilinmeyen') + '</div>';
-    return;
-  }
+function render(questions){
+  els.form.innerHTML='';
+  questions.forEach((q,qi)=>{
+    const idBase = `q_${qi}`;
+    const block = el('fieldset',{class:'q'});
+    const legend = el('legend',{}, `${qi+1}. ${q.label || 'Soru'}` + (q.required? ' *':''));
+    block.appendChild(legend);
 
-  const form = json.form || {};
-  $('#title').textContent = form.title || 'Anket';
-
-  let schema = form.schema;
-  try{ if(typeof schema === 'string') schema = JSON.parse(schema); }catch(_){}
-  const questions = Array.isArray(schema)
-      ? schema
-      : (schema && Array.isArray(schema.questions) ? schema.questions : []);
-
-  if(!questions.length){
-    root.innerHTML = '<div class="muted">Bu ankette henüz soru yok.</div>';
-    return;
-  }
-
-  root.innerHTML = '';
-  questions.forEach((q, i) => {
-    const card = document.createElement('div'); card.className = 'card';
-    const title = document.createElement('div'); title.className = 'q';
-    const label = q.label || q.text || `Soru ${i+1}`;
-    title.textContent = `${i+1}. ${label}` + (q.required ? ' *' : '');
-    card.appendChild(title);
-
-    const t = String(q.type || 'radio').toLowerCase();
-    const name = `q_${i}`;
-
-    if (t === 'checkbox'){
-      (q.options || []).forEach(opt => {
-        const row = document.createElement('label'); row.className='opt';
-        const inp = document.createElement('input'); inp.type='checkbox'; inp.name=name; inp.value=opt;
-        row.appendChild(inp); row.appendChild(document.createTextNode(opt));
-        card.appendChild(row);
+    if(q.type==='radio' || q.type==='checkbox'){
+      (q.options||[]).forEach((op,oi)=>{
+        const id = `${idBase}_${oi}`;
+        const line = el('label',{for:id,class:'opt'});
+        const inp = el('input',{type:q.type,name:idBase,id});
+        // büyük tıklama alanı
+        const text = el('span',{}, op);
+        line.append(inp,text);
+        block.appendChild(line);
       });
-
-    } else if (t === 'radio' || t === 'çoktan seçmeli' || t === 'coktan secmeli'){
-      (q.options || []).forEach(opt => {
-        const row = document.createElement('label'); row.className='opt';
-        const inp = document.createElement('input'); inp.type='radio'; inp.name=name; inp.value=opt;
-        row.appendChild(inp); row.appendChild(document.createTextNode(opt));
-        card.appendChild(row);
-      });
-
-    } else if (t === 'dropdown' || t === 'select'){
-      const row = document.createElement('div'); row.className='opt';
-      const sel = document.createElement('select'); sel.name=name;
-      (q.options || []).forEach(opt => { const o=document.createElement('option'); o.value=opt; o.textContent=opt; sel.appendChild(o); });
-      row.appendChild(sel); card.appendChild(row);
-
-    } else if (t === 'text'){
-      const row = document.createElement('div'); row.className='opt';
-      const inp = document.createElement('input'); inp.type='text'; inp.name=name;
-      row.appendChild(inp); card.appendChild(row);
-
-    } else if (t === 'textarea'){
-      const row = document.createElement('div'); row.className='opt';
-      const ta = document.createElement('textarea'); ta.name=name;
-      row.appendChild(ta); card.appendChild(row);
-
-    } else {
-      const row = document.createElement('div'); row.className='opt';
-      const inp = document.createElement('input'); inp.type='text'; inp.name=name;
-      row.appendChild(inp); card.appendChild(row);
+    } else if(q.type==='textarea'){
+      const ta = el('textarea',{name:idBase,placeholder:'Yanıtınızı yazın...'});
+      ta.className='text';
+      const wrap = el('div',{class:'text'}); wrap.appendChild(ta);
+      block.appendChild(wrap);
+    } else { // text
+      const inp = el('input',{type:'text',name:idBase,placeholder:'Yanıtınızı yazın...'});
+      const wrap = el('div',{class:'text'}); wrap.appendChild(inp);
+      block.appendChild(wrap);
     }
 
-    root.appendChild(card);
+    els.form.appendChild(block);
   });
 
-  actions.style.display = 'block';
-  btn.onclick = async () => {
-    const answers = {};
-    for (let i=0;i<questions.length;i++){
-      const q = questions[i];
-      const name = `q_${i}`;
-      const t = String(q.type||'radio').toLowerCase();
-      let val = null;
+  els.send.onclick = (e)=>{ e.preventDefault(); submit(questions); };
+}
 
-      if (t==='checkbox'){
-        val = [...root.querySelectorAll(`input[name="${name}"]:checked`)].map(x=>x.value);
-      } else if (t==='radio' || t==='çoktan seçmeli' || t==='coktan secmeli'){
-        const el = root.querySelector(`input[name="${name}"]:checked`);
-        val = el ? el.value : null;
-      } else if (t==='dropdown' || t==='select'){
-        const el = root.querySelector(`select[name="${name}"]`);
-        val = el ? el.value : null;
-      } else if (t==='text' || t==='textarea'){
-        const el = root.querySelector(`[name="${name}"]`);
-        val = el ? el.value : null;
-      }
+function collect(questions){
+  const answers = {};
+  let valid = true;
 
-      if (q.required){
-        const empty = (val==null) || (Array.isArray(val)&&val.length===0) || (typeof val==='string' && val.trim()==='');
-        if (empty){ alert(`${i+1}. soru zorunlu`); return; }
-      }
+  questions.forEach((q,qi)=>{
+    const idBase = `q_${qi}`;
+    let value = null;
 
-      const key = q.label || q.text || `Soru ${i+1}`;
-      answers[key] = val;
+    if(q.type==='radio'){
+      const sel = document.querySelector(`input[name="${idBase}"]:checked`);
+      value = sel ? sel.nextSibling.textContent : null;
+    } else if(q.type==='checkbox'){
+      value = Array.from(document.querySelectorAll(`input[name="${idBase}"]:checked`))
+                   .map(inp => inp.nextSibling.textContent);
+      if(value.length===0) value = null;
+    } else {
+      const inp = document.querySelector(`[name="${idBase}"]`);
+      value = inp?.value?.trim() || null;
     }
 
-    btn.disabled = true;
-    try{
-      const r = await fetch(`/api/forms/${encodeURIComponent(slug)}/submit`, {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({answers})
-      });
-      const j = await r.json().catch(()=> ({}));
-      if(j && j.ok){ location.href='/thanks.html'; }
-      else{ alert('Kaydetme hatası: ' + (j.error||'bilinmeyen')); btn.disabled=false; }
-    }catch(e){
-      alert('İstek hatası: '+e.message); btn.disabled=false;
+    if(q.required && (value===null || value==='' || (Array.isArray(value)&&value.length===0))){
+      valid = false;
     }
-  };
-})();
+    // çıktıda anahtar olarak SORU METNİ’ni kullan
+    answers[q.label || `Soru ${qi+1}`] = value;
+  });
+
+  return {valid, payload:{answers}};
+}
+
+async function submit(questions){
+  const {valid, payload} = collect(questions);
+  if(!valid) return toast('Lütfen zorunlu soruları doldurun','err');
+
+  try{
+    const r = await fetch(`/api/forms/${encodeURIComponent(slug)}/submit`,{
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
+    });
+    const j = await r.json();
+    if(!j.ok) throw new Error(j.error||'Kaydedilemedi');
+    // teşekkür
+    els.card.style.display='none';
+    els.thanks.style.display='block';
+  }catch(e){ toast('Hata: '+e.message,'err'); }
+}
