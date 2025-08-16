@@ -279,6 +279,54 @@ async function openPickerIfNoSlug() {
   // 2) slug varsa normal akış (mevcut loadForm vb.)
   await loadForm(); // senin var olan fonksiyonun
 })();
+  // URL'den slug parametresi al
+const urlParams = new URLSearchParams(window.location.search);
+let slug = urlParams.get("slug");
+
+if (!slug) {
+  // Eğer slug yoksa form seçme ekranı göster
+  fetch("/api/forms")
+    .then(res => res.json())
+    .then(forms => {
+      // Modal oluştur
+      const modal = document.createElement("div");
+      modal.style.position = "fixed";
+      modal.style.top = "0";
+      modal.style.left = "0";
+      modal.style.width = "100%";
+      modal.style.height = "100%";
+      modal.style.background = "rgba(0,0,0,0.6)";
+      modal.style.display = "flex";
+      modal.style.justifyContent = "center";
+      modal.style.alignItems = "center";
+      modal.style.zIndex = "9999";
+
+      const box = document.createElement("div");
+      box.style.background = "#fff";
+      box.style.padding = "20px";
+      box.style.borderRadius = "8px";
+      box.style.textAlign = "center";
+
+      const title = document.createElement("h2");
+      title.innerText = "Bir anket seçin";
+      box.appendChild(title);
+
+      // Liste oluştur
+      forms.forEach(f => {
+        const btn = document.createElement("button");
+        btn.innerText = f.title || f.slug;
+        btn.style.display = "block";
+        btn.style.margin = "10px auto";
+        btn.onclick = () => {
+          window.location.href = `form.html?slug=${f.slug}`;
+        };
+        box.appendChild(btn);
+      });
+
+      modal.appendChild(box);
+      document.body.appendChild(modal);
+    });
+}
   // Etkinlik
   els.btnSend?.addEventListener('click', handleSubmit);
 
