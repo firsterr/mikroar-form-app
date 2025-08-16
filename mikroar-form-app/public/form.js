@@ -14,7 +14,8 @@ const els = {
   thanks:$('#thanks'),
 };
 
-const slug = new URLSearchParams(location.search).get('slug');
+const slug = new URLSearchParams(location.search).get('slug')
+           || (window.__CFG && window.__CFG.defaultSlug);
 
 if(!slug){
   toast('Slug eksik','err');
