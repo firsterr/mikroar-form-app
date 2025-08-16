@@ -56,7 +56,7 @@ app.use(helmet({
 
 // “/” kök adresine geleni tek bir forma yönlendir
 app.get('/', (req, res) => {
-  res.redirect(301, '/form.html?slug=deneme9');
+  res.redirect(301, '/form.html?slug=formayvalik');
 });
 
 // CORS
