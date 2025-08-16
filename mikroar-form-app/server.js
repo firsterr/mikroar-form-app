@@ -54,9 +54,16 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false // bazı tarayıcı kısıtlarını gevşet
 }));
 
-// “/” kök adresine geleni tek bir forma yönlendir
+// Form sayfasına yönlendirme (daha önce eklemiştik)
 app.get('/', (req, res) => {
-  res.redirect(301, '/form.html?slug=formayvalik');
+  if (req.hostname === 'form.mikroar.com') {
+    res.redirect('https://mikroar-form-app.onrender.com/form.html?slug=formayvalik');
+  } else if (req.hostname === 'anket.mikroar.com') {
+    // Yeni eklenen yönlendirme
+    res.redirect('https://mikroar-form-app.onrender.com/admin.html');
+  } else {
+    res.send('Domain tanımlı değil');
+  }
 });
 
 // CORS
