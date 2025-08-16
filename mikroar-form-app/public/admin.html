@@ -1,101 +1,85 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Admin • Form Oluştur</title>
-  <style>
-    :root{--bg:#f6f7fb;--card:#fff;--ink:#111;--muted:#667085;--line:#e6e8ef;--pri:#2563eb}
-    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto}
-    .container{max-width:980px;margin:28px auto;padding:0 16px}
-    h1{font-size:24px;margin:0 0 20px}
-    label{display:block;font-weight:600;margin:14px 0 6px}
-    .muted{color:var(--muted)}
-    input,select,textarea{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:#fff;font:15px/1.3 inherit}
-    textarea{resize:vertical}
-    .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
-    .row{display:flex;gap:10px;align-items:center}
-    .btn{background:var(--pri);color:#fff;border:none;border-radius:12px;padding:10px 16px;font-weight:600;cursor:pointer}
-    .ghost{background:#fff;border:1px solid var(--line);color:var(--ink)}
-    .icon{border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 12px;cursor:pointer}
-    .bar{display:flex;gap:10px;align-items:center;margin-top:16px}
-    .q-item{margin:14px 0}
-  </style>
+  <meta charset="UTF-8">
+  <title>Anket Admin</title>
 </head>
 <body>
-  <main class="container">
-    <h1>Admin • Form Oluştur</h1>
+  <h1>Anket Oluştur / Düzenle</h1>
 
-    <div class="card">
-      <label for="slug">Form Slug</label>
-      <input id="slug" placeholder="örn: deneme6" />
+  <!-- Slug Yükleme Alanı -->
+  <input type="text" id="slugInput" placeholder="Slug gir (örn: formayvalik)">
+  <button onclick="loadForm()">Yükle</button>
 
-      <label for="title">Başlık</label>
-      <input id="title" placeholder="örn: deneme6 anket değerlendirme" />
-    </div>
+  <div>
+    <label>Anket Başlığı: </label>
+    <input type="text" id="title">
+  </div>
 
-    <h2 style="margin:18px 0 8px">Sorular</h2>
-    <div id="qList"></div>
+  <div id="questions"></div>
+  <button onclick="addQuestion()">Soru Ekle</button>
 
-    <div class="bar">
-      <button id="addBtn" class="btn ghost" type="button">+ Soru Ekle</button>
-      <button id="saveBtn" class="btn" type="button">Kaydet</button>
-      <span id="saveStatus" class="muted"></span>
-    </div>
-  </main>
+  <button onclick="saveForm()">Kaydet</button>
 
-  <!-- Soru şablonu -->
-  <template id="qTemplate">
-    <div class="q-item card">
-      <label>Soru Metni</label>
-      <input class="q-text" placeholder="Buraya SORUYU yazın (örn: Bu hizmetten memnun musunuz?)" />
+  <script>
+    async function loadForm() {
+      const slug = document.getElementById("slugInput").value.trim();
+      if (!slug) return alert("Slug giriniz");
 
-      <div class="row" style="margin-top:10px">
-        <select class="q-type" title="Yanıt tipi" style="flex:1">
-          <option value="short_text">Kısa yanıt</option>
-          <option value="paragraph">Paragraf</option>
-          <option value="radio">Tek seçenek (radio)</option>
-          <option value="checkbox">Çoklu seçenek (checkbox)</option>
-          <option value="dropdown">Açılır liste</option>
-          <option value="linear">Lineer ölçek</option>
-        </select>
+      const res = await fetch(`/api/forms/${slug}`);
+      if (!res.ok) {
+        return alert("Form bulunamadı");
+      }
+      const form = await res.json();
 
-        <select class="q-req" title="Zorunluluk" style="width:160px">
-          <option value="true">Zorunlu</option>
-          <option value="false">Zorunlu değil</option>
-        </select>
+      // Form başlığını doldur
+      document.getElementById("title").value = form.title || "";
 
-        <button class="icon btn-up"   type="button" title="Yukarı">↑</button>
-        <button class="icon btn-down" type="button" title="Aşağı">↓</button>
-        <button class="icon btn-del"  type="button" title="Sil">Sil</button>
-      </div>
+      // Soruları ekrana bas
+      const qDiv = document.getElementById("questions");
+      qDiv.innerHTML = "";
+      form.questions.forEach((q, idx) => {
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = q;
+        input.dataset.index = idx;
+        qDiv.appendChild(input);
+        qDiv.appendChild(document.createElement("br"));
+      });
+    }
 
-      <div class="opt-wrap" style="margin-top:12px;display:none">
-        <label>Seçenekler (her satır bir seçenek):</label>
-        <textarea class="q-opts" rows="4" placeholder="Evet&#10;Hayır"></textarea>
-      </div>
+    function addQuestion() {
+      const qDiv = document.getElementById("questions");
+      const input = document.createElement("input");
+      input.type = "text";
+      input.placeholder = "Yeni soru";
+      qDiv.appendChild(input);
+      qDiv.appendChild(document.createElement("br"));
+    }
 
-      <div class="linear-wrap" style="display:none;margin-top:12px;gap:10px" class="row">
-        <div>
-          <label>Min</label>
-          <input type="number" class="q-min" value="1" style="width:120px">
-        </div>
-        <div>
-          <label>Max</label>
-          <input type="number" class="q-max" value="5" style="width:120px">
-        </div>
-        <div>
-          <label>Sol Etiket</label>
-          <input class="q-minlab" placeholder="Kötü">
-        </div>
-        <div>
-          <label>Sağ Etiket</label>
-          <input class="q-maxlab" placeholder="İyi">
-        </div>
-      </div>
-    </div>
-  </template>
+    async function saveForm() {
+      const slug = document.getElementById("slugInput").value.trim();
+      const title = document.getElementById("title").value.trim();
+      const questions = Array.from(document.querySelectorAll("#questions input"))
+        .map(i => i.value.trim())
+        .filter(v => v);
 
-  <script src="/admin.js" defer></script>
+      if (!slug || !title || questions.length === 0) {
+        return alert("Slug, başlık ve sorular boş olamaz");
+      }
+
+      const res = await fetch("/api/forms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug, title, questions })
+      });
+
+      if (res.ok) {
+        alert("Form kaydedildi / güncellendi!");
+      } else {
+        alert("Kayıt hatası");
+      }
+    }
+  </script>
 </body>
 </html>
