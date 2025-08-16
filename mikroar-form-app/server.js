@@ -54,17 +54,43 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false // bazı tarayıcı kısıtlarını gevşet
 }));
 
-// Form sayfasına yönlendirme (daha önce eklemiştik)
-app.get('/', (req, res) => {
-  if (req.hostname === 'form.mikroar.com') {
-    res.redirect('https://mikroar-form-app.onrender.com/form.html?slug=formayvalik');
-  } else if (req.hostname === 'anket.mikroar.com') {
-    // Yeni eklenen yönlendirme
-    res.redirect('https://mikroar-form-app.onrender.com/admin.html');
-  } else {
-    res.send('Domain tanımlı değil');
-  }
+// ... senin mevcut import ve app/use’ların aynı kalsın
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
+const PUBLIC_DIR = path.join(__dirname, 'public');
+
+// (İSTEĞE BAĞLI) varsayılan form slug'ı .env'den gelsin
+const DEFAULT_FORM_SLUG = process.env.DEFAULT_FORM_SLUG || 'formayvalik';
+
+// 0) Küçük bir config script üretelim; front-end buradan slug'ı alacak
+app.get('/_config.js', (_req, res) => {
+  res.type('application/javascript').send(
+    `window.__CFG=${JSON.stringify({ defaultSlug: DEFAULT_FORM_SLUG })};`
+  );
 });
+
+// 1) form.mikroar.com kökü → form.html'i aynı host altında SERVE ET (redirect YOK)
+app.get('/', (req, res, next) => {
+  if (req.hostname === 'form.mikroar.com') {
+    return res.sendFile(path.join(PUBLIC_DIR, 'form.html'));
+  }
+  if (req.hostname === 'anket.mikroar.com') {
+    return res.sendFile(path.join(PUBLIC_DIR, 'admin.html'));
+  }
+  // diğer domainler mevcut statik davranışla devam etsin
+  return next();
+});
+
+// 2) Güvenli fallback: /admin kökü de admin.html’i servis etsin (bookmark için faydalı)
+app.get('/admin', (_req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'admin.html'));
+});
+
+// NOT: app.use(express.static('public')) zaten var; form.html, admin.html, JS/CSS dosyaları
+// doğrudan aynı domainden yüklenecek. Redirect yok → URL değişmez.
 
 // CORS
 app.use(cors({ origin: CORS_ORIGIN, credentials: false }));
