@@ -204,7 +204,81 @@
       els.btnSend.disabled = false;
     }
   }
+// --- slug belirleme ---
+const params = new URLSearchParams(location.search);
+let slug = (params.get('slug') || '').trim();
 
+// --- slug yoksa: modal aç, formları listele ---
+async function openPickerIfNoSlug() {
+  if (slug) return false; // slug varsa modal gereksiz
+
+  const modal = document.getElementById('pickModal');
+  const select = document.getElementById('formPicker');
+  const btn    = document.getElementById('pickGo');
+  const warn   = document.getElementById('pickWarn');
+
+  if (!modal || !select || !btn) return false;
+
+  // Listeyi çek
+  try {
+    const r = await fetch('/api/forms', { cache: 'no-store' });
+    const data = await r.json();
+    if (!r.ok || !data.ok) throw new Error(data.error || 'Liste alınamadı');
+
+    const rows = Array.isArray(data.rows) ? data.rows : [];
+
+    if (rows.length === 0) {
+      warn.style.display = 'block';
+      warn.textContent = 'Aktif form yok. Lütfen yönetim panelinden bir form oluşturun.';
+      modal.style.display = 'flex';
+      return true;
+    }
+
+    // seçenekleri doldur
+    select.innerHTML = '';
+    rows.forEach(x => {
+      const opt = document.createElement('option');
+      opt.value = x.slug;
+      opt.textContent = x.title ? `${x.title} (${x.slug})` : x.slug;
+      select.appendChild(opt);
+    });
+
+    // tek form varsa direkt ona gitmek istersen:
+    // if (rows.length === 1) {
+    //   location.assign(`/form.html?slug=${encodeURIComponent(rows[0].slug)}`);
+    //   return true;
+    // }
+
+    modal.style.display = 'flex';
+
+    btn.onclick = () => {
+      const chosen = (select.value || '').trim();
+      if (!chosen) {
+        warn.style.display = 'block';
+        warn.textContent = 'Lütfen bir form seçin.';
+        return;
+      }
+      location.assign(`/form.html?slug=${encodeURIComponent(chosen)}`);
+    };
+
+    return true;
+  } catch (e) {
+    console.error(e);
+    // bir sorun olduysa en azından mesaj gösterebiliriz
+    alert('Form listesi alınamadı. Lütfen daha sonra tekrar deneyin.');
+    return true;
+  }
+}
+
+// --- sayfa başlatma (boot) ---
+(async function boot() {
+  // 1) slug yoksa seçiciye düş
+  const interrupted = await openPickerIfNoSlug();
+  if (interrupted) return; // modal süreç yönetiyor
+
+  // 2) slug varsa normal akış (mevcut loadForm vb.)
+  await loadForm(); // senin var olan fonksiyonun
+})();
   // Etkinlik
   els.btnSend?.addEventListener('click', handleSubmit);
 
