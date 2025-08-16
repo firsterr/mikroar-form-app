@@ -1,114 +1,156 @@
-console.log('[admin.js] loaded');
+<!-- public/admin.js -->
+<script>
+(() => {
+  // --- DOM ---
+  const elSlug   = document.getElementById('slug');
+  const elTitle  = document.getElementById('title');
+  const elActive = document.getElementById('active');
+  const elLoad   = document.getElementById('btnLoad');
+  const elNew    = document.getElementById('btnNew');
+  const elAdd    = document.getElementById('btnAdd');
+  const elSave   = document.getElementById('btnSave');
+  const listBox  = document.getElementById('questions');
 
-const $ = sel => document.querySelector(sel);
-const el = id => document.getElementById(id);
-
-let CURRENT_FORM = {
-  slug: '',
-  title: '',
-  active: true,
-  schema: { questions: [] }
-};
-
-function renderQuestions(list) {
-  const wrap = el('questions');
-  wrap.innerHTML = '';
-  list.forEach((q, idx) => {
-    const card = document.createElement('div');
-    card.className = 'qcard';
-    card.innerHTML = `
-      <div style="display:flex; gap:10px; align-items:center; margin-bottom:8px">
-        <select data-k="type">
-          <option value="radio"   ${q.type==='radio'?'selected':''}>Tek seçenek (radyo)</option>
-          <option value="checkbox"${q.type==='checkbox'?'selected':''}>Çoklu seçenek (checkbox)</option>
-          <option value="short_text"${q.type==='short_text'?'selected':''}>Kısa metin</option>
-          <option value="long_text" ${q.type==='long_text'?'selected':''}>Uzun metin</option>
-        </select>
-        <input data-k="text" placeholder="Soru metni" value="${q.text||''}" style="flex:1"/>
-        <button data-k="del">Sil</button>
-      </div>
-      <div ${q.type==='radio'||q.type==='checkbox'?'':'style="display:none"'} >
-        <div class="muted" style="margin-bottom:6px">Seçenekler (satır satır):</div>
-        <textarea data-k="options" rows="4" style="width:100%">${(q.options||[]).join('\n')}</textarea>
-      </div>
-    `;
-    // event’lar
-    card.querySelector('[data-k="type"]').onchange = e=>{
-      q.type = e.target.value;
-      renderQuestions(CURRENT_FORM.schema.questions);
-    };
-    card.querySelector('[data-k="text"]').oninput = e=> q.text = e.target.value;
-    const opts = card.querySelector('[data-k="options"]');
-    if (opts) opts.oninput = e=> q.options = e.target.value.split('\n').filter(Boolean);
-    card.querySelector('[data-k="del"]').onclick = ()=>{
-      CURRENT_FORM.schema.questions.splice(idx,1);
-      renderQuestions(CURRENT_FORM.schema.questions);
-    };
-    wrap.appendChild(card);
-  });
-}
-
-el('btnAddQuestion').onclick = ()=>{
-  CURRENT_FORM.schema.questions.push({type:'radio', text:'', options:[]});
-  renderQuestions(CURRENT_FORM.schema.questions);
-};
-
-el('btnNew').onclick = ()=>{
-  CURRENT_FORM = { slug:'', title:'', active:true, schema:{questions:[]} };
-  el('title').value = ''; el('active').value = 'true';
-  renderQuestions(CURRENT_FORM.schema.questions);
-};
-
-el('btnLoad').onclick = async ()=>{
-  const slug = el('slug').value.trim();
-  if (!slug) return alert('Önce slug gir');
-  try{
-    const r = await fetch(`/api/forms/${encodeURIComponent(slug)}?_=${Date.now()}`, {cache:'no-store'});
-    if(!r.ok){ alert(`Bulunamadı (${r.status})`); return; }
-    const json = await r.json();
-    const form = json.form || json;
-    const qs = (form.schema?.questions) || form.questions || [];
-    CURRENT_FORM = {
-      slug: form.slug || slug,
-      title: form.title || '',
-      active: form.active !== false,
-      schema: { questions: qs.map(q=>({
-        type: q.type || 'short_text',
-        text: q.text || '',
-        options: Array.isArray(q.options)? q.options : []
-      })) }
-    };
-    el('title').value  = CURRENT_FORM.title;
-    el('active').value = CURRENT_FORM.active ? 'true' : 'false';
-    renderQuestions(CURRENT_FORM.schema.questions);
-  }catch(e){ console.error(e); alert('Yükleme hatası: '+e.message); }
-};
-
-el('btnSave').onclick = async ()=>{
-  const slug = el('slug').value.trim();
-  if(!slug) return alert('Slug gir');
-  CURRENT_FORM.slug   = slug;
-  CURRENT_FORM.title  = el('title').value.trim();
-  CURRENT_FORM.active = (el('active').value === 'true');
-
-  try{
-    const r = await fetch('/admin/api/forms', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        slug: CURRENT_FORM.slug,
-        title: CURRENT_FORM.title,
-        active: CURRENT_FORM.active,
-        schema: { questions: CURRENT_FORM.schema.questions }
-      })
+  // Yardımcı
+  const h = (tag, attrs={}, ...children) => {
+    const n = document.createElement(tag);
+    Object.entries(attrs).forEach(([k,v]) => {
+      if (k === 'class') n.className = v;
+      else if (k === 'value') n.value = v;
+      else n.setAttribute(k, v);
     });
-    if(!r.ok){
-      const t = await r.text().catch(()=> '');
-      throw new Error(`Kaydedilemedi (${r.status}) ${t}`);
-    }
-    alert('Kaydedildi ✔');
-  }catch(e){ console.error(e); alert(e.message); }
-};
+    children.forEach(c => n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c));
+    return n;
+  };
+  const toLines = (arr) => (arr || []).map(x => String(x)).join('\n');
+  const fromLines = (txt) =>
+    (txt || '')
+      .split('\n')
+      .map(s => s.trim())
+      .filter(Boolean);
 
-// sayfa ilk açılış: boş render
-renderQuestions(CURRENT_FORM.schema.questions);
+  // Ekranı sorularla doldur
+  function renderQuestions(questions) {
+    listBox.innerHTML = '';
+    (questions || []).forEach((q, idx) => {
+      const typeSel = h('select', { class: 'q-type' });
+      ['radio','checkbox','text'].forEach(t => {
+        typeSel.appendChild(h('option', { value: t }, t === 'radio' ? 'Tek seçenek (radyo)' : (t==='checkbox' ? 'Çoklu seçenek (checkbox)' : 'Metin (tek satır)')));
+      });
+      typeSel.value = q.type || 'radio';
+
+      // 🔥 PROBLEM BURADAYDI: q.text geri yazılmıyordu
+      const textInp = h('input', { class: 'q-text', type: 'text', placeholder: 'Soru metni', value: q.text || '' });
+
+      // Seçenekler sadece radio/checkbox için
+      const optsTa  = h('textarea', { class: 'q-options', rows: 5, placeholder: 'Seçenekler (satır satır):' }, '');
+      if (q.type === 'radio' || q.type === 'checkbox') {
+        optsTa.value = toLines(q.options);
+      } else {
+        optsTa.style.display = 'none';
+      }
+
+      // Tür değişince textarea göster/gizle
+      typeSel.addEventListener('change', () => {
+        if (typeSel.value === 'radio' || typeSel.value === 'checkbox') {
+          optsTa.style.display = '';
+        } else {
+          optsTa.style.display = 'none';
+        }
+      });
+
+      const delBtn = h('button', { type: 'button', class: 'btn-del' }, 'Sil');
+      delBtn.addEventListener('click', () => {
+        listBox.removeChild(card);
+      });
+
+      const card = h('div', { class: 'q-card' },
+        h('div', { class: 'q-row' }, typeSel, textInp, delBtn),
+        h('div', { class: 'q-row' }, optsTa)
+      );
+      listBox.appendChild(card);
+    });
+  }
+
+  // Form verisini UI’dan topla
+  function collectSchemaFromUI() {
+    const cards = [...listBox.querySelectorAll('.q-card')];
+    const questions = cards.map(card => {
+      const type = card.querySelector('.q-type').value;
+      const text = card.querySelector('.q-text').value.trim();          // <-- soru metni
+      const optsArea = card.querySelector('.q-options');
+      const options = (type === 'radio' || type === 'checkbox') ? fromLines(optsArea.value) : [];
+      return { type, text, options };                                   // <-- text mutlaka yazılıyor
+    });
+    return { questions };
+  }
+
+  // API: form getir
+  async function fetchForm(slug) {
+    const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`);
+    if (!r.ok) throw new Error('Form bulunamadı');
+    return r.json();
+  }
+
+  // API: kaydet
+  async function saveForm(payload) {
+    const r = await fetch('/admin/api/forms', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!r.ok) {
+      const tx = await r.text().catch(()=>'');
+      throw new Error(tx || 'Kaydetme hatası');
+    }
+    return r.json();
+  }
+
+  // --- Butonlar ---
+  elLoad.addEventListener('click', async () => {
+    const slug = (elSlug.value || '').trim();
+    if (!slug) return alert('Önce slug yaz.');
+    try {
+      const { ok, form } = await fetchForm(slug);
+      if (!ok || !form) throw new Error('Bulunamadı');
+      elTitle.value = form.title || '';
+      elActive.value = (form.active === false ? 'Pasif' : 'Aktif');
+      const qs = (form.schema && Array.isArray(form.schema.questions)) ? form.schema.questions : [];
+      renderQuestions(qs);                                              // <-- text’ler input’a set ediliyor
+    } catch (e) {
+      alert('Yükleme hata: ' + e.message);
+    }
+  });
+
+  elNew.addEventListener('click', () => {
+    elTitle.value = '';
+    elActive.value = 'Aktif';
+    renderQuestions([
+      { type:'radio', text:'', options:['Evet','Hayır'] }
+    ]);
+  });
+
+  elAdd.addEventListener('click', () => {
+    const curr = collectSchemaFromUI().questions;
+    curr.push({ type:'radio', text:'', options:['Evet','Hayır'] });
+    renderQuestions(curr);
+  });
+
+  elSave.addEventListener('click', async () => {
+    const slug = (elSlug.value || '').trim();
+    if (!slug) return alert('Slug gerekli');
+    const title = elTitle.value || '';
+    const active = elActive.value === 'Aktif';
+    const schema = collectSchemaFromUI();                               // <-- text + options toplanıyor
+    try {
+      await saveForm({ slug, title, active, schema });
+      alert('Kaydedildi.');
+    } catch (e) {
+      alert('Kaydetme hata: ' + e.message);
+    }
+  });
+
+  // sayfa açıldığında boxes boş gelsin
+  renderQuestions([]);
+})();
+</script>
