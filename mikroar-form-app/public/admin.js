@@ -1,17 +1,15 @@
-// admin.js v8 — form yükle/düzenle/kaydet (label sorunu ve butonlar fix)
+// admin.js v9 — status yoksa aktif varsay, label + options sorunsuz yükle/kaydet
 
 (() => {
-  // --- DOM
   const el = {
     slug: document.getElementById('slug'),
     title: document.getElementById('title'),
-    status: document.getElementById('status'),
+    status: document.getElementById('status'),           // olabilir veya olmayabilir
     btnLoad: document.getElementById('btnLoad'),
     btnNew: document.getElementById('btnNew'),
     btnAddQ: document.getElementById('btnAddQ'),
     btnSave: document.getElementById('btnSave'),
     qsWrap: document.getElementById('qsWrap'),
-    optsBox: document.getElementById('optsBox') // sayfadaki sağdaki textarea (kullanmayacağız)
   };
 
   const API = {
@@ -32,17 +30,12 @@
     }
   };
 
-  // --- UI helpers
-  function clearQuestions() {
-    el.qsWrap.innerHTML = '';
-  }
+  function clearQuestions(){ el.qsWrap.innerHTML=''; }
 
-  function renderQuestion(q = { type: 'radio', label: '', options: [], required: true }) {
+  function renderQuestion(q = { type:'radio', label:'', options:[], required:true }) {
     const row = document.createElement('div');
     row.className = 'q-row';
-    row.style.cssText = 'display:grid;grid-template-columns: 360px 1fr 56px;gap:12px;align-items:start;margin:16px 0;';
 
-    // type select
     const sel = document.createElement('select');
     sel.innerHTML = `
       <option value="radio">Tek seçenek (radyo)</option>
@@ -52,32 +45,28 @@
     `;
     sel.value = q.type || 'radio';
 
-    // label input
     const inp = document.createElement('input');
     inp.type = 'text';
     inp.placeholder = 'Soru metni';
     inp.value = q.label || '';
 
-    // options textarea
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.textContent = 'Sil';
+    del.className = 'button';
+    del.addEventListener('click', () => row.remove());
+
     const ta = document.createElement('textarea');
     ta.placeholder = 'Seçenekler (satır satır)…';
-    ta.rows = 5;
-    ta.style.gridColumn = '2 / span 2'; // büyük textarea
     ta.value = (q.options || []).join('\n');
-    // text/textarea ise seçenek kutusunu gizle
+    ta.style.gridColumn = '2 / span 2';
+
     const toggleOpts = () => {
       const show = (sel.value === 'radio' || sel.value === 'checkbox');
       ta.style.display = show ? '' : 'none';
     };
     sel.addEventListener('change', toggleOpts);
     toggleOpts();
-
-    // delete btn
-    const del = document.createElement('button');
-    del.type = 'button';
-    del.textContent = 'Sil';
-    del.className = 'button';
-    del.addEventListener('click', () => row.remove());
 
     row.appendChild(sel);
     row.appendChild(inp);
@@ -86,78 +75,74 @@
     el.qsWrap.appendChild(row);
   }
 
-  function readQuestionsFromUI() {
+  function readQuestionsFromUI(){
     const rows = el.qsWrap.querySelectorAll('.q-row');
     const arr = [];
-    rows.forEach(r => {
+    rows.forEach(r=>{
       const type = r.querySelector('select').value;
       const label = r.querySelector('input').value.trim();
       const ta = r.querySelector('textarea');
       const options = (ta && ta.style.display !== 'none')
-        ? ta.value.split('\n').map(s => s.trim()).filter(Boolean)
+        ? ta.value.split('\n').map(s=>s.trim()).filter(Boolean)
         : [];
-      if (!label) return; // boş soru atla
-      arr.push({ type, label, options, required: true });
+      if (!label) return;
+      arr.push({ type, label, options, required:true });
     });
     return arr;
   }
 
-  async function loadForm() {
+  async function loadForm(){
     const slug = el.slug.value.trim();
     if (!slug) return alert('Slug yaz');
-    try {
+    try{
       const j = await API.getForm(slug);
-      // beklenen json: { ok:true, form:{slug,title,active,schema:{questions:[...]}} }
       const form = j.form || {};
       el.title.value = form.title || '';
-      el.status.value = (form.active === false) ? 'pasif' : 'aktif';
+
+      // status yoksa bile patlama: aktif varsay
+      const activeVal = (form.active === false) ? 'pasif' : 'aktif';
+      if (el.status) el.status.value = activeVal;
 
       const qs = (form.schema && Array.isArray(form.schema.questions))
         ? form.schema.questions
         : [];
 
       clearQuestions();
-      qs.forEach(q => renderQuestion(q));
-      if (!qs.length) renderQuestion(); // boşsa 1 tane şablon
-    } catch (e) {
+      if (qs.length) qs.forEach(renderQuestion);
+      else renderQuestion(); // boşsa şablon
+    }catch(e){
       console.error(e);
-      alert('Yüklenemedi: ' + e.message);
+      alert('Yüklenemedi: '+e.message);
     }
   }
 
-  function newForm() {
+  function newForm(){
     el.title.value = '';
-    el.status.value = 'aktif';
+    if (el.status) el.status.value = 'aktif';
     clearQuestions();
-    renderQuestion(); // boş bir soru
+    renderQuestion();
   }
 
-  async function saveForm() {
+  async function saveForm(){
     const slug = el.slug.value.trim();
     if (!slug) return alert('Slug yaz');
     const title = el.title.value.trim();
-    const active = (el.status.value === 'aktif');
+    const active = el.status ? (el.status.value === 'aktif') : true; // status yoksa aktif
     const questions = readQuestionsFromUI();
-    try {
-      await API.saveForm({ slug, title, active, schema: { questions } });
+    try{
+      await API.saveForm({ slug, title, active, schema:{ questions } });
       alert('Kaydedildi');
-    } catch (e) {
+    }catch(e){
       console.error(e);
-      alert('Kaydet hatası: ' + e.message);
+      alert('Kaydet hatası: '+e.message);
     }
   }
 
-  // --- events
   el.btnLoad?.addEventListener('click', loadForm);
   el.btnNew?.addEventListener('click', newForm);
-  el.btnAddQ?.addEventListener('click', () => renderQuestion());
+  el.btnAddQ?.addEventListener('click', ()=>renderQuestion());
   el.btnSave?.addEventListener('click', saveForm);
 
-  // URL ?slug=… ile gelindiyse otomatik yükle
-  const usp = new URLSearchParams(location.search);
-  const qsSlug = usp.get('slug');
-  if (qsSlug) {
-    el.slug.value = qsSlug;
-    loadForm();
-  }
+  const qsSlug = new URLSearchParams(location.search).get('slug');
+  if (qsSlug){ el.slug.value = qsSlug; loadForm(); }
 })();
