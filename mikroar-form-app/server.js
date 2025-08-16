@@ -98,29 +98,30 @@ function adminOnly(req, res, next) {
   next();
 }
 
-// ---- Alan adına göre yönlendirme (kök "/")
-app.get('/', (req, res, next) => {
-  const host = (req.hostname || '').toLowerCase();
+// .env'ye ekleyebilirsin: DEFAULT_FORM_SLUG=formayvalik
+const DEFAULT_FORM_SLUG = process.env.DEFAULT_FORM_SLUG || 'formayvalik';
 
-  // form subdomain: form sayfası
-  if (host === 'form.mikroar.com') {
-    // slug varsa korunur: /?slug=... → /form.html?slug=...
-    const q = req.originalUrl.includes('?') ? req.originalUrl.substring(req.originalUrl.indexOf('?')) : '';
-    return res.redirect(302, '/form.html' + q);
-  }
+// KÖK YÖNLENDİRME — host'a göre
+app.get('/', (req, res) => {
+  const host = (req.headers.host || '').toLowerCase();
 
-  // anket subdomain: admin sayfası
-  if (host === 'anket.mikroar.com') {
+  // Admin alan adı: anket.mikroar.com
+  if (host.startsWith('anket.')) {
     return res.redirect(302, '/admin.html');
   }
 
-  // Diğerleri: köke gelenleri form sayfasına al
-  if (DEFAULT_SLUG) {
-    return res.redirect(302, `/form.html?slug=${encodeURIComponent(DEFAULT_SLUG)}`);
-  }
-  return res.redirect(302, '/form.html');
+  // Form alan adı: form.mikroar.com (veya diğerleri)
+  return res.redirect(302, `/form.html?slug=${encodeURIComponent(DEFAULT_FORM_SLUG)}`);
 });
 
+// İsteğe bağlı kısa yollar:
+app.get('/form', (req, res) => {
+  const slug = req.query.slug || DEFAULT_FORM_SLUG;
+  return res.redirect(302, `/form.html?slug=${encodeURIComponent(slug)}`);
+});
+app.get('/f/:slug', (req, res) => {
+  return res.redirect(302, `/form.html?slug=${encodeURIComponent(req.params.slug)}`);
+});
 // ---- Sağlık
 app.get('/health', async (_req, res) => {
   try {
