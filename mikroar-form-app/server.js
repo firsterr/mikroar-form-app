@@ -179,7 +179,20 @@ app.post('/api/forms/:slug/submit', async (req, res) => {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
-
+// === Public: aktif formları listele (slug ve başlık) ===
+app.get('/api/forms', async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT slug, title 
+         FROM forms 
+        WHERE active IS DISTINCT FROM false 
+        ORDER BY created_at DESC`
+    );
+    res.json(rows);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
 // ---- Admin: formlar listesi
 app.get('/admin/api/forms', adminOnly, async (_req, res) => {
   try {
