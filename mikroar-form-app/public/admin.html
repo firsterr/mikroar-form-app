@@ -1,85 +1,295 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="UTF-8">
-  <title>Anket Admin</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MikroAR – Anket Admin (Düzenleme Modu)</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:16px;color:#111}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    .card{border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin:12px 0;background:#fff}
+    input[type=text], select, textarea{padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;min-width:240px}
+    textarea{min-width:420px;min-height:72px}
+    button{padding:8px 12px;border:1px solid #334155;background:#0ea5e9;color:#fff;border-radius:8px;cursor:pointer}
+    button.secondary{background:#fff;color:#111;border-color:#cbd5e1}
+    button.danger{background:#ef4444;border-color:#ef4444}
+    .q-head{display:flex;align-items:center;gap:10px;justify-content:space-between}
+    .q-type{min-width:180px}
+    .choices{margin-top:8px;margin-left:8px;border-left:3px solid #e5e7eb;padding-left:10px}
+    .muted{color:#6b7280;font-size:13px}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #e5e7eb;font-size:12px}
+    .grid{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+  </style>
 </head>
 <body>
-  <h1>Anket Oluştur / Düzenle</h1>
 
-  <!-- Slug Yükleme Alanı -->
-  <input type="text" id="slugInput" placeholder="Slug gir (örn: formayvalik)">
-  <button onclick="loadForm()">Yükle</button>
+  <h2>🛠️ Anket Oluştur / Düzenle</h2>
 
-  <div>
-    <label>Anket Başlığı: </label>
-    <input type="text" id="title">
+  <div class="card">
+    <div class="row">
+      <div>
+        <div class="muted">Slug</div>
+        <input id="slug" type="text" placeholder="örn: formayvalik" />
+      </div>
+      <div>
+        <div class="muted">Başlık</div>
+        <input id="title" type="text" placeholder="Anket başlığı" />
+      </div>
+      <div>
+        <div class="muted">Durum</div>
+        <select id="active">
+          <option value="true">Aktif</option>
+          <option value="false">Pasif</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:8px;">
+      <button class="secondary" id="btnLoad">Yükle</button>
+      <button class="secondary" id="btnNew">Yeni (sıfır)</button>
+      <span class="muted">“Yükle” mevcut formu getirir; sonra düzenleyip “Kaydet” dersen üzerine yazar.</span>
+    </div>
   </div>
 
-  <div id="questions"></div>
-  <button onclick="addQuestion()">Soru Ekle</button>
+  <div class="q-head">
+    <h3>Sorular</h3>
+    <div class="row">
+      <button class="secondary" id="btnAddQ">Soru Ekle</button>
+      <button id="btnSave">Kaydet</button>
+    </div>
+  </div>
 
-  <button onclick="saveForm()">Kaydet</button>
+  <div id="qList"></div>
 
   <script>
-    async function loadForm() {
-      const slug = document.getElementById("slugInput").value.trim();
-      if (!slug) return alert("Slug giriniz");
+    // --- Yardımcılar ---
+    const el = sel => document.querySelector(sel);
+    const ce = (tag, cls) => { const n = document.createElement(tag); if (cls) n.className = cls; return n; };
 
-      const res = await fetch(`/api/forms/${slug}`);
-      if (!res.ok) {
-        return alert("Form bulunamadı");
-      }
-      const form = await res.json();
+    const QUESTION_TYPES = [
+      { value: "short_text", label: "Kısa Metin" },
+      { value: "long_text",  label: "Uzun Metin" },
+      { value: "single_choice", label: "Tekli Seçim" },
+      { value: "multi_choice",  label: "Çoklu Seçim" }
+    ];
 
-      // Form başlığını doldur
-      document.getElementById("title").value = form.title || "";
+    function emptyForm() {
+      return {
+        slug: "",
+        title: "",
+        active: true,
+        schema: { questions: [] }
+      };
+    }
 
-      // Soruları ekrana bas
-      const qDiv = document.getElementById("questions");
-      qDiv.innerHTML = "";
-      form.questions.forEach((q, idx) => {
-        const input = document.createElement("input");
-        input.type = "text";
-        input.value = q;
-        input.dataset.index = idx;
-        qDiv.appendChild(input);
-        qDiv.appendChild(document.createElement("br"));
+    function normalizeIncoming(data){
+      // /api/forms/:slug → { ok:true, form:{slug,title,active,schema} }
+      // schema yoksa/yanlışsa toparla
+      const form = data?.form ?? data ?? {};
+      const schema = form.schema ?? {};
+      let questions = schema.questions ?? form.questions ?? [];
+      // Eski düz metin dizisi geldiyse metne çevir
+      questions = questions.map(q => {
+        if (typeof q === 'string') {
+          return { type: 'short_text', text: q, options: [] };
+        }
+        // {text, type, options} bekliyoruz
+        return {
+          type: q.type || 'short_text',
+          text: q.text || '',
+          options: Array.isArray(q.options) ? q.options : []
+        };
+      });
+      return {
+        slug: form.slug || "",
+        title: form.title || "",
+        active: form.active !== false,
+        schema: { questions }
+      };
+    }
+
+    function renderQuestions(list){
+      const host = el('#qList');
+      host.innerHTML = '';
+      list.forEach((q, idx) => {
+        host.appendChild(renderQuestion(q, idx));
       });
     }
 
-    function addQuestion() {
-      const qDiv = document.getElementById("questions");
-      const input = document.createElement("input");
-      input.type = "text";
-      input.placeholder = "Yeni soru";
-      qDiv.appendChild(input);
-      qDiv.appendChild(document.createElement("br"));
-    }
+    function renderQuestion(q, idx){
+      const card = ce('div','card');
 
-    async function saveForm() {
-      const slug = document.getElementById("slugInput").value.trim();
-      const title = document.getElementById("title").value.trim();
-      const questions = Array.from(document.querySelectorAll("#questions input"))
-        .map(i => i.value.trim())
-        .filter(v => v);
+      // Üst satır: metin + tip + butonlar
+      const row = ce('div','row');
 
-      if (!slug || !title || questions.length === 0) {
-        return alert("Slug, başlık ve sorular boş olamaz");
-      }
+      const qText = ce('input');
+      qText.type = 'text';
+      qText.placeholder = `Soru #${idx+1}`;
+      qText.value = q.text || '';
+      qText.style.flex = '1';
+      qText.addEventListener('input', e => q.text = e.target.value);
 
-      const res = await fetch("/api/forms", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug, title, questions })
+      const qType = ce('select','q-type');
+      QUESTION_TYPES.forEach(t => {
+        const opt = ce('option');
+        opt.value = t.value;
+        opt.textContent = t.label;
+        if (q.type === t.value) opt.selected = true;
+        qType.appendChild(opt);
+      });
+      qType.addEventListener('change', e => {
+        q.type = e.target.value;
+        // tip değişince seçenek alanını yeniden kuralım
+        refreshChoices();
       });
 
-      if (res.ok) {
-        alert("Form kaydedildi / güncellendi!");
-      } else {
-        alert("Kayıt hatası");
+      const btnDel = ce('button','danger');
+      btnDel.textContent = 'Sil';
+      btnDel.onclick = () => {
+        const form = collectForm();
+        form.schema.questions.splice(idx,1);
+        renderQuestions(form.schema.questions);
+      };
+
+      row.append(qText, qType, btnDel);
+      card.appendChild(row);
+
+      // Seçenekler alanı (tekli/çoklu için görünür)
+      const choicesWrap = ce('div','choices');
+      function refreshChoices(){
+        choicesWrap.innerHTML = '';
+        if (q.type === 'single_choice' || q.type === 'multi_choice') {
+          const list = Array.isArray(q.options) ? q.options : (q.options = []);
+          const grid = ce('div','grid');
+
+          list.forEach((opt, i) => {
+            const wrap = ce('div','row');
+            const inp = ce('input');
+            inp.type = 'text';
+            inp.placeholder = `Seçenek #${i+1}`;
+            inp.value = opt;
+            inp.style.minWidth = '260px';
+            inp.oninput = e => list[i] = e.target.value;
+
+            const rm = ce('button','secondary');
+            rm.textContent = 'Kaldır';
+            rm.onclick = () => {
+              list.splice(i,1);
+              refreshChoices();
+            };
+
+            wrap.append(inp, rm);
+            grid.appendChild(wrap);
+          });
+
+          const addBtn = ce('button','secondary');
+          addBtn.textContent = 'Seçenek Ekle';
+          addBtn.onclick = () => { list.push(''); refreshChoices(); };
+
+          choicesWrap.appendChild(grid);
+          choicesWrap.appendChild(ce('div','muted')).textContent =
+            'Not: Çoklu seçimde kullanıcı birden fazla işaretleyebilir.';
+          choicesWrap.appendChild(addBtn);
+        } else {
+          choicesWrap.appendChild(ce('div','muted')).textContent = 'Bu soru tipi seçenek gerektirmez.';
+        }
       }
+      refreshChoices();
+      card.appendChild(choicesWrap);
+
+      return card;
     }
+
+    function collectForm(){
+      const slug = el('#slug').value.trim();
+      const title = el('#title').value.trim();
+      const active = el('#active').value === 'true';
+      // ekranda duranı oku
+      // (#qList içindeki kartlardan model üretmek yerine memory’de tuttuğumuz
+      // formu güncellemek daha sağlam, biz memory kullanacağız.)
+      return CURRENT_FORM;
+    }
+
+    // Memory’de formu tutalım ki input event’leri direkt ona yazsın
+    let CURRENT_FORM = emptyForm();
+
+    function syncHeaderToForm(){
+      el('#slug').value  = CURRENT_FORM.slug || '';
+      el('#title').value = CURRENT_FORM.title || '';
+      el('#active').value= CURRENT_FORM.active ? 'true' : 'false';
+    }
+    function syncFormHeaderFromInputs(){
+      CURRENT_FORM.slug   = el('#slug').value.trim();
+      CURRENT_FORM.title  = el('#title').value.trim();
+      CURRENT_FORM.active = (el('#active').value === 'true');
+    }
+
+    // --- Olay bağla ---
+    el('#btnNew').onclick = () => {
+      CURRENT_FORM = emptyForm();
+      syncHeaderToForm();
+      renderQuestions(CURRENT_FORM.schema.questions);
+    };
+
+    el('#btnAddQ').onclick = () => {
+      CURRENT_FORM.schema.questions.push({ type:'short_text', text:'', options:[] });
+      renderQuestions(CURRENT_FORM.schema.questions);
+    };
+
+    el('#btnLoad').onclick = async () => {
+      const slug = el('#slug').value.trim();
+      if (!slug) return alert('Önce slug gir');
+      try{
+        const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`);
+        if(!r.ok){
+          const t = await r.text();
+          return alert('Form bulunamadı:\n' + t);
+        }
+        const json = await r.json();
+        CURRENT_FORM = normalizeIncoming(json);
+        // slug alanını boş dönerse elimizdeki değeri koru
+        if(!CURRENT_FORM.slug) CURRENT_FORM.slug = slug;
+        syncHeaderToForm();
+        renderQuestions(CURRENT_FORM.schema.questions);
+      }catch(e){
+        alert('Yükleme hatası: ' + e.message);
+      }
+    };
+
+    el('#title').addEventListener('input', e => { CURRENT_FORM.title = e.target.value; });
+    el('#active').addEventListener('change', e => { CURRENT_FORM.active = (e.target.value === 'true'); });
+
+    el('#btnSave').onclick = async () => {
+      syncFormHeaderFromInputs();
+      const ok = CURRENT_FORM.slug && CURRENT_FORM.title && CURRENT_FORM.schema.questions.length > 0;
+      if(!ok) return alert('Slug, başlık ve en az 1 soru gerekli.');
+
+      try{
+        // Backend upsert: /admin/api/forms  (Basic Auth çıkar)
+        const res = await fetch('/admin/api/forms', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({
+            slug: CURRENT_FORM.slug,
+            title: CURRENT_FORM.title,
+            active: CURRENT_FORM.active,
+            schema: { questions: CURRENT_FORM.schema.questions }
+          })
+        });
+        if(!res.ok){
+          const t = await res.text();
+          return alert('Kaydetme hatası:\n' + t);
+        }
+        alert('Form kaydedildi/güncellendi ✅');
+      }catch(e){
+        alert('Hata: ' + e.message);
+      }
+    };
+
+    // İlk açılışta boş form
+    CURRENT_FORM = emptyForm();
+    syncHeaderToForm();
+    renderQuestions(CURRENT_FORM.schema.questions);
   </script>
 </body>
 </html>
