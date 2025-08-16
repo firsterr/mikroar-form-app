@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 // ESM ortamında __dirname üretimi
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
+
 // server.js — MikroAR Anket Sunucusu (tam sürüm)
 import express from 'express';
 import dotenv from 'dotenv';
@@ -14,6 +15,7 @@ import cors from 'cors';
 import morgan from 'morgan';
 import basicAuth from 'basic-auth';
 import pkg from 'pg';
+import { Parser } from 'json2csv';   // <-- CSV export için eklendi
 
 dotenv.config();
 const { Pool } = pkg;
@@ -35,7 +37,7 @@ const pool = new Pool({ connectionString: DATABASE_URL });
 
 // --- App kurulumu ---
 const app = express();
-app.set('trust proxy', true); // Render / proxy arkasında gerçek IP için
+app.set('trust proxy', true);
 app.use(helmet());
 app.use(morgan('combined'));
 app.use(cors({ origin: CORS_ORIGIN, credentials: false }));
@@ -64,7 +66,6 @@ app.get('/health', async (_req, res) => {
 });
 
 // === Public: form şemasını getir ===
-// forms tablosu: slug (PK/UNIQUE), title, active (bool), schema (jsonb)
 app.get('/api/forms/:slug', async (req, res) => {
   const { slug } = req.params;
   try {
@@ -80,19 +81,15 @@ app.get('/api/forms/:slug', async (req, res) => {
   }
 });
 
-// === Public: yanıt kaydet (IP bazlı tek oy) ===
-// responses tablosu: form_slug, payload(jsonb), user_agent, ip, created_at
-// DB’de unique index önerilir: UNIQUE(form_slug, ip)
+// === Public: yanıt kaydet ===
 app.post('/api/forms/:slug/submit', async (req, res) => {
   const { slug } = req.params;
   const payload = req.body || {};
-  // Gerçek istemci IP'sini al
   const xff = req.headers['x-forwarded-for'];
   const forwardedIp = Array.isArray(xff) ? xff[0] : (typeof xff === 'string' ? xff.split(',')[0].trim() : null);
   const ip = forwardedIp || req.ip || req.connection?.remoteAddress || null;
 
   try {
-    // Form var ve aktif mi?
     const form = await pool.query(
       'SELECT 1 FROM forms WHERE slug=$1 AND (active IS DISTINCT FROM false)',
       [slug]
@@ -101,7 +98,6 @@ app.post('/api/forms/:slug/submit', async (req, res) => {
       return res.status(404).json({ ok: false, error: 'Form bulunamadı veya pasif' });
     }
 
-    // Ekle (UNIQUE ihlalinde 23505 döner)
     await pool.query(
       'INSERT INTO responses (form_slug, payload, user_agent, ip) VALUES ($1, $2, $3, $4)',
       [slug, payload, req.get('user-agent') || null, ip]
@@ -110,14 +106,13 @@ app.post('/api/forms/:slug/submit', async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     if (e.code === '23505') {
-      // uniq_response_per_ip_per_form index’i tetiklendi
       return res.status(409).json({ ok: false, error: 'Bu IP’den zaten yanıt gönderilmiş.' });
     }
     res.status(500).json({ ok: false, error: e.message });
   }
 });
 
-// === Admin: form listele (özet) ===
+// === Admin: form listele ===
 app.get('/admin/api/forms', adminOnly, async (_req, res) => {
   try {
     const { rows } = await pool.query(
@@ -130,22 +125,17 @@ app.get('/admin/api/forms', adminOnly, async (_req, res) => {
 });
 
 // === Admin: form oluştur/güncelle ===
-// Body kabul ettiği formatlar:
-// A) { slug, title, active, schema:{questions:[...] } }
-// B) { slug, title, active, questions:[...] }   // <-- yanlış da gelse biz dönüştürüyoruz
 app.post('/admin/api/forms', adminOnly, async (req, res) => {
   try {
     let { slug, title, active = true, schema, questions } = req.body || {};
     if (!slug || !title) {
       return res.status(400).json({ ok: false, error: 'slug ve title gerekli' });
     }
-
-    // GÖNDERİLENİ NORMALİZE ET
     if (!schema && Array.isArray(questions)) {
-      schema = { questions };            // admin yanlış gönderse bile toparla
+      schema = { questions };
     }
     if (!schema || !Array.isArray(schema.questions)) {
-      schema = { questions: [] };        // en azından boş dizi olsun
+      schema = { questions: [] };
     }
 
     await pool.query(
@@ -158,12 +148,11 @@ app.post('/admin/api/forms', adminOnly, async (req, res) => {
 
     res.json({ ok: true });
   } catch (e) {
-    console.error(e);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
 
-// === Admin: yanıtları listele (kontrol için) ===
+// === Admin: yanıtları listele ===
 app.get('/admin/forms/:slug/responses.json', adminOnly, async (req, res) => {
   const { slug } = req.params;
   try {
@@ -190,58 +179,11 @@ app.get('/admin/forms/:slug/stats', adminOnly, async (req, res) => {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
-// 1) responses.json dosyası yolu
-const RESP_FILE = path.join(__dirname, 'responses.json');
 
-// 2) Dosyadan okuma fonksiyonu
-function readResponses(){
-  if(!fs.existsSync(RESP_FILE)) return [];
-  return JSON.parse(fs.readFileSync(RESP_FILE));
-}
-
-// 3) Dosyaya yazma fonksiyonu
-function saveResponses(list){
-  fs.writeFileSync(RESP_FILE, JSON.stringify(list, null, 2));
-}
-
-// 4) Yeni endpoint: Cevap kaydetme
-app.post('/api/responses', (req, res) => {
-  try {
-    const { slug, answers } = req.body || {};
-    
-    // Zorunlu kontrol
-    if(!slug || !Array.isArray(answers)) {
-      return res.status(400).json({ error: 'Eksik veri' });
-    }
-    
-    // Mevcut kayıtları oku
-    const list = readResponses();
-    
-    // Yeni cevabı ekle
-    list.push({
-      slug,
-      answers,
-      ip: (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').toString(),
-      user_agent: req.headers['user-agent'] || '',
-      created_at: new Date().toISOString()
-    });
-    
-    // Kaydet
-    saveResponses(list);
-    
-    res.json({ ok: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
-// CSV export için ek rota
-import { Parser } from "json2csv";
-
-app.get("/admin/forms/:slug/export.csv", basicAuth, async (req, res) => {
+// === Admin: CSV Export ===
+app.get("/admin/forms/:slug/export.csv", adminOnly, async (req, res) => {
   const { slug } = req.params;
 
-  // Veritabanından form yanıtlarını çek
   const { rows } = await pool.query(
     `select r.created_at, a.key as question, 
       case when jsonb_typeof(a.value) = 'array'
@@ -255,25 +197,22 @@ app.get("/admin/forms/:slug/export.csv", basicAuth, async (req, res) => {
     [slug]
   );
 
-  // Satırları "pivot" için hazırla
   const grouped = {};
   for (let row of rows) {
     const ts = row.created_at;
     if (!grouped[ts]) grouped[ts] = { created_at: ts };
     grouped[ts][row.question] = row.answers.join(", ");
   }
-
   const data = Object.values(grouped);
 
-  // CSV’ye çevir
   const parser = new Parser();
   const csv = parser.parse(data);
 
-  // İndirme çıktısı
   res.header("Content-Type", "text/csv");
   res.attachment(`${slug}_export.csv`);
   return res.send(csv);
 });
+
 // --- Sunucu başlat ---
 app.listen(PORT, () => {
   console.log(`MikroAR Form API ${PORT} portunda çalışıyor`);
