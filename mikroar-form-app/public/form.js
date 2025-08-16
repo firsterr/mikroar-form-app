@@ -1,3 +1,25 @@
+(function () {
+  const params = new URLSearchParams(location.search);
+  let slug = (params.get('slug') || '').trim();
+  const DEFAULT = (window.DEFAULT_FORM_SLUG || 'formayvalik');
+
+  // Slug yoksa otomatik yönlendir
+  if (!slug) {
+    location.replace(`/form.html?slug=${encodeURIComponent(DEFAULT)}`);
+    return; // önemli: yönlendirme sonrası devam etmesin
+  }
+
+  // Başlık elemanı bulunamazsa yarat (çökmeyi önler)
+  let titleEl = document.getElementById('title');
+  if (!titleEl) {
+    titleEl = document.createElement('h1');
+    titleEl.id = 'title';
+    document.body.prepend(titleEl);
+  }
+
+  // ... mevcut kodun burada devam edebilir
+})();
+
 /* MikroAR – Katılımcı Formu */
 const $ = s => document.querySelector(s);
 const toast=(m, type='')=>{
