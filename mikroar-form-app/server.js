@@ -54,6 +54,32 @@ app.use(
     crossOriginEmbedderPolicy: false,
   })
 );
+// >>> KOPYALA-YAPIŞTIR — static'in ÜSTÜNE ekle
+app.get('/', (req, res) => {
+  const h = (req.hostname || '').toLowerCase();
+  const q = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+  if (h === 'form.mikroar.com')  return res.redirect(302, '/form.html' + q);
+  if (h === 'anket.mikroar.com') return res.redirect(302, '/admin.html');
+  return res.redirect(302, '/form.html' + q); // default
+});
+
+app.get(['/form', '/form.html'], async (req, res, next) => {
+  const slug = (req.query.slug || '').trim();
+  if (slug) return next(); // slug varsa form.html normal servis edilsin
+
+  try {
+    const r = await pool.query(
+      "select slug from forms where (active is distinct from false) order by created_at desc limit 1"
+    );
+    if (r.rowCount) {
+      return res.redirect(302, `/form.html?slug=${encodeURIComponent(r.rows[0].slug)}`);
+    }
+    return res.status(404).send('Aktif form yok.');
+  } catch (e) {
+    return res.status(500).send('Sunucu hatası');
+  }
+});
+// <<< SON
 
 // CORS + body parsers + logs + static
 app.use(cors({ origin: CORS_ORIGIN, credentials: false }));
