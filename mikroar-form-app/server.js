@@ -236,7 +236,7 @@ app.post('/api/responses', (req, res) => {
   }
 });
 // CSV export için ek rota
-const { Parser } = require("json2csv");
+import { Parser } from "json2csv";
 
 app.get("/admin/forms/:slug/export.csv", basicAuth, async (req, res) => {
   const { slug } = req.params;
