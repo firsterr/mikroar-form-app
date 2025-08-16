@@ -2,20 +2,17 @@
 <html lang="tr">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>MikroAR – Anket Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>🛠️ Anket Oluştur / Düzenle</title>
   <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:24px}
-    .row{display:flex;gap:12px;align-items:center;margin:8px 0}
-    input[type="text"],select,textarea{padding:10px;border:1px solid #d0d0d0;border-radius:8px;font-size:15px}
-    input[type="text"]{min-width:300px}
-    textarea{width:100%;border-radius:10px}
-    .btn{padding:10px 14px;border:1px solid #d0d0d0;border-radius:8px;background:#fff;cursor:pointer}
-    .btn.primary{background:#1677ff;color:#fff;border-color:#1677ff}
-    .btn.danger{background:#fff0f0;border-color:#ffb3b3;color:#c20000}
-    .q-card{border:1px solid #e6e6e6;border-radius:12px;padding:12px;margin:14px 0}
-    .q-row{display:flex;gap:12px;align-items:center;margin:8px 0}
-    .section-title{font-size:22px;font-weight:700;margin:18px 0}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:24px;}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+    .row input[type=text], .row select{height:40px;padding:0 10px;font-size:16px}
+    .button{height:40px;padding:0 14px;border:1px solid #ccc;border-radius:8px;background:#f6f7f8;cursor:pointer}
+    .primary{background:#1677ff;color:#fff;border-color:#1677ff}
+    h1{margin:0 0 16px}
+    #qsWrap .q-row{display:grid;grid-template-columns:360px 1fr 56px;gap:12px;align-items:start;margin:16px 0}
+    #qsWrap textarea{min-height:120px}
   </style>
 </head>
 <body>
@@ -24,37 +21,32 @@
   <div class="row">
     <div>
       <div>Slug</div>
-      <input id="slug" type="text" placeholder="örn: formayvalik" />
+      <input id="slug" type="text" placeholder="örn: formayvalik" style="width:320px" />
     </div>
-
     <div>
       <div>Başlık</div>
-      <input id="title" type="text" placeholder="Anket başlığı" />
+      <input id="title" type="text" placeholder="Anket başlığı" style="width:420px" />
     </div>
-
     <div>
       <div>Durum</div>
-      <select id="active">
-        <option>Aktif</option>
-        <option>Pasif</option>
+      <select id="status" style="width:120px">
+        <option value="aktif" selected>Aktif</option>
+        <option value="pasif">Pasif</option>
       </select>
     </div>
 
-    <div style="margin-top:22px;display:flex;gap:8px">
-      <button id="btnLoad" class="btn">Yükle</button>
-      <button id="btnNew" class="btn">Yeni (sıfır)</button>
-      <button id="btnAdd" class="btn">Soru Ekle</button>
-      <button id="btnSave" class="btn primary">Kaydet</button>
-    </div>
+    <button id="btnLoad" class="button">Yükle</button>
+    <button id="btnNew" class="button">Yeni (sıfır)</button>
+    <button id="btnAddQ" class="button">Soru Ekle</button>
+    <button id="btnSave" class="button primary">Kaydet</button>
   </div>
 
   <p>“Yükle” mevcut formu getirir; düzenleyip “Kaydet” dersen üzerine yazar.</p>
 
-  <div class="section-title">Sorular</div>
-  <div id="questions"></div>
+  <h2>Sorular</h2>
+  <div id="qsWrap"></div>
 
-  <!-- Tek JS dosyamız: -->
-  <script src="/admin.js" defer></script>
+  <!-- Cache’i kırmak için v=9 -->
+  <script src="admin.js?v=9"></script>
 </body>
 </html>
-<script src="admin.js?v=8"></script>
