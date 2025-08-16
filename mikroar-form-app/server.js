@@ -1,89 +1,68 @@
-// --- Core/ESM helpers ---
+// server.js  —  MikroAR Form App (ESM)
+
+import express from 'express';
+import dotenv from 'dotenv';
+import helmet from 'helmet';
+import cors from 'cors';
+import morgan from 'morgan';
+import basicAuth from 'basic-auth';
+import pkg from 'pg';
 import path from 'path';
 import { fileURLToPath } from 'url';
-const __filename = fileURLToPath(import.meta.url);
-const __dirname  = path.dirname(__filename);
-
-// --- Packages ---
-import express   from 'express';
-import dotenv    from 'dotenv';
-import helmet    from 'helmet';
-import cors      from 'cors';
-import morgan    from 'morgan';
-import basicAuth from 'basic-auth';
-import pgPkg     from 'pg';
-import { Parser } from 'json2csv'; // CSV export
 
 dotenv.config();
-const { Pool } = pgPkg;
+const { Pool } = pkg;
 
-// --- Env ---
-const PORT               = process.env.PORT || 3000;
-const DATABASE_URL       = process.env.DATABASE_URL;
-const CORS_ORIGIN        = process.env.CORS_ORIGIN || '*';
-const ADMIN_USER         = process.env.ADMIN_USER || 'admin';
-const ADMIN_PASS         = process.env.ADMIN_PASS || 'password';
-const DEFAULT_FORM_SLUG  = process.env.DEFAULT_FORM_SLUG || 'formayvalik';
-
-// iframe izinleri (virgül ile ayrılmış): ör. https://sites.google.com, https://*.mikroar.com
-const FRAME_ALLOW = (process.env.FRAME_ANCESTORS || '')
-  .split(',')
-  .map(s => s.trim())
-  .filter(Boolean);
+// ---- Env
+const PORT = process.env.PORT || 3000;
+const DATABASE_URL = process.env.DATABASE_URL;
+const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
+const ADMIN_USER = process.env.ADMIN_USER || 'admin';
+const ADMIN_PASS = process.env.ADMIN_PASS || 'password';
+const FRAME_ANCESTORS = process.env.FRAME_ANCESTORS || `'self'`;
+const DEFAULT_SLUG = process.env.DEFAULT_SLUG || ''; // kökten slug vermek istersen
 
 if (!DATABASE_URL) {
   console.error('DATABASE_URL tanımlı değil!');
   process.exit(1);
 }
+
+// ---- __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// ---- DB
 const pool = new Pool({ connectionString: DATABASE_URL });
 
+// ---- App
 const app = express();
 app.set('trust proxy', true);
 
-// --- Security headers (Google Sites / custom domain iframe) ---
-app.use(helmet({
-  contentSecurityPolicy: {
-    useDefaults: true,
-    directives: {
-      "frame-ancestors": ["'self'", ...FRAME_ALLOW],
-    }
-  },
-  frameguard: false,
-  crossOriginEmbedderPolicy: false,
-}));
+// Helmet + CSP (frame-ancestors)
+const faList = FRAME_ANCESTORS.split(',').map(s => s.trim()).filter(Boolean);
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        // frame-ancestors için boşlukla ayrılmış liste gerekir; array de geçerlidir.
+        'frame-ancestors': faList.length ? faList : [`'self'`],
+      },
+    },
+    // iframe gömmeleri için X-Frame-Options olmamalı:
+    frameguard: false,
+    crossOriginEmbedderPolicy: false,
+  })
+);
 
-// --- Parsers / CORS / Logs / Static ---
+// CORS + body parsers + logs + static
 app.use(cors({ origin: CORS_ORIGIN, credentials: false }));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('combined'));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// --- Küçük client config: default slug ---
-app.get('/_config.js', (_req, res) => {
-  res
-    .type('application/javascript')
-    .send(`window.__CFG=${JSON.stringify({ defaultSlug: DEFAULT_FORM_SLUG })};`);
-});
-
-// --- Host-based root routing (redirectsiz; URL aynı kalır) ---
-const PUBLIC_DIR = path.join(__dirname, 'public');
-app.get('/', (req, res, next) => {
-  if (req.hostname === 'form.mikroar.com') {
-    return res.sendFile(path.join(PUBLIC_DIR, 'form.html'));
-  }
-  if (req.hostname === 'anket.mikroar.com') {
-    return res.sendFile(path.join(PUBLIC_DIR, 'admin.html'));
-  }
-  return next();
-});
-
-// Bookmark için: /admin → admin.html
-app.get('/admin', (_req, res) => {
-  res.sendFile(path.join(PUBLIC_DIR, 'admin.html'));
-});
-
-// --- Basic auth helper (admin bölgeleri) ---
+// ---- Yardımcılar
 function adminOnly(req, res, next) {
   const user = basicAuth(req);
   if (!user || user.name !== ADMIN_USER || user.pass !== ADMIN_PASS) {
@@ -93,7 +72,30 @@ function adminOnly(req, res, next) {
   next();
 }
 
-// --- Health ---
+// ---- Alan adına göre yönlendirme (kök "/")
+app.get('/', (req, res, next) => {
+  const host = (req.hostname || '').toLowerCase();
+
+  // form subdomain: form sayfası
+  if (host === 'form.mikroar.com') {
+    // slug varsa korunur: /?slug=... → /form.html?slug=...
+    const q = req.originalUrl.includes('?') ? req.originalUrl.substring(req.originalUrl.indexOf('?')) : '';
+    return res.redirect(302, '/form.html' + q);
+  }
+
+  // anket subdomain: admin sayfası
+  if (host === 'anket.mikroar.com') {
+    return res.redirect(302, '/admin.html');
+  }
+
+  // Diğerleri: köke gelenleri form sayfasına al
+  if (DEFAULT_SLUG) {
+    return res.redirect(302, `/form.html?slug=${encodeURIComponent(DEFAULT_SLUG)}`);
+  }
+  return res.redirect(302, '/form.html');
+});
+
+// ---- Sağlık
 app.get('/health', async (_req, res) => {
   try {
     await pool.query('SELECT 1');
@@ -103,7 +105,7 @@ app.get('/health', async (_req, res) => {
   }
 });
 
-// --- Public: form schema ---
+// ---- API: form şeması
 app.get('/api/forms/:slug', async (req, res) => {
   const { slug } = req.params;
   try {
@@ -119,14 +121,17 @@ app.get('/api/forms/:slug', async (req, res) => {
   }
 });
 
-// --- Public: submit (IP bazlı tek oy) ---
+// ---- API: cevap kaydet (IP bazlı tek oy için DB tarafında UNIQUE index önerilir)
 app.post('/api/forms/:slug/submit', async (req, res) => {
   const { slug } = req.params;
   const payload = req.body || {};
 
   const xff = req.headers['x-forwarded-for'];
-  const forwardedIp = Array.isArray(xff) ? xff[0]
-    : (typeof xff === 'string' ? xff.split(',')[0].trim() : null);
+  const forwardedIp = Array.isArray(xff)
+    ? xff[0]
+    : typeof xff === 'string'
+    ? xff.split(',')[0].trim()
+    : null;
   const ip = forwardedIp || req.ip || req.connection?.remoteAddress || null;
 
   try {
@@ -152,7 +157,7 @@ app.post('/api/forms/:slug/submit', async (req, res) => {
   }
 });
 
-// --- Admin: list forms ---
+// ---- Admin: formlar listesi
 app.get('/admin/api/forms', adminOnly, async (_req, res) => {
   try {
     const { rows } = await pool.query(
@@ -164,7 +169,10 @@ app.get('/admin/api/forms', adminOnly, async (_req, res) => {
   }
 });
 
-// --- Admin: upsert form ---
+// ---- Admin: form oluştur/güncelle
+// Body kabul:
+//  A) { slug, title, active, schema:{questions:[...] } }
+//  B) { slug, title, active, questions:[...] }
 app.post('/admin/api/forms', adminOnly, async (req, res) => {
   try {
     let { slug, title, active = true, schema, questions } = req.body || {};
@@ -188,7 +196,7 @@ app.post('/admin/api/forms', adminOnly, async (req, res) => {
   }
 });
 
-// --- Admin: raw responses ---
+// ---- Admin: yanıtlar & sayaç
 app.get('/admin/forms/:slug/responses.json', adminOnly, async (req, res) => {
   const { slug } = req.params;
   try {
@@ -202,7 +210,6 @@ app.get('/admin/forms/:slug/responses.json', adminOnly, async (req, res) => {
   }
 });
 
-// --- Admin: count ---
 app.get('/admin/forms/:slug/stats', adminOnly, async (req, res) => {
   const { slug } = req.params;
   try {
@@ -216,40 +223,7 @@ app.get('/admin/forms/:slug/stats', adminOnly, async (req, res) => {
   }
 });
 
-// --- Admin: CSV export (pivot) ---
-app.get('/admin/forms/:slug/export.csv', adminOnly, async (req, res) => {
-  const { slug } = req.params;
-
-  const { rows } = await pool.query(
-    `select r.created_at, a.key as question, 
-            case when jsonb_typeof(a.value) = 'array'
-                 then array(select jsonb_array_elements_text(a.value))
-                 else array[trim(both '"' from a.value::text)]
-            end as answers
-       from responses r
-       cross join lateral jsonb_each(r.payload->'answers') as a(key, value)
-      where r.form_slug = $1
-      order by r.created_at`,
-    [slug]
-  );
-
-  const grouped = {};
-  for (const row of rows) {
-    const ts = row.created_at?.toISOString ? row.created_at.toISOString() : row.created_at;
-    if (!grouped[ts]) grouped[ts] = { created_at: ts };
-    grouped[ts][row.question] = row.answers.join(', ');
-  }
-  const data = Object.values(grouped);
-
-  const parser = new Parser();
-  const csv = parser.parse(data);
-
-  res.header('Content-Type', 'text/csv');
-  res.attachment(`${slug}_export.csv`);
-  res.send(csv);
-});
-
-// --- Start ---
+// ---- Sunucu
 app.listen(PORT, () => {
   console.log(`MikroAR Form API ${PORT} portunda çalışıyor`);
 });
