@@ -235,6 +235,45 @@ app.post('/api/responses', (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// CSV export için ek rota
+const { Parser } = require("json2csv");
+
+app.get("/admin/forms/:slug/export.csv", basicAuth, async (req, res) => {
+  const { slug } = req.params;
+
+  // Veritabanından form yanıtlarını çek
+  const { rows } = await pool.query(
+    `select r.created_at, a.key as question, 
+      case when jsonb_typeof(a.value) = 'array'
+           then array(select jsonb_array_elements_text(a.value))
+           else array[trim(both '"' from a.value::text)]
+      end as answers
+     from responses r
+     cross join lateral jsonb_each(r.payload->'answers') as a(key, value)
+     where r.form_slug = $1
+     order by r.created_at`,
+    [slug]
+  );
+
+  // Satırları "pivot" için hazırla
+  const grouped = {};
+  for (let row of rows) {
+    const ts = row.created_at;
+    if (!grouped[ts]) grouped[ts] = { created_at: ts };
+    grouped[ts][row.question] = row.answers.join(", ");
+  }
+
+  const data = Object.values(grouped);
+
+  // CSV’ye çevir
+  const parser = new Parser();
+  const csv = parser.parse(data);
+
+  // İndirme çıktısı
+  res.header("Content-Type", "text/csv");
+  res.attachment(`${slug}_export.csv`);
+  return res.send(csv);
+});
 // --- Sunucu başlat ---
 app.listen(PORT, () => {
   console.log(`MikroAR Form API ${PORT} portunda çalışıyor`);
