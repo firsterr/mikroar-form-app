@@ -18,14 +18,14 @@ dotenv.config();
 const { Pool } = pgPkg;
 
 // --- Env ---
-const PORT            = process.env.PORT || 3000;
-const DATABASE_URL    = process.env.DATABASE_URL;
-const CORS_ORIGIN     = process.env.CORS_ORIGIN || '*';
-const ADMIN_USER      = process.env.ADMIN_USER || 'admin';
-const ADMIN_PASS      = process.env.ADMIN_PASS || 'password';
-const DEFAULT_FORM_SLUG = process.env.DEFAULT_FORM_SLUG || 'formayvalik';
+const PORT               = process.env.PORT || 3000;
+const DATABASE_URL       = process.env.DATABASE_URL;
+const CORS_ORIGIN        = process.env.CORS_ORIGIN || '*';
+const ADMIN_USER         = process.env.ADMIN_USER || 'admin';
+const ADMIN_PASS         = process.env.ADMIN_PASS || 'password';
+const DEFAULT_FORM_SLUG  = process.env.DEFAULT_FORM_SLUG || 'formayvalik';
 
-// iframe izinleri (virgül ile ayrılmış liste): ör. https://sites.google.com, https://*.mikroar.com
+// iframe izinleri (virgül ile ayrılmış): ör. https://sites.google.com, https://*.mikroar.com
 const FRAME_ALLOW = (process.env.FRAME_ANCESTORS || '')
   .split(',')
   .map(s => s.trim())
@@ -59,14 +59,14 @@ app.use(express.urlencoded({ extended: true }));
 app.use(morgan('combined'));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// --- Small client config: default slug ---
+// --- Küçük client config: default slug ---
 app.get('/_config.js', (_req, res) => {
   res
     .type('application/javascript')
     .send(`window.__CFG=${JSON.stringify({ defaultSlug: DEFAULT_FORM_SLUG })};`);
 });
 
-// --- Host-based root routing (no redirect → URL değişmez) ---
+// --- Host-based root routing (redirectsiz; URL aynı kalır) ---
 const PUBLIC_DIR = path.join(__dirname, 'public');
 app.get('/', (req, res, next) => {
   if (req.hostname === 'form.mikroar.com') {
