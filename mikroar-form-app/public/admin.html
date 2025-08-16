@@ -1,128 +1,53 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="tr">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>MikroAR – Anket Admin (Düzenleme Modu)</title>
+  <title>Anket Oluştur / Düzenle</title>
   <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:16px;color:#111}
-    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-    .card{border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin:12px 0;background:#fff}
-    input[type=text], select, textarea{padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;min-width:240px}
-    textarea{min-width:420px;min-height:72px}
-    button{padding:8px 12px;border:1px solid #334155;background:#0ea5e9;color:#fff;border-radius:8px;cursor:pointer}
-    button.secondary{background:#fff;color:#111;border-color:#cbd5e1}
-    button.danger{background:#ef4444;border-color:#ef4444}
-    .q-head{display:flex;align-items:center;gap:10px;justify-content:space-between}
-    .q-type{min-width:180px}
-    .choices{margin-top:8px;margin-left:8px;border-left:3px solid #e5e7eb;padding-left:10px}
-    .muted{color:#6b7280;font-size:13px}
-    .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #e5e7eb;font-size:12px}
-    .grid{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto; margin:0; padding:24px;}
+    .row{display:grid;grid-template-columns:1fr 1fr 1fr; gap:16px; align-items:center}
+    input,select,button,textarea{font:inherit; padding:10px; border-radius:10px; border:1px solid #ddd}
+    button{background:#f4f6ff; cursor:pointer}
+    button.primary{background:#1f73ff; color:white}
+    .qcard{border:1px solid #ececec; border-radius:14px; padding:14px; margin:14px 0}
+    .muted{color:#667}
   </style>
+
+  <!-- ÖNEMLİ: JS harici dosyada ve defer ile -->
+  <script src="/admin.js?v=2" defer></script>
 </head>
 <body>
+  <h1>🔧 Anket Oluştur / Düzenle</h1>
 
-  <h2>🛠️ Anket Oluştur / Düzenle</h2>
-
-  <div class="card">
-    <div class="row">
-      <div>
-        <div class="muted">Slug</div>
-        <input id="slug" type="text" placeholder="örn: formayvalik" />
-      </div>
-      <div>
-        <div class="muted">Başlık</div>
-        <input id="title" type="text" placeholder="Anket başlığı" />
-      </div>
-      <div>
-        <div class="muted">Durum</div>
-        <select id="active">
-          <option value="true">Aktif</option>
-          <option value="false">Pasif</option>
-        </select>
-      </div>
+  <div class="row" style="margin-bottom:12px">
+    <div>
+      <div>Slug</div>
+      <input id="slug" placeholder="örn: formayvalik"/>
     </div>
-
-    <div class="row" style="margin-top:8px;">
-      <button class="secondary" id="btnLoad">Yükle</button>
-      <button class="secondary" id="btnNew">Yeni (sıfır)</button>
-      <span class="muted">“Yükle” mevcut formu getirir; sonra düzenleyip “Kaydet” dersen üzerine yazar.</span>
+    <div>
+      <div>Başlık</div>
+      <input id="title" placeholder="Anket başlığı"/>
+    </div>
+    <div>
+      <div>Durum</div>
+      <select id="active">
+        <option value="true" selected>Aktif</option>
+        <option value="false">Pasif</option>
+      </select>
     </div>
   </div>
 
-  <div class="q-head">
-    <h3>Sorular</h3>
-    <div class="row">
-      <button class="secondary" id="btnAddQ">Soru Ekle</button>
-      <button id="btnSave">Kaydet</button>
-    </div>
+  <div style="display:flex; gap:12px; align-items:center; margin-bottom:10px">
+    <button id="btnLoad">Yükle</button>
+    <button id="btnNew">Yeni (sıfır)</button>
+    <div class="muted">“Yükle” mevcut formu getirir; sonra düzenleyip “Kaydet” dersen üzerine yazar.</div>
+    <div style="flex:1"></div>
+    <button id="btnAddQuestion">Soru Ekle</button>
+    <button id="btnSave" class="primary">Kaydet</button>
   </div>
 
-  <div id="qList"></div>
-
-  <script>
-  <script>
-  // ... üstteki kodlar aynı kalsın
-
-  el('#btnLoad').onclick = async () => {
-    const slug = el('#slug').value.trim();
-    if (!slug) { alert('Önce slug gir'); return; }
-
-    try {
-      console.log('[LOAD] fetching /api/forms/' + slug);
-      const r = await fetch(`/api/forms/${encodeURIComponent(slug)}?_=${Date.now()}`, {
-        credentials: 'same-origin', // aynı origin cookie vs. varsa taşı
-        cache: 'no-store'
-      });
-
-      if (!r.ok) {
-        const t = await r.text().catch(()=> '');
-        console.error('Load failed:', r.status, t);
-        alert(`Form bulunamadı veya hata (${r.status}).\n${t}`);
-        return;
-      }
-
-      const json = await r.json();
-      console.log('[LOAD] json:', json);
-
-      // normalize + ekrana bas
-      CURRENT_FORM = (function normalizeIncoming(data){
-        const form = data?.form ?? data ?? {};
-        const schema = form.schema ?? {};
-        let questions = schema.questions ?? form.questions ?? [];
-        questions = questions.map(q => {
-          if (typeof q === 'string') return { type:'short_text', text:q, options:[] };
-          return {
-            type: q.type || 'short_text',
-            text: q.text || '',
-            options: Array.isArray(q.options) ? q.options : []
-          };
-        });
-        return {
-          slug: form.slug || slug,
-          title: form.title || '',
-          active: form.active !== false,
-          schema: { questions }
-        };
-      })(json);
-
-      el('#title').value       = CURRENT_FORM.title || '';
-      el('#active').value      = CURRENT_FORM.active ? 'true' : 'false';
-      renderQuestions(CURRENT_FORM.schema.questions);
-
-      // ufak geri bildirim
-      el('#title').classList.add('pillloaded');
-      setTimeout(()=> el('#title').classList.remove('pillloaded'), 700);
-
-    } catch (e) {
-      console.error(e);
-      alert('Yükleme hatası: ' + e.message);
-    }
-  };
-
-  // ... alttaki kodlar aynı kalsın
-</script>
-  </script>
+  <h2>Sorular</h2>
+  <div id="questions"></div>
 </body>
 </html>
