@@ -80,6 +80,24 @@ app.get(['/form', '/form.html'], async (req, res, next) => {
   }
 });
 // <<< SON
+// .env'de ayarlanabilir, yoksa 'formayvalik'
+const DEFAULT_FORM_SLUG = process.env.DEFAULT_FORM_SLUG || 'formayvalik';
+
+// KÖK YÖNLENDİRME — MUTLAKA express.static'ten ÖNCE OLMALI
+app.get('/', (req, res) => {
+  const host = (req.headers.host || '').toLowerCase();
+
+  // Admin alan adı: anket.mikroar.com → admin
+  if (host.startsWith('anket.')) {
+    return res.redirect(302, '/admin.html');
+  }
+
+  // Form alan adı (veya diğerleri) → form.html?slug=...
+  return res.redirect(
+    302,
+    `/form.html?slug=${encodeURIComponent(DEFAULT_FORM_SLUG)}`
+  );
+});
 
 // CORS + body parsers + logs + static
 app.use(cors({ origin: CORS_ORIGIN, credentials: false }));
@@ -98,30 +116,7 @@ function adminOnly(req, res, next) {
   next();
 }
 
-// .env'ye ekleyebilirsin: DEFAULT_FORM_SLUG=formayvalik
-const DEFAULT_FORM_SLUG = process.env.DEFAULT_FORM_SLUG || 'formayvalik';
 
-// KÖK YÖNLENDİRME — host'a göre
-app.get('/', (req, res) => {
-  const host = (req.headers.host || '').toLowerCase();
-
-  // Admin alan adı: anket.mikroar.com
-  if (host.startsWith('anket.')) {
-    return res.redirect(302, '/admin.html');
-  }
-
-  // Form alan adı: form.mikroar.com (veya diğerleri)
-  return res.redirect(302, `/form.html?slug=${encodeURIComponent(DEFAULT_FORM_SLUG)}`);
-});
-
-// İsteğe bağlı kısa yollar:
-app.get('/form', (req, res) => {
-  const slug = req.query.slug || DEFAULT_FORM_SLUG;
-  return res.redirect(302, `/form.html?slug=${encodeURIComponent(slug)}`);
-});
-app.get('/f/:slug', (req, res) => {
-  return res.redirect(302, `/form.html?slug=${encodeURIComponent(req.params.slug)}`);
-});
 // ---- Sağlık
 app.get('/health', async (_req, res) => {
   try {
