@@ -1,163 +1,189 @@
-(async function () {
-  const $ = s => document.querySelector(s);
-  const slugInput = $('#slug');
-  const loadBtn = $('#loadBtn');
-  const meta = $('#meta');
-  const thead = $('#grid thead');
-  const tbody = $('#grid tbody');
-  const csvBtn = $('#csvBtn');
-  const copyBtn = $('#copyBtn');
+// === Basit yardımcılar ===
+const $ = (sel) => document.querySelector(sel);
 
-  // ?slug=... ile çağrılırsa otomatik set et
-  const url = new URL(location.href);
-  const initialSlug = url.searchParams.get('slug') || '';
-  slugInput.value = initialSlug;
+const els = {
+  slug:     $('#slug'),
+  sluglist: $('#sluglist'),
+  btnLoad:  $('#btnLoad'),
+  btnCopy:  $('#btnCopy'),
+  btnCsv:   $('#btnCsv'),
+  stats:    $('#stats'),
+  meta:     $('#meta'),
+  thead:    $('#thead'),
+  tbody:    $('#tbody'),
+};
 
-  // küçük yardımcılar
-  const esc = (s='') => String(s).replaceAll('"','""');
-  const asArray = v => Array.isArray(v) ? v : (v == null ? [] : [v]);
+const LS_KEY = 'known_slugs_v2';
+const knownSlugs = new Set(JSON.parse(localStorage.getItem(LS_KEY) || '[]'));
 
-  async function load() {
-    const slug = slugInput.value.trim();
-    if (!slug) { alert('Slug girin'); return; }
+function updateDatalist(){
+  els.sluglist.innerHTML = Array.from(knownSlugs).sort().map(s => `<option value="${s}">`).join('');
+}
 
-    thead.innerHTML = '';
-    tbody.innerHTML = '';
-    meta.textContent = 'yükleniyor...';
+// URL param
+const urlParams = new URLSearchParams(location.search);
+const initialSlug = urlParams.get('slug') || '';
 
-    try {
-      // 1) Şema (soru sırası için)
-      const formRes = await fetch(`/api/forms/${encodeURIComponent(slug)}`);
-      if (!formRes.ok) throw new Error('Form bulunamadı');
-      const formJson = await formRes.json();
-      const schema = formJson?.form?.schema || {};
-      const qOrder = Array.isArray(schema.questions)
-        ? schema.questions.map(q => q.label).filter(Boolean)
-        : [];
+updateDatalist();
+if (initialSlug) els.slug.value = initialSlug;
 
-      // 2) Yanıtlar
-      const respRes = await fetch(`/admin/forms/${encodeURIComponent(slug)}/responses.json`, {
-        credentials: 'include'
-      });
-      if (!respRes.ok) throw new Error(`Yanıtlar alınamadı (${respRes.status})`);
-      const respJson = await respRes.json();
-      const rows = respJson.rows || [];
-
-      // 3) Tüm soruların başlık seti (ekstra sorular da dahil)
-      const allQSet = new Set(qOrder);
-      for (const r of rows) {
-        const ans = r.payload?.answers || {};
-        Object.keys(ans).forEach(k => allQSet.add(k));
-      }
-      // Önce şemadaki sıra, sonra yeni çıkanlar (alfabetik)
-      const extra = [...allQSet].filter(x => !qOrder.includes(x)).sort((a,b)=>a.localeCompare(b,'tr'));
-      const columns = ['created_at','ip', ...qOrder, ...extra];
-
-      // 4) Başlık çiz
-      const trHead = document.createElement('tr');
-      for (const c of columns) {
-        const th = document.createElement('th');
-        th.textContent = (c === 'created_at' ? 'Tarih' : c === 'ip' ? 'IP' : c);
-        trHead.appendChild(th);
-      }
-      thead.appendChild(trHead);
-
-      // 5) Satırlar
-      for (const r of rows) {
-        const tr = document.createElement('tr');
-        const answers = r.payload?.answers || {};
-
-        for (const c of columns) {
-          const td = document.createElement('td');
-          if (c === 'created_at') {
-            td.textContent = new Date(r.created_at).toLocaleString('tr-TR');
-          } else if (c === 'ip') {
-            td.textContent = r.ip || '';
-          } else {
-            const vals = asArray(answers[c]);
-            if (!vals.length) {
-              td.textContent = '';
-            } else if (vals.length === 1) {
-              td.textContent = vals[0];
-            } else {
-              // Çoklu seçimlerde pill
-              vals.forEach(v => {
-                const span = document.createElement('span');
-                span.className = 'pill';
-                span.textContent = v;
-                td.appendChild(span);
-              });
-            }
-          }
-          tr.appendChild(td);
-        }
-        tbody.appendChild(tr);
-      }
-
-      meta.textContent = `kayıt: ${rows.length}, sütun: ${columns.length}`;
-      // CSV export ve kopyalama için data sakla
-      window.__gridData = { columns, rows };
-
-    } catch (e) {
-      console.error(e);
-      alert('Yüklenemedi: ' + e.message);
-      meta.textContent = 'hata';
+// Sunucudaki tüm formların slug’larını çek (öneri için)
+(async () => {
+  try {
+    const r = await fetch('/admin/api/forms'); // BasicAuth gerektirir
+    const j = await r.json();
+    if (j.ok && Array.isArray(j.rows)) {
+      j.rows.forEach(row => row.slug && knownSlugs.add(row.slug));
+      localStorage.setItem(LS_KEY, JSON.stringify(Array.from(knownSlugs)));
+      updateDatalist();
     }
+  } catch(err) {
+    console.warn('Form listesi alınamadı:', err);
   }
-
-  function buildCSV({ columns, rows }) {
-    const lines = [];
-    // başlık
-    lines.push(columns.map(c => `"${esc(c)}"`).join(','));
-
-    for (const r of rows) {
-      const answers = r.payload?.answers || {};
-      const line = columns.map(c => {
-        if (c === 'created_at') return `"${esc(new Date(r.created_at).toISOString())}"`;
-        if (c === 'ip') return `"${esc(r.ip || '')}"`;
-        const vals = asArray(answers[c]);
-        return `"${esc(vals.join(', '))}"`;
-      }).join(',');
-      lines.push(line);
-    }
-    return lines.join('\r\n');
-  }
-
-  function buildTSV({ columns, rows }) {
-    const lines = [];
-    lines.push(columns.join('\t'));
-    for (const r of rows) {
-      const answers = r.payload?.answers || {};
-      const line = columns.map(c => {
-        if (c === 'created_at') return new Date(r.created_at).toISOString();
-        if (c === 'ip') return (r.ip || '');
-        const vals = asArray(answers[c]);
-        return vals.join(', ');
-      }).join('\t');
-      lines.push(line);
-    }
-    return lines.join('\n');
-  }
-
-  // Olaylar
-  loadBtn.addEventListener('click', load);
-  csvBtn.addEventListener('click', () => {
-    if (!window.__gridData) return;
-    const csv = buildCSV(window.__gridData);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a');
-    const slug = slugInput.value.trim() || 'export';
-    a.href = URL.createObjectURL(blob);
-    a.download = `${slug}_grid.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  });
-  copyBtn.addEventListener('click', async () => {
-    if (!window.__gridData) return;
-    const tsv = buildTSV(window.__gridData);
-    await navigator.clipboard.writeText(tsv);
-    alert('TSV panoya kopyalandı. (Excel’de yapıştırabilirsiniz)');
-  });
-
-  if (initialSlug) load();
 })();
+
+// === Veri çekme ve pivot ===
+// /api/forms/:slug -> { slug,title,active,schema:{questions:[...] } }
+// /admin/forms/:slug/responses.json -> { ok:true, rows:[{ id, payload:{answers:{}}, user_agent, ip, created_at }] }
+
+async function fetchForm(slug){
+  const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`);
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error || 'Form bulunamadı');
+  return j.form; // {slug,title,active,schema}
+}
+
+async function fetchResponses(slug){
+  const r = await fetch(`/admin/forms/${encodeURIComponent(slug)}/responses.json`);
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error || 'Yanıtlar alınamadı');
+  return j.rows; // []
+}
+
+// Array<string> -> "a, b, c"
+const joinVals = (v) => Array.isArray(v) ? v.join(', ') : (v ?? '');
+
+function pivotRows(schemaQuestions, rows){
+  // Sütun başlıkları: Tarih, IP + soru etiketleri
+  const headers = ['Tarih', 'IP', ...schemaQuestions.map(q => q.label)];
+
+  const data = rows.map(row => {
+    const answers = (row.payload && row.payload.answers) || {};
+    const out = [
+      new Date(row.created_at).toLocaleString('tr-TR'),
+      row.ip || ''
+    ];
+    for (const q of schemaQuestions) {
+      out.push(joinVals(answers[q.label] ?? answers[q.name] ?? answers[q.id]));
+    }
+    return out;
+  });
+
+  return { headers, data };
+}
+
+function renderMeta(form){
+  els.meta.innerHTML = '';
+  const chips = [
+    ['Başlık', form.title || form.slug],
+    ['Durum', form.active === false ? 'pasif' : 'aktif'],
+    ['Soru', Array.isArray(form.schema?.questions) ? form.schema.questions.length : 0]
+  ];
+  for (const [k,v] of chips) {
+    const c = document.createElement('span');
+    c.className = 'chip';
+    c.textContent = `${k}: ${v}`;
+    els.meta.appendChild(c);
+  }
+}
+
+function renderTable(headers, data){
+  els.thead.innerHTML = '';
+  els.tbody.innerHTML = '';
+
+  headers.forEach(h => {
+    const th = document.createElement('th');
+    th.textContent = h;
+    els.thead.appendChild(th);
+  });
+
+  data.forEach(row => {
+    const tr = document.createElement('tr');
+    row.forEach(cell => {
+      const td = document.createElement('td');
+      td.textContent = cell ?? '';
+      tr.appendChild(td);
+    });
+    els.tbody.appendChild(tr);
+  });
+
+  els.stats.textContent = `kayıt: ${data.length}, sütun: ${headers.length}`;
+}
+
+function asCSV(headers, data, sep=','){
+  const esc = (s) => {
+    const v = (s ?? '').toString();
+    if (v.includes(sep) || v.includes('"') || v.includes('\n')) {
+      return `"${v.replace(/"/g,'""')}"`;
+    }
+    return v;
+  };
+  const lines = [ headers.map(esc).join(sep), ...data.map(r => r.map(esc).join(sep)) ];
+  return lines.join('\n');
+}
+
+function copyTSV(headers, data){
+  const tsv = asCSV(headers, data, '\t');
+  navigator.clipboard.writeText(tsv).then(() => {
+    els.btnCopy.textContent = 'Kopyalandı ✓';
+    setTimeout(() => els.btnCopy.textContent = 'Kopyala (TSV)', 1400);
+  });
+}
+
+function downloadCSV(filename, headers, data){
+  const csv = asCSV(headers, data, ',');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${filename || 'export'}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// === Yükleme akışı ===
+async function load(slug){
+  if (!slug) return;
+  els.stats.textContent = 'yükleniyor…';
+  try {
+    // Öneriye ekle
+    knownSlugs.add(slug);
+    localStorage.setItem(LS_KEY, JSON.stringify(Array.from(knownSlugs)));
+    updateDatalist();
+
+    const [form, rows] = await Promise.all([ fetchForm(slug), fetchResponses(slug) ]);
+
+    const schemaQuestions = Array.isArray(form.schema?.questions) ? form.schema.questions : [];
+    renderMeta(form);
+
+    const { headers, data } = pivotRows(schemaQuestions, rows);
+    renderTable(headers, data);
+
+    // CSV-TSV butonları o anki tabloya bakacak
+    els.btnCopy.onclick = () => copyTSV(headers, data);
+    els.btnCsv.onclick  = () => downloadCSV(slug, headers, data);
+
+  } catch(err){
+    console.error(err);
+    els.stats.textContent = (err && err.message) || 'Hata';
+    els.thead.innerHTML = '';
+    els.tbody.innerHTML = '';
+  }
+}
+
+// UI olayları
+els.btnLoad.addEventListener('click', () => load(els.slug.value.trim()));
+els.slug.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); load(els.slug.value.trim()); } });
+
+// Sayfa ilk açılışta URL param varsa otomatik yükle
+if (initialSlug) load(initialSlug);
