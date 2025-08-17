@@ -191,7 +191,9 @@ app.get('/admin/api/forms', adminOnly, async (_req, res) => {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
-
+app.get('/health', (req, res) => {
+  res.status(200).send('ok');
+});
 // ---- Admin: form oluştur/güncelle
 // Body kabul:
 //  A) { slug, title, active, schema:{questions:[...] } }
