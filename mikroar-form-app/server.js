@@ -54,11 +54,25 @@ app.use(
     crossOriginEmbedderPolicy: false,
   })
 );
-// ⬇️ KÖK: /  (public/index.html)
-import path from 'path';
-import { fileURLToPath } from 'url';
-const __filename = fileURLToPath(import.meta.url);
-const __dirname  = path.dirname(__filename);
+// Kök: /  -> public/index.html
+app.get('/', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Aktif formları listeleyen public API
+app.get('/api/forms', async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT slug, title
+         FROM forms
+        WHERE (active IS DISTINCT FROM false)
+        ORDER BY created_at DESC NULLS LAST, slug ASC`
+    );
+    res.json({ ok: true, rows });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
 
 app.get('/', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
