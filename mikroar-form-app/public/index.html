@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>MikroAR – Anket Seç</title>
+  <title>MikroAR – Form Seç</title>
   <style>
     :root{color-scheme:light dark}
-    body{margin:0;font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Noto Sans","Helvetica Neue",Arial}
+    body{margin:0;font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Inter,sans-serif}
     .wrap{max-width:860px;margin:48px auto;padding:0 16px}
     h1{font-size:28px;margin:0 0 8px}
     p.muted{opacity:.7;margin:0 0 24px}
@@ -24,7 +24,7 @@
 <body>
   <div class="wrap">
     <h1>Form seçin</h1>
-    <p class="muted">Bu sayfada aktif formlar listelenir. Bir form seçtiğinizde <code>/form.html?slug=…</code> ile anket sayfasına gidersiniz.</p>
+    <p class="muted">Aktif formlar listelenir. Bir form seçince <code>/form.html?slug=…</code> ile anket sayfasına gidilir.</p>
 
     <div class="card">
       <div class="row">
@@ -32,30 +32,29 @@
           <option value="">— Yükleniyor… —</option>
         </select>
         <button id="goBtn">Formu aç</button>
-        <button id="copyBtn" class="secondary" title="Bağlantıyı kopyala">Bağlantıyı kopyala</button>
+        <button id="copyBtn" class="secondary">Bağlantıyı kopyala</button>
       </div>
-
       <ul id="list"></ul>
     </div>
   </div>
 
   <script>
   (async function () {
-    // 1) URL’de slug varsa direkt form.html’e gönder
-    const params = new URLSearchParams(location.search);
-    const slugFromUrl = params.get('slug') || params.get('form') || params.get('s');
-    if (slugFromUrl) {
-      location.replace(`/form.html?slug=${encodeURIComponent(slugFromUrl)}`);
+    // URL’de slug verilmişse direkt form sayfasına gönder
+    const p = new URLSearchParams(location.search);
+    const preset = p.get('slug') || p.get('form') || p.get('s');
+    if (preset) {
+      location.replace(`/form.html?slug=${encodeURIComponent(preset)}`);
       return;
     }
 
-    // 2) Aktif formları çek ve doldur
     const sel = document.getElementById('formSelect');
     const list = document.getElementById('list');
+
     try {
-      const r = await fetch('/api/forms'); // server.js’de ekledik
+      const r = await fetch('/api/forms');
       const data = await r.json();
-      if (!data.ok) throw new Error(data.error || 'Bilinmeyen hata');
+      if (!data.ok) throw new Error(data.error || 'Liste alınamadı');
 
       sel.innerHTML = '<option value="">— Bir form seçin —</option>';
       list.innerHTML = '';
@@ -82,7 +81,6 @@
       list.innerHTML = `<li>Hata: ${e.message}</li>`;
     }
 
-    // 3) Butonlar
     document.getElementById('goBtn').onclick = () => {
       const v = sel.value;
       if (!v) return alert('Önce bir form seçin.');
@@ -98,41 +96,5 @@
     };
   })();
   </script>
-  <ul id="form-list"></ul>
-
-<script>
-async function loadForms() {
-  const res = await fetch('/api/forms');
-  const data = await res.json();
-  if (data.ok) {
-    const ul = document.getElementById('form-list');
-    ul.innerHTML = '';
-    data.rows.forEach(f => {
-      const li = document.createElement('li');
-      li.innerHTML = `<a href="form.html?slug=${encodeURIComponent(f.slug)}">${f.title}</a>`;
-      ul.appendChild(li);
-    });
-  }
-}
-loadForms();
-</script>
-  <ul id="form-list"></ul>
-
-<script>
-async function loadForms() {
-  const res = await fetch('/api/forms');
-  const data = await res.json();
-  if (data.ok) {
-    const ul = document.getElementById('form-list');
-    ul.innerHTML = '';
-    data.rows.forEach(f => {
-      const li = document.createElement('li');
-      li.innerHTML = `<a href="form.html?slug=${encodeURIComponent(f.slug)}">${f.title}</a>`;
-      ul.appendChild(li);
-    });
-  }
-}
-loadForms();
-</script>
 </body>
 </html>
