@@ -46,26 +46,14 @@ const RAW_FRAME = (process.env.FRAME_ANCESTORS || '')
   .map(s => s.trim())
   .filter(Boolean);
 
-// Helmet
+// Helmet – CSP kapalı (geçici/pratik çözüm)
 app.use(helmet({
-  contentSecurityPolicy: {
-    useDefaults: true,
-    directives: {
-      "default-src": ["'self'"],
-      "script-src": ["'self'", "'unsafe-inline'"],
-      "style-src": ["'self'", "'unsafe-inline'"],
-      // kritik satır:
-      "frame-ancestors": ["'self'", ...RAW_FRAME],
-    },
-  },
-  frameguard: false,
-  crossOriginEmbedderPolicy: false,
+  contentSecurityPolicy: false,       // <-- CSP kapalı; invalid header hatası biter
+  frameguard: false,                  // X-Frame-Options yok
+  crossOriginEmbedderPolicy: false,   // COEP kapalı
 }));
 
-// Kök: /  -> public/index.html
-app.get('/', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+
 
 // Aktif formları listeleyen public API
 app.get('/api/forms', async (_req, res) => {
@@ -82,8 +70,7 @@ app.get('/api/forms', async (_req, res) => {
   }
 });
 
-app.get('/', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+
 });
 // >>> KOPYALA-YAPIŞTIR — static'in ÜSTÜNE ekle
 app.get('/', (req, res) => {
@@ -169,9 +156,14 @@ app.post('/api/forms/:slug/submit', async (req, res) => {
   }
 });
 
-// >>> KÖK YÖNLENDİRME — MUTLAKA express.static'ten ÖNCE <<<
+// KÖK YÖNLENDİRME — express.static'ten ÖNCE olmalı
 app.get('/', (req, res) => {
-  const host = (req.headers.host || '').toLowerCase();
+  const h = (req.hostname || '').toLowerCase();
+  const q = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+  if (h === 'form.mikroar.com')  return res.redirect(302, '/form.html' + q);
+  if (h === 'anket.mikroar.com') return res.redirect(302, '/admin.html');
+  return res.redirect(302, '/form.html' + q); // default
+});
 
   // Admin alan adı: anket.mikroar.com → admin.html
   if (host.startsWith('anket.')) {
