@@ -109,8 +109,57 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('combined'));
 
-// .env yoksa varsayılan
-const DEFAULT_FORM_SLUG = process.env.DEFAULT_FORM_SLUG || 'formayvalik';
+// --- API: Aktif formlar listesi (index.html bunu çağırıyor)
+app.get('/api/forms-list', async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT slug, title
+         FROM forms
+        WHERE active IS DISTINCT FROM false
+        ORDER BY created_at DESC`
+    );
+    res.json({ ok: true, rows });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// --- API: Tek form şeması (form.html bunu çağırıyor)
+app.get('/api/forms/:slug', async (req, res) => {
+  const { slug } = req.params;
+  try {
+    const { rows } = await pool.query(
+      'SELECT slug, title, active, schema FROM forms WHERE slug=$1',
+      [slug]
+    );
+    if (!rows.length) return res.status(404).json({ ok: false, error: 'Form bulunamadı' });
+    if (rows[0].active === false) return res.status(403).json({ ok: false, error: 'Form pasif' });
+    res.json({ ok: true, form: rows[0] });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// --- API: Yanıt kaydet (form.html POST eder)
+app.post('/api/forms/:slug/submit', async (req, res) => {
+  const { slug } = req.params;
+  const payload = req.body || {};
+  try {
+    const xff = req.headers['x-forwarded-for'];
+    const ip = Array.isArray(xff)
+      ? xff[0]
+      : (typeof xff === 'string' ? xff.split(',')[0].trim() : req.ip || null);
+
+    await pool.query(
+      'INSERT INTO responses (form_slug, payload, user_agent, ip) VALUES ($1, $2, $3, $4)',
+      [slug, payload, req.get('user-agent') || null, ip]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    // unique ihlali vb. durumları burada istersen yakalayabilirsin
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
 
 // >>> KÖK YÖNLENDİRME — MUTLAKA express.static'ten ÖNCE <<<
 app.get('/', (req, res) => {
