@@ -8,7 +8,7 @@
   <style>
     :root{
       --bg:#0b1220; --fg:#e6ecf2; --muted:#93a1b3; --card:#0f1a2d; --line:#21304a;
-      --accent:#4ea8ff; --accent-2:#22d3ee; --ok:#22c55e; --err:#ef4444; --radius:16px;
+      --accent:#4ea8ff; --accent-2:#22d3ee; --radius:16px;
     }
     @media (prefers-color-scheme:light){
       :root{ --bg:#f5f7fb; --fg:#0b1220; --muted:#475569; --card:#ffffff; --line:#e5e7eb; --accent:#2563eb; --accent-2:#06b6d4; }
@@ -25,8 +25,8 @@
     .logo{width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:grid;place-items:center;color:white;font-weight:800}
     h1{margin:0;font-size:28px}
     .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
-    .q{margin:14px 0;padding:12px;border-radius:12px;border:1px dashed var(--line)}
-    .q legend{font-weight:700;margin-bottom:8px}
+    fieldset{border:1px dashed var(--line);border-radius:12px;margin:14px 0;padding:12px}
+    legend{font-weight:700}
     .opt{display:flex;gap:10px;align-items:center;margin:8px 0}
     .opt input{width:22px;height:22px}
     .text input,.text textarea{
@@ -37,13 +37,11 @@
     .btn{height:44px;padding:0 18px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--fg);cursor:pointer}
     .btn.pri{background:var(--accent);border-color:transparent;color:#fff;font-weight:700}
     .muted{color:var(--muted)}
-    .toast{position:fixed;right:16px;bottom:16px;background:var(--card);border:1px solid var(--line);padding:10px 12px;border-radius:10px;display:none}
     .thanks{display:none;text-align:center;padding:40px 16px}
     .thanks h2{font-size:26px;margin:0 0 8px}
+    .error{margin-top:8px;color:#ff6b6b}
   </style>
 </head>
-  <script src="/_config.js"></script>
-
 <body>
   <div class="wrap">
     <div class="title">
@@ -52,11 +50,12 @@
     </div>
 
     <div class="card" id="formCard">
-      <form id="form"></form>
+      <form id="form" novalidate></form>
       <div class="actions">
-        <button id="btnSend" class="btn pri">Gönder</button>
+        <button id="btnSend" class="btn pri" type="button">Gönder</button>
       </div>
       <div class="muted" id="fineprint">IP’niz korunur; tekrar oy engeli için kullanılır.</div>
+      <div id="err" class="error"></div>
     </div>
 
     <div class="thanks" id="thanks">
@@ -65,38 +64,124 @@
     </div>
   </div>
 
-  <div id="toast" class="toast"></div>
-  <script src="./form.js"></script>
-  <!DOCTYPE html>
-<html lang="tr">
-<head>
-  <meta charset="UTF-8">
-  <title>Form Görüntüleme</title>
-</head>
-<body>
-  <h1 id="form-title"></h1>
-  <div id="form-content"></div>
-
   <script>
-    async function loadForm() {
-      const params = new URLSearchParams(window.location.search);
-      const slug = params.get('slug');  // URL’den slug al
-      if (!slug) return;
+  (async function () {
+    const params = new URLSearchParams(location.search);
+    const slug = params.get('slug');
+    const titleEl = document.getElementById('title');
+    const formEl  = document.getElementById('form');
+    const errEl   = document.getElementById('err');
 
-      const res = await fetch(`/api/forms/${slug}`);
-      const data = await res.json();
-
-      if (data.ok) {
-        document.getElementById('form-title').innerText = data.form.title;
-        // buraya formun içeriğini render et
-        document.getElementById('form-content').innerHTML = "<p>Form detayları burada olacak</p>";
-      } else {
-        document.getElementById('form-content').innerText = "Form yüklenemedi!";
-      }
+    if (!slug) {
+      // slug yoksa seçim sayfasına yönlendir
+      location.replace('/index.html');
+      return;
     }
-    loadForm();
+
+    // 1) Form şemasını getir
+    let schema;
+    try {
+      const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`);
+      const data = await r.json();
+      if (!data.ok) throw new Error(data.error || 'Form bulunamadı');
+      titleEl.textContent = data.form.title || slug;
+      schema = (data.form.schema && data.form.schema.questions) || [];
+    } catch (e) {
+      titleEl.textContent = 'Form yüklenemedi';
+      errEl.textContent = e.message;
+      return;
+    }
+
+    // 2) Soruları çiz
+    formEl.innerHTML = '';
+    schema.forEach((q, idx) => {
+      const qName = `q_${idx}`;
+      const fs = document.createElement('fieldset');
+      const lg = document.createElement('legend');
+      lg.textContent = q.label || q.text || `Soru ${idx+1}`;
+      fs.appendChild(lg);
+
+      if (q.type === 'text' || q.type === 'textarea') {
+        const wrap = document.createElement('div');
+        wrap.className = 'text';
+        const el = q.type === 'textarea' ? document.createElement('textarea')
+                                         : document.createElement('input');
+        el.name = qName;
+        el.required = !!q.required;
+        wrap.appendChild(el);
+        fs.appendChild(wrap);
+      } else if (q.type === 'radio' || q.type === 'checkbox') {
+        (q.options || []).forEach(opt => {
+          const row = document.createElement('label');
+          row.className = 'opt';
+          const inp = document.createElement('input');
+          inp.type = q.type;
+          inp.name = q.type === 'radio' ? qName : `${qName}[]`;
+          inp.value = opt;
+          row.appendChild(inp);
+          row.appendChild(document.createTextNode(opt));
+          fs.appendChild(row);
+        });
+      } else {
+        // Bilinmeyen tipleri metin olarak ele al
+        const wrap = document.createElement('div');
+        wrap.className = 'text';
+        const el = document.createElement('input');
+        el.name = qName;
+        wrap.appendChild(el);
+        fs.appendChild(wrap);
+      }
+
+      formEl.appendChild(fs);
+    });
+
+    // 3) Gönder
+    document.getElementById('btnSend').onclick = async () => {
+      errEl.textContent = '';
+
+      // basit zorunlu kontrolü
+      const invalid = [...formEl.querySelectorAll('[required]')].find(el => !el.value?.trim());
+      if (invalid) {
+        invalid.focus();
+        errEl.textContent = 'Lütfen zorunlu alanları doldurun.';
+        return;
+      }
+
+      // cevapları topla (etiketleri anahtar yapalım)
+      const answers = {};
+      schema.forEach((q, idx) => {
+        const key = q.label || q.text || `Soru ${idx+1}`;
+        if (q.type === 'checkbox') {
+          answers[key] = [...formEl.querySelectorAll(`input[name="q_${idx}[]"]:checked`)]
+            .map(i => i.value);
+        } else if (q.type === 'radio') {
+          const r = formEl.querySelector(`input[name="q_${idx}"]:checked`);
+          answers[key] = r ? r.value : null;
+        } else {
+          const t = formEl.querySelector(`[name="q_${idx}"]`);
+          answers[key] = t ? t.value : null;
+        }
+      });
+
+      try {
+        const res = await fetch(`/api/forms/${encodeURIComponent(slug)}/submit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ answers })
+        });
+        const out = await res.json();
+        if (!out.ok) throw new Error(out.error || 'Gönderilemedi');
+
+        // başarı
+        document.getElementById('formCard').style.display = 'none';
+        document.getElementById('thanks').style.display = 'block';
+        // (isteğe bağlı: birkaç sn sonra seçim sayfasına dön)
+        // setTimeout(() => location.href = '/index.html', 3000);
+      } catch (e) {
+        errEl.textContent = e.message;
+      }
+    };
+  })();
   </script>
-</body>
-</html>
 </body>
 </html>
