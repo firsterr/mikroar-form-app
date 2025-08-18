@@ -17,15 +17,13 @@ const { Pool } = pkg;
 const PORT         = process.env.PORT || 3000;
 const DATABASE_URL = process.env.DATABASE_URL;
 const CORS_ORIGIN  = process.env.CORS_ORIGIN || '*';
-// Misafir (genel) giriş — ENV yoksa bu değerler kullanılır
+
+// Admin & Misafir hesapları
+const ADMIN_USER = process.env.ADMIN_USER || 'adminfirster';
+const ADMIN_PASS = process.env.ADMIN_PASS || '10Yor!!de_';
+
 const GUEST_USER = process.env.GUEST_USER || 'firsterx';
 const GUEST_PASS = process.env.GUEST_PASS || '2419_i';
-// Tek yerde tanımlayalım (env yoksa verilen değerlere düşer)
-const ADMIN_USER   = process.env.ADMIN_USER || 'adminfirster';
-const ADMIN_PASS   = process.env.ADMIN_PASS || '10Yor!!de_';
-// İstemci (host bazlı) koruma aynı bilgileri kullansın
-const FRONT_USER   = process.env.FRONT_USER || ADMIN_USER;
-const FRONT_PASS   = process.env.FRONT_PASS || ADMIN_PASS;
 
 if (!DATABASE_URL) {
   console.error('DATABASE_URL tanımlı değil!');
@@ -50,56 +48,45 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-// ---- Basit basic-auth yardımcıları
-function checkBasic(req, user, pass) {
-  const u = basicAuth(req);
-  return u && u.name === user && u.pass === pass;
-}
-function requireBasic(realm = 'MikroAR') {
-  return (req, res, next) => {
-    if (!checkBasic(req, FRONT_USER, FRONT_PASS)) {
-      res.set('WWW-Authenticate', `Basic realm="${realm}"`);
-      return res.status(401).send('Yetkisiz');
-    }
-    next();
-  };
-}
-function adminOnly(req, res, next) {
-  if (!checkBasic(req, ADMIN_USER, ADMIN_PASS)) {
-    res.set('WWW-Authenticate', 'Basic realm="MikroAR Admin API"');
-    return res.status(401).send('Yetkisiz');
-  }
-  next();
+// -------------------------------------------------------
+// Yardımcılar: Basic Auth kontrol
+// -------------------------------------------------------
+function isAdmin(req) {
+  const cred = basicAuth(req);
+  return cred && cred.name === ADMIN_USER && cred.pass === ADMIN_PASS;
 }
 
-// ---- Host bazlı koruma (STATİK ve sayfalar için) — routes’tan ÖNCE
+function isGuest(req) {
+  const cred = basicAuth(req);
+  return cred && cred.name === GUEST_USER && cred.pass === GUEST_PASS;
+}
+
+// Belirli sayfalar için (admin VEYA misafir) koruması
+const PROTECTED_PAGES = new Set(['/', '/index.html', '/admin.html', '/results.html']);
+
 app.use((req, res, next) => {
-  const host = (req.hostname || '').toLowerCase();
-  const p = req.path;
-
-  // 1) anket.mikroar.com -> tamamı şifreli (admin sayfası ve admin API’ler)
-  if (host === 'anket.mikroar.com') {
-    return requireBasic('MikroAR Anket (Admin)')(req, res, next);
+  if (PROTECTED_PAGES.has(req.path)) {
+    if (isAdmin(req) || isGuest(req)) return next();
+    res.set('WWW-Authenticate', 'Basic realm="MikroAR"');
+    return res.status(401).send('Unauthorized');
   }
-
-  // 2) form.mikroar.com -> sadece kök ve sonuçlar şifreli
-  if (host === 'form.mikroar.com') {
-    if (p === '/' || p === '/index.html' || p === '/results.html') {
-      return requireBasic('MikroAR Form Seçici')(req, res, next);
-    }
-  }
-
   return next();
 });
 
+// Sadece admin için koruma (API’ler)
+function adminOnly(_req, res, next) {
+  if (isAdmin(_req)) return next();
+  res.set('WWW-Authenticate', 'Basic realm="MikroAR Admin API"');
+  return res.status(401).send('Yetkisiz');
+}
+
 // -------------------------------------------------------
 // KÖK: alan adına göre davranış
-// - anket.mikroar.com  -> admin.html
-// - form.mikroar.com   -> index.html (form seç)
+// - anket.mikroar.com  -> /admin.html
+// - form.mikroar.com   -> /index.html (form seç)
 // -------------------------------------------------------
 app.get('/', (req, res) => {
   const host = (req.hostname || '').toLowerCase();
-
   if (host === 'anket.mikroar.com') {
     return res.redirect(302, '/admin.html');
   }
@@ -163,7 +150,7 @@ app.get('/api/forms/:slug', async (req, res) => {
       'SELECT slug, title, active, schema FROM forms WHERE slug=$1',
       [slug]
     );
-    if (!rows.length)            return res.status(404).json({ ok: false, error: 'Form bulunamadı' });
+    if (!rows.length)             return res.status(404).json({ ok: false, error: 'Form bulunamadı' });
     if (rows[0].active === false) return res.status(403).json({ ok: false, error: 'Form pasif' });
     res.json({ ok: true, form: rows[0] });
   } catch (e) {
@@ -202,26 +189,7 @@ app.post('/api/forms/:slug/submit', async (req, res) => {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
-// --- Basic Auth (genel): Kök ve bazı sayfalar "admin YA DA misafir" girişi ister
-const PROTECTED = new Set(['/', '/index.html', '/admin.html', '/results.html']);
 
-app.use((req, res, next) => {
-  if (PROTECTED.has(req.path)) {
-    const cred = basicAuth(req);
-    const ok =
-      cred &&
-      (
-        (cred.name === ADMIN_USER && cred.pass === ADMIN_PASS) ||   // admin kabul
-        (cred.name === GUEST_USER && cred.pass === GUEST_PASS)      // misafir kabul
-      );
-
-    if (!ok) {
-      res.set('WWW-Authenticate', 'Basic realm="MikroAR"');
-      return res.status(401).send('Unauthorized');
-    }
-  }
-  next();
-});
 // ---- Statik dosyalar (public/)
 app.use(express.static(path.join(__dirname, 'public')));
 
