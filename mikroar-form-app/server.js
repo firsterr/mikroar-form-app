@@ -202,7 +202,26 @@ app.post('/api/forms/:slug/submit', async (req, res) => {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
+// --- Basic Auth (genel): Kök ve bazı sayfalar "admin YA DA misafir" girişi ister
+const PROTECTED = new Set(['/', '/index.html', '/admin.html', '/results.html']);
 
+app.use((req, res, next) => {
+  if (PROTECTED.has(req.path)) {
+    const cred = basicAuth(req);
+    const ok =
+      cred &&
+      (
+        (cred.name === ADMIN_USER && cred.pass === ADMIN_PASS) ||   // admin kabul
+        (cred.name === GUEST_USER && cred.pass === GUEST_PASS)      // misafir kabul
+      );
+
+    if (!ok) {
+      res.set('WWW-Authenticate', 'Basic realm="MikroAR"');
+      return res.status(401).send('Unauthorized');
+    }
+  }
+  next();
+});
 // ---- Statik dosyalar (public/)
 app.use(express.static(path.join(__dirname, 'public')));
 
