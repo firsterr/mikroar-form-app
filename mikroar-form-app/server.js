@@ -61,6 +61,7 @@ app.use(helmet({
   frameguard: false,
   crossOriginEmbedderPolicy: false,
 }));
+
 // Kök: /  -> public/index.html
 app.get('/', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
