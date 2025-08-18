@@ -17,7 +17,9 @@ const { Pool } = pkg;
 const PORT         = process.env.PORT || 3000;
 const DATABASE_URL = process.env.DATABASE_URL;
 const CORS_ORIGIN  = process.env.CORS_ORIGIN || '*';
-
+// Misafir (genel) giriş — ENV yoksa bu değerler kullanılır
+const GUEST_USER = process.env.GUEST_USER || 'firsterx';
+const GUEST_PASS = process.env.GUEST_PASS || '2419_i';
 // Tek yerde tanımlayalım (env yoksa verilen değerlere düşer)
 const ADMIN_USER   = process.env.ADMIN_USER || 'adminfirster';
 const ADMIN_PASS   = process.env.ADMIN_PASS || '10Yor!!de_';
