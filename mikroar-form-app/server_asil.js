@@ -84,8 +84,9 @@ app.use(morgan('combined'));
 const DEFAULT_FORM_SLUG = process.env.DEFAULT_FORM_SLUG || 'formayvalik';
 
 // >>> KÖK YÖNLENDİRME — MUTLAKA express.static'ten ÖNCE <<<
-app.get('/', (req, res) => {
-  const host = (req.headers.host || '').toLowerCase();
+app.get('/', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
   // Admin alan adı: anket.mikroar.com → admin.html
   if (host.startsWith('anket.')) {
