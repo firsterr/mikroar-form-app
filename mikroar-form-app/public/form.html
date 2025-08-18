@@ -67,5 +67,36 @@
 
   <div id="toast" class="toast"></div>
   <script src="./form.js"></script>
+  <!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Form Görüntüleme</title>
+</head>
+<body>
+  <h1 id="form-title"></h1>
+  <div id="form-content"></div>
+
+  <script>
+    async function loadForm() {
+      const params = new URLSearchParams(window.location.search);
+      const slug = params.get('slug');  // URL’den slug al
+      if (!slug) return;
+
+      const res = await fetch(`/api/forms/${slug}`);
+      const data = await res.json();
+
+      if (data.ok) {
+        document.getElementById('form-title').innerText = data.form.title;
+        // buraya formun içeriğini render et
+        document.getElementById('form-content').innerHTML = "<p>Form detayları burada olacak</p>";
+      } else {
+        document.getElementById('form-content').innerText = "Form yüklenemedi!";
+      }
+    }
+    loadForm();
+  </script>
+</body>
+</html>
 </body>
 </html>
