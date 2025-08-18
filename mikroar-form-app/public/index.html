@@ -98,5 +98,23 @@
     };
   })();
   </script>
+  <ul id="form-list"></ul>
+
+<script>
+async function loadForms() {
+  const res = await fetch('/api/forms');
+  const data = await res.json();
+  if (data.ok) {
+    const ul = document.getElementById('form-list');
+    ul.innerHTML = '';
+    data.rows.forEach(f => {
+      const li = document.createElement('li');
+      li.innerHTML = `<a href="form.html?slug=${encodeURIComponent(f.slug)}">${f.title}</a>`;
+      ul.appendChild(li);
+    });
+  }
+}
+loadForms();
+</script>
 </body>
 </html>
