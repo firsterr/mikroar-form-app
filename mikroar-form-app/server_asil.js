@@ -85,7 +85,7 @@ app.get('/', (_req, res) => {
   );
 });
 
-app.use(express.static(path.join(__dirname, 'public')));
+
 
 // ---- Yardımcılar
 function adminOnly(req, res, next) {
