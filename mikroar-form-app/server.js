@@ -38,22 +38,29 @@ const pool = new Pool({ connectionString: DATABASE_URL });
 const app = express();
 app.set('trust proxy', true);
 
-// Helmet + CSP (frame-ancestors)
-const faList = FRAME_ANCESTORS.split(',').map(s => s.trim()).filter(Boolean);
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      useDefaults: true,
-      directives: {
-        // frame-ancestors için boşlukla ayrılmış liste gerekir; array de geçerlidir.
-        'frame-ancestors': faList.length ? faList : [`'self'`],
-      },
+// .env: FRAME_ANCESTORS ör: "https://*.mikroar.com https://sites.google.com"
+const RAW_FRAME = (process.env.FRAME_ANCESTORS || '')
+  .replace(/[\r\n]+/g, ' ')             // satır sonlarını at
+  .replace(/,+/g, ' ')                  // virgülleri boşluk yap (helmet boşlukla ayırmayı sever)
+  .split(/\s+/)                         // boşluklardan ayır
+  .map(s => s.trim())
+  .filter(Boolean);
+
+// Helmet
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      "default-src": ["'self'"],
+      "script-src": ["'self'", "'unsafe-inline'"],
+      "style-src": ["'self'", "'unsafe-inline'"],
+      // kritik satır:
+      "frame-ancestors": ["'self'", ...RAW_FRAME],
     },
-    // iframe gömmeleri için X-Frame-Options olmamalı:
-    frameguard: false,
-    crossOriginEmbedderPolicy: false,
-  })
-);
+  },
+  frameguard: false,
+  crossOriginEmbedderPolicy: false,
+}));
 // Kök: /  -> public/index.html
 app.get('/', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
