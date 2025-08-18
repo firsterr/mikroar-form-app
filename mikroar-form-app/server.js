@@ -20,7 +20,7 @@ const CORS_ORIGIN  = process.env.CORS_ORIGIN || '*';
 
 // Tek yerde tanımlayalım (env yoksa verilen değerlere düşer)
 const ADMIN_USER   = process.env.ADMIN_USER || 'x';
-const ADMIN_PASS   = process.env.ADMIN_PASS || '2419-i;
+const ADMIN_PASS   = process.env.ADMIN_PASS || '2419i;
 // İstemci (host bazlı) koruma aynı bilgileri kullansın
 const FRONT_USER   = process.env.FRONT_USER || ADMIN_USER;
 const FRONT_PASS   = process.env.FRONT_PASS || ADMIN_PASS;
