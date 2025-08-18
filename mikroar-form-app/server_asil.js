@@ -42,17 +42,11 @@ app.set('trust proxy', true);
 const faList = FRAME_ANCESTORS.split(',').map(s => s.trim()).filter(Boolean);
 app.use(
   helmet({
-    contentSecurityPolicy: {
-      useDefaults: true,
-      directives: {
-        // frame-ancestors için boşlukla ayrılmış liste gerekir; array de geçerlidir.
-        'frame-ancestors': faList.length ? faList : [`'self'`],
-      },
-    },
-    // iframe gömmeleri için X-Frame-Options olmamalı:
-    frameguard: false,
-    crossOriginEmbedderPolicy: false,
-  };
+    contentSecurityPolicy: false,      // CSP kapalı
+    frameguard: false,                 // X-Frame-Options kapalı
+    crossOriginEmbedderPolicy: false,  // COEP kapalı
+  })
+);
 );
 // >>> KOPYALA-YAPIŞTIR — static'in ÜSTÜNE ekle
 app.get('/', (req, res) => {
