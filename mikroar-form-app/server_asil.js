@@ -38,25 +38,46 @@ const pool = new Pool({ connectionString: DATABASE_URL });
 const app = express();
 app.set('trust proxy', true);
 
- // ---- Helmet (basit)
+// Helmet + CSP (frame-ancestors)
+const faList = FRAME_ANCESTORS.split(',').map(s => s.trim()).filter(Boolean);
 app.use(
   helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        // frame-ancestors için boşlukla ayrılmış liste gerekir; array de geçerlidir.
+        'frame-ancestors': faList.length ? faList : [`'self'`],
+      },
+    },
+    // iframe gömmeleri için X-Frame-Options olmamalı:
     frameguard: false,
     crossOriginEmbedderPolicy: false,
   })
 );
+// >>> KOPYALA-YAPIŞTIR — static'in ÜSTÜNE ekle
+app.get('/', (req, res) => {
+  const h = (req.hostname || '').toLowerCase();
+  const q = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+  if (h === 'form.mikroar.com')  return res.redirect(302, '/form.html' + q);
+  if (h === 'anket.mikroar.com') return res.redirect(302, '/admin.html');
+  return res.redirect(302, '/form.html' + q); // default
+});
 
-// ---- CORS + body parsers + log
-app.use(cors({ origin: CORS_ORIGIN, credentials: false }));
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true }));
-app.use(morgan('combined'));
+app.get(['/form', '/form.html'], async (req, res, next) => {
+  const slug = (req.query.slug || '').trim();
+  if (slug) return next(); // slug varsa form.html normal servis edilsin
 
-// ---- Static + Root
-app.use(express.static(path.join(__dirname, 'public')));
-app.get('/', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  try {
+    const r = await pool.query(
+      "select slug from forms where (active is distinct from false) order by created_at desc limit 1"
+    );
+    if (r.rowCount) {
+      return res.redirect(302, `/form.html?slug=${encodeURIComponent(r.rows[0].slug)}`);
+    }
+    return res.status(404).send('Aktif form yok.');
+  } catch (e) {
+    return res.status(500).send('Sunucu hatası');
+  }
 });
 // <<< SON
 // CORS + body parsers + logs + static
@@ -68,7 +89,9 @@ app.use(morgan('combined'));
 // .env yoksa varsayılan
 const DEFAULT_FORM_SLUG = process.env.DEFAULT_FORM_SLUG || 'formayvalik';
 
-
+// >>> KÖK YÖNLENDİRME — MUTLAKA express.static'ten ÖNCE <<<
+app.get('/', (req, res) => {
+  const host = (req.headers.host || '').toLowerCase();
 
   // Admin alan adı: anket.mikroar.com → admin.html
   if (host.startsWith('anket.')) {
@@ -82,7 +105,7 @@ const DEFAULT_FORM_SLUG = process.env.DEFAULT_FORM_SLUG || 'formayvalik';
   );
 });
 
-
+app.use(express.static(path.join(__dirname, 'public')));
 
 // ---- Yardımcılar
 function adminOnly(req, res, next) {
