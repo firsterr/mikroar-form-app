@@ -3,185 +3,50 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>MikroAR • Anket</title>
-  <meta name="color-scheme" content="light dark">
+  <title>Anket • MikroAR</title>
   <style>
     :root{
-      --bg:#0b1220; --fg:#e6ecf2; --muted:#93a1b3; --card:#0f1a2d; --line:#21304a;
-      --accent:#4ea8ff; --accent-2:#22d3ee; --radius:16px;
-    }
-    @media (prefers-color-scheme:light){
-      :root{ --bg:#f5f7fb; --fg:#0b1220; --muted:#475569; --card:#ffffff; --line:#e5e7eb; --accent:#2563eb; --accent-2:#06b6d4; }
+      color-scheme: dark;
+      --bg:#0e1116; --card:#131824; --muted:#9aa3b2; --fg:#e8edf3; --primary:#2f7df6;
     }
     *{box-sizing:border-box}
-    html,body{height:100%;margin:0;color:var(--fg);background:
-      radial-gradient(1200px 600px at 120% -10%,rgba(78,168,255,.15),transparent 45%),
-      radial-gradient(900px 500px at -10% -10%,rgba(34,211,238,.12),transparent 40%),
-      var(--bg);
-      font:16px/1.5 system-ui,-apple-system,Segoe UI,Inter,Roboto,Ubuntu,sans-serif;
-    }
-    .wrap{max-width:820px;margin:28px auto;padding:0 14px}
-    .title{display:flex;gap:12px;align-items:center;margin-bottom:16px}
-    .logo{width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:grid;place-items:center;color:white;font-weight:800}
-    h1{margin:0;font-size:28px}
-    .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
-    fieldset{border:1px dashed var(--line);border-radius:12px;margin:14px 0;padding:12px}
-    legend{font-weight:700}
-    .opt{display:flex;gap:10px;align-items:center;margin:8px 0}
-    .opt input{width:22px;height:22px}
-    .text input,.text textarea{
-      width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--fg);outline:0;
-    }
-    textarea{min-height:90px;resize:vertical}
-    .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:12px}
-    .btn{height:44px;padding:0 18px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--fg);cursor:pointer}
-    .btn.pri{background:var(--accent);border-color:transparent;color:#fff;font-weight:700}
+    body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif}
+    .wrap{max-width:960px;margin:40px auto;padding:0 20px}
+    header{display:flex;align-items:center;gap:14px;margin-bottom:18px}
+    .logo{width:56px;height:56px;border-radius:16px;background:#0f141f;display:grid;place-items:center;font-weight:900}
+    h1{margin:0;font-weight:800;letter-spacing:.3px;font-size:clamp(24px,4vw,36px)}
+    .card{background:var(--card);border:1px solid #1f2633;border-radius:14px;padding:20px}
     .muted{color:var(--muted)}
-    .thanks{display:none;text-align:center;padding:40px 16px}
-    .thanks h2{font-size:26px;margin:0 0 8px}
-    .error{margin-top:8px;color:#ff6b6b}
+    .q{margin:16px 0 22px}
+    .q label.title{display:block;font-weight:700;margin-bottom:8px}
+    .opts label{display:block;margin:6px 0}
+    input[type="text"], textarea, select{
+      width:100%;border:1px solid #273246;background:#0f141f;color:var(--fg);
+      padding:10px;border-radius:10px;
+    }
+    button{height:48px;border-radius:10px;border:none;background:var(--primary);padding:0 18px;font-weight:800;cursor:pointer}
+    .row{display:flex;justify-content:flex-end}
+    .hint{margin-top:10px}
   </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="title">
+    <header>
       <div class="logo">AR</div>
       <h1 id="title">Anket</h1>
-    </div>
+    </header>
 
-    <div class="card" id="formCard">
-      <form id="form" novalidate></form>
-      <div class="actions">
-        <button id="btnSend" class="btn pri" type="button">Gönder</button>
-      </div>
-      <div class="muted" id="fineprint">IP’niz korunur; tekrar oy engeli için kullanılır.</div>
-      <div id="err" class="error"></div>
-    </div>
-
-    <div class="thanks" id="thanks">
-      <h2>Teşekkürler! 🎉</h2>
-      <div class="muted">Yanıtınız kaydedildi.</div>
+    <div class="card">
+      <form id="frm">
+        <div id="questions"></div>
+        <div class="row"><button id="send" type="submit">Gönder</button></div>
+        <p class="muted hint">IP’niz korunur; tekrar oy engeli için kullanılır.</p>
+        <p id="msg" class="muted"></p>
+      </form>
     </div>
   </div>
 
-  <script>
-  (async function () {
-    const params = new URLSearchParams(location.search);
-    const slug = params.get('slug');
-    const titleEl = document.getElementById('title');
-    const formEl  = document.getElementById('form');
-    const errEl   = document.getElementById('err');
-
-    if (!slug) {
-      // slug yoksa seçim sayfasına yönlendir
-      location.replace('/index.html');
-      return;
-    }
-
-    // 1) Form şemasını getir
-    let schema;
-    try {
-      const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`);
-      const data = await r.json();
-      if (!data.ok) throw new Error(data.error || 'Form bulunamadı');
-      titleEl.textContent = data.form.title || slug;
-      schema = (data.form.schema && data.form.schema.questions) || [];
-    } catch (e) {
-      titleEl.textContent = 'Form yüklenemedi';
-      errEl.textContent = e.message;
-      return;
-    }
-
-    // 2) Soruları çiz
-    formEl.innerHTML = '';
-    schema.forEach((q, idx) => {
-      const qName = `q_${idx}`;
-      const fs = document.createElement('fieldset');
-      const lg = document.createElement('legend');
-      lg.textContent = q.label || q.text || `Soru ${idx+1}`;
-      fs.appendChild(lg);
-
-      if (q.type === 'text' || q.type === 'textarea') {
-        const wrap = document.createElement('div');
-        wrap.className = 'text';
-        const el = q.type === 'textarea' ? document.createElement('textarea')
-                                         : document.createElement('input');
-        el.name = qName;
-        el.required = !!q.required;
-        wrap.appendChild(el);
-        fs.appendChild(wrap);
-      } else if (q.type === 'radio' || q.type === 'checkbox') {
-        (q.options || []).forEach(opt => {
-          const row = document.createElement('label');
-          row.className = 'opt';
-          const inp = document.createElement('input');
-          inp.type = q.type;
-          inp.name = q.type === 'radio' ? qName : `${qName}[]`;
-          inp.value = opt;
-          row.appendChild(inp);
-          row.appendChild(document.createTextNode(opt));
-          fs.appendChild(row);
-        });
-      } else {
-        // Bilinmeyen tipleri metin olarak ele al
-        const wrap = document.createElement('div');
-        wrap.className = 'text';
-        const el = document.createElement('input');
-        el.name = qName;
-        wrap.appendChild(el);
-        fs.appendChild(wrap);
-      }
-
-      formEl.appendChild(fs);
-    });
-
-    // 3) Gönder
-    document.getElementById('btnSend').onclick = async () => {
-      errEl.textContent = '';
-
-      // basit zorunlu kontrolü
-      const invalid = [...formEl.querySelectorAll('[required]')].find(el => !el.value?.trim());
-      if (invalid) {
-        invalid.focus();
-        errEl.textContent = 'Lütfen zorunlu alanları doldurun.';
-        return;
-      }
-
-      // cevapları topla (etiketleri anahtar yapalım)
-      const answers = {};
-      schema.forEach((q, idx) => {
-        const key = q.label || q.text || `Soru ${idx+1}`;
-        if (q.type === 'checkbox') {
-          answers[key] = [...formEl.querySelectorAll(`input[name="q_${idx}[]"]:checked`)]
-            .map(i => i.value);
-        } else if (q.type === 'radio') {
-          const r = formEl.querySelector(`input[name="q_${idx}"]:checked`);
-          answers[key] = r ? r.value : null;
-        } else {
-          const t = formEl.querySelector(`[name="q_${idx}"]`);
-          answers[key] = t ? t.value : null;
-        }
-      });
-
-      try {
-        const res = await fetch(`/api/forms/${encodeURIComponent(slug)}/submit`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ answers })
-        });
-        const out = await res.json();
-        if (!out.ok) throw new Error(out.error || 'Gönderilemedi');
-
-        // başarı
-        document.getElementById('formCard').style.display = 'none';
-        document.getElementById('thanks').style.display = 'block';
-        // (isteğe bağlı: birkaç sn sonra seçim sayfasına dön)
-        // setTimeout(() => location.href = '/index.html', 3000);
-      } catch (e) {
-        errEl.textContent = e.message;
-      }
-    };
-  })();
-  </script>
+  <!-- CSP uyumlu: harici script -->
+  <script src="/form.js" defer></script>
 </body>
 </html>
