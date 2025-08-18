@@ -19,8 +19,8 @@ const DATABASE_URL = process.env.DATABASE_URL;
 const CORS_ORIGIN  = process.env.CORS_ORIGIN || '*';
 
 // Admin & Misafir hesapları
-const ADMIN_USER = process.env.ADMIN_USER || 'adminfirster';
-const ADMIN_PASS = process.env.ADMIN_PASS || '10Yor!!de_';
+const ADMIN_USER = process.env.ADMIN_USER || 'firster';
+const ADMIN_PASS = process.env.ADMIN_PASS || '24198823Gds!!';
 
 const GUEST_USER = process.env.GUEST_USER || 'firsterx';
 const GUEST_PASS = process.env.GUEST_PASS || '2419_i';
