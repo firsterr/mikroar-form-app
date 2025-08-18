@@ -52,7 +52,7 @@ app.use(
     // iframe gömmeleri için X-Frame-Options olmamalı:
     frameguard: false,
     crossOriginEmbedderPolicy: false,
-  })
+  };
 );
 // >>> KOPYALA-YAPIŞTIR — static'in ÜSTÜNE ekle
 app.get('/', (req, res) => {
