@@ -19,8 +19,8 @@ const DATABASE_URL = process.env.DATABASE_URL;
 const CORS_ORIGIN  = process.env.CORS_ORIGIN || '*';
 
 // KULLANICI/ŞİFRE: Env varsa onu kullan, yoksa aşağıdaki **senin çiftine** düş.
-const ADMIN_USER = 'firsterx';
-const ADMIN_PASS = '2419_i';
+const ADMIN_USER = (process.env.ADMIN_USER || 'firsterx').trim();
+const ADMIN_PASS = (process.env.ADMIN_PASS || '2419_i').trim();
 
 if (!DATABASE_URL) {
   console.error('DATABASE_URL tanımlı değil!');
