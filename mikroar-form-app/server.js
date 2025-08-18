@@ -1,4 +1,4 @@
-// server.js — MikroAR Form App (ESM, sade ve sağlam basic-auth)
+// server.js — MikroAR Form App (ESM, basic-auth sabit ve sağlam)
 
 import express from 'express';
 import dotenv from 'dotenv';
@@ -18,9 +18,9 @@ const PORT         = process.env.PORT || 3000;
 const DATABASE_URL = process.env.DATABASE_URL;
 const CORS_ORIGIN  = process.env.CORS_ORIGIN || '*';
 
-// Tek yerde tanımlı kimlik (env varsa onları kullanır)
-const ADMIN_USER = process.env.ADMIN_USER || 'firsterx';
-const ADMIN_PASS = process.env.ADMIN_PASS || '2419_i';
+// KULLANICI/ŞİFRE: Env varsa onu kullan, yoksa aşağıdaki **senin çiftine** düş.
+const ADMIN_USER = (process.env.ADMIN_USER || 'firsterx').trim();
+const ADMIN_PASS = (process.env.ADMIN_PASS || '2419_i').trim();
 
 if (!DATABASE_URL) {
   console.error('DATABASE_URL tanımlı değil!');
@@ -63,11 +63,12 @@ function needAuth(req) {
   // 3) Admin sayfası ve admin API'leri her yerde şifreli
   if (p === '/admin.html' || p.startsWith('/admin/')) return true;
 
-  return false; // form.html vb. halka açık
+  return false; // /form.html?slug=... halka açık
 }
 
 function checkBasic(req) {
   const u = basicAuth(req);
+  // trim’lenmiş beklenen değerlerle birebir karşılaştır
   return u && u.name === ADMIN_USER && u.pass === ADMIN_PASS;
 }
 
@@ -87,7 +88,6 @@ app.use(protectPages);
 app.get('/', (req, res) => {
   const host = (req.hostname || '').toLowerCase();
   if (host === 'anket.mikroar.com') {
-    // Admin paneli
     return res.redirect(302, '/admin.html');
   }
   // form.mikroar.com ve digerleri -> form seçme sayfası
