@@ -3,30 +3,25 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Anket • MikroAR</title>
+  <title>Anket</title>
   <style>
-    :root{
-      color-scheme: dark;
-      --bg:#0e1116; --card:#131824; --muted:#9aa3b2; --fg:#e8edf3; --primary:#2f7df6;
-    }
-    *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif}
-    .wrap{max-width:960px;margin:40px auto;padding:0 20px}
-    header{display:flex;align-items:center;gap:14px;margin-bottom:18px}
-    .logo{width:56px;height:56px;border-radius:16px;background:#0f141f;display:grid;place-items:center;font-weight:900}
-    h1{margin:0;font-weight:800;letter-spacing:.3px;font-size:clamp(24px,4vw,36px)}
-    .card{background:var(--card);border:1px solid #1f2633;border-radius:14px;padding:20px}
-    .muted{color:var(--muted)}
-    .q{margin:16px 0 22px}
-    .q label.title{display:block;font-weight:700;margin-bottom:8px}
-    .opts label{display:block;margin:6px 0}
-    input[type="text"], textarea, select{
-      width:100%;border:1px solid #273246;background:#0f141f;color:var(--fg);
-      padding:10px;border-radius:10px;
-    }
-    button{height:48px;border-radius:10px;border:none;background:var(--primary);padding:0 18px;font-weight:800;cursor:pointer}
-    .row{display:flex;justify-content:flex-end}
-    .hint{margin-top:10px}
+    :root { color-scheme: dark; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 0; }
+    .wrap { max-width: 980px; margin: 48px auto; padding: 0 16px; }
+    header { display:flex; align-items:center; gap:16px; margin-bottom:24px; }
+    header .logo { width:56px; height:56px; border-radius:14px; display:grid; place-items:center;
+                   background:linear-gradient(135deg,#3b82f6,#06b6d4); font-weight:700; }
+    h1 { margin:0; font-size:clamp(26px,4vw,44px); line-height:1.2; }
+    .card { background:#0f172a; border:1px solid rgba(255,255,255,.06);
+            padding:20px; border-radius:16px; }
+    .hint { color:#a1a1aa; margin:0 0 20px; }
+    .err  { color:#ef4444; margin:12px 0 0; font-weight:600; }
+    .q { margin:18px 0 22px; }
+    .q legend { font-weight:600; margin-bottom:8px; }
+    .opt { display:flex; align-items:center; gap:10px; margin:6px 0; }
+    .btn { appearance:none; border:0; background:#3b82f6; color:#fff; font-weight:700;
+           padding:12px 22px; border-radius:12px; cursor:pointer; }
+    .btn[disabled] { opacity:.5; cursor:not-allowed; }
   </style>
 </head>
 <body>
@@ -37,16 +32,172 @@
     </header>
 
     <div class="card">
-      <form id="frm">
-        <div id="questions"></div>
-        <div class="row"><button id="send" type="submit">Gönder</button></div>
-        <p class="muted hint">IP’niz korunur; tekrar oy engeli için kullanılır.</p>
-        <p id="msg" class="muted"></p>
-      </form>
+      <p class="hint">IP’niz korunur; tekrar oy engeli için kullanılır.</p>
+      <form id="form"></form>
+      <p id="err" class="err" hidden></p>
+      <div style="display:flex; justify-content:flex-end; margin-top:16px;">
+        <button id="send" class="btn">Gönder</button>
+      </div>
     </div>
   </div>
 
-  <!-- CSP uyumlu: harici script -->
-  <script src="/form.js" defer></script>
+  <script>
+  (function () {
+    const $ = (sel, el=document) => el.querySelector(sel);
+    const el = {
+      title: $('#title'),
+      form : $('#form'),
+      err  : $('#err'),
+      send : $('#send')
+    };
+
+    const qp   = new URLSearchParams(location.search);
+    const slug = (qp.get('slug') || '').trim();
+
+    if (!slug) {
+      // index.html zaten /form.html?slug=... yönlendiriyor, yine de emniyet
+      el.err.hidden = false;
+      el.err.textContent = 'Yüklenemedi: slug parametresi bulunamadı.';
+      el.send.disabled = true;
+      return;
+    }
+
+    // Küçük yardımcılar
+    const sanitizeKey = (s) =>
+      String(s ?? '').toLowerCase().replace(/\s+/g, '_').replace(/[^\w\-]/g, '');
+
+    const mk = (tag, attrs={}, children=[]) => {
+      const n = document.createElement(tag);
+      for (const [k,v] of Object.entries(attrs)) {
+        if (v === undefined || v === null) continue;
+        if (k === 'text') { n.textContent = v; continue; }
+        if (k in n)      { n[k] = v;        continue; }
+        n.setAttribute(k, String(v));
+      }
+      (Array.isArray(children) ? children : [children]).forEach(c => {
+        if (c === undefined || c === null) return;
+        n.append(c.nodeType ? c : document.createTextNode(String(c)));
+      });
+      return n;
+    };
+
+    async function load() {
+      try {
+        const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`, { headers: { 'Accept':'application/json' }});
+        if (!r.ok) throw new Error(`Sunucu ${r.status} döndürdü`);
+        const data = await r.json();
+
+        const form = data.form;
+        el.title.textContent = form.title || slug;
+        document.title = (form.title || slug) + ' — MikroAR';
+
+        const questions = (form.schema && Array.isArray(form.schema.questions))
+          ? form.schema.questions : [];
+
+        // Formu temizle
+        el.form.replaceChildren();
+
+        questions.forEach((q, idx) => {
+          const key = sanitizeKey(q.key || q.name || q.text || ('q' + idx)) || ('q' + idx);
+          const type = (q.type || 'radio').toLowerCase();
+
+          const field = mk('fieldset', { className:'q' });
+          field.append(mk('legend', { text: `${idx+1}. ${q.text || key}` }));
+
+          if (type === 'text') {
+            const id = `${key}_${idx}`;
+            const input = mk('input', { id, name:key, type:'text' });
+            field.append(mk('label', { htmlFor:id, text:'' }), input);
+          }
+          else if (type === 'textarea') {
+            const id = `${key}_${idx}`;
+            const ta = mk('textarea', { id, name:key, rows:3 });
+            field.append(mk('label', { htmlFor:id, text:'' }), ta);
+          }
+          else if (type === 'select') {
+            const id = `${key}_${idx}`;
+            const sel = mk('select', { id, name:key });
+            (q.options || []).forEach(opt => {
+              sel.append(mk('option', { value:String(opt), text:String(opt) }));
+            });
+            field.append(sel);
+          }
+          else if (type === 'checkbox' || type === 'radio') {
+            (q.options || []).forEach((opt, oi) => {
+              const id = `${key}_${idx}_${oi}`;
+              const inp = mk('input', {
+                id,
+                type,
+                name: key + (type === 'checkbox' ? '[]' : ''),
+                value: String(opt)
+              });
+              const lab = mk('label', { className:'opt', htmlFor:id }, [
+                inp,
+                mk('span', { text: String(opt) })
+              ]);
+              field.append(lab);
+            });
+          }
+          else {
+            // Güvenli fallback (metin)
+            const id = `${key}_${idx}`;
+            const input = mk('input', { id, name:key, type:'text' });
+            field.append(mk('label', { htmlFor:id, text:'' }), input);
+          }
+
+          el.form.append(field);
+        });
+
+        // Gönder
+        el.send.onclick = async (ev) => {
+          ev.preventDefault();
+          try {
+            el.send.disabled = true;
+
+            // form verilerini topla
+            const fd = new FormData(el.form);
+            const answers = {};
+            for (const [rawK, v] of fd.entries()) {
+              const k = rawK.endsWith('[]') ? rawK.slice(0, -2) : rawK;
+              if (rawK.endsWith('[]')) {
+                if (!Array.isArray(answers[k])) answers[k] = [];
+                answers[k].push(v);
+              } else {
+                answers[k] = v;
+              }
+            }
+
+            const r2 = await fetch(`/api/forms/${encodeURIComponent(slug)}/submit`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ answers })
+            });
+
+            const j = await r2.json().catch(() => ({}));
+            if (!r2.ok || j.ok === false) {
+              throw new Error(j.error || `Sunucu ${r2.status} döndürdü`);
+            }
+
+            el.err.hidden = false;
+            el.err.style.color = '#22c55e';
+            el.err.textContent = 'Teşekkürler! Cevabınız kaydedildi.';
+          } catch (e) {
+            el.err.hidden = false;
+            el.err.textContent = 'Gönderilemedi: ' + (e && e.message ? e.message : e);
+          } finally {
+            el.send.disabled = false;
+          }
+        };
+
+      } catch (e) {
+        el.err.hidden = false;
+        el.err.textContent = 'Yüklenemedi: ' + (e && e.message ? e.message : e);
+        el.send.disabled = true;
+      }
+    }
+
+    load();
+  })();
+  </script>
 </body>
 </html>
