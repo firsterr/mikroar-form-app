@@ -14,21 +14,19 @@ dotenv.config();
 const { Pool } = pkg;
 
 // ---- Env
-const PORT            = process.env.PORT || 3000;
-const DATABASE_URL    = process.env.DATABASE_URL;
-const CORS_ORIGIN     = process.env.CORS_ORIGIN || '*';
-const ADMIN_USER      = process.env.ADMIN_USER || 'admin';
-const ADMIN_PASS      = process.env.ADMIN_PASS || 'password';
-const DEFAULT_SLUG    = process.env.DEFAULT_SLUG || ''; // istersen varsayılan slug
-// FRAME_ANCESTORS tanımlasan da CSP devre dışı; burada sadece ileride gerekirse kullanılır.
-const FRAME_ANCESTORS = (process.env.FRAME_ANCESTORS || '').trim();
+const PORT         = process.env.PORT || 3000;
+const DATABASE_URL = process.env.DATABASE_URL;
+const CORS_ORIGIN  = process.env.CORS_ORIGIN || '*';
+const ADMIN_USER   = process.env.ADMIN_USER || 'admin';
+const ADMIN_PASS   = process.env.ADMIN_PASS || 'password';
+const DEFAULT_SLUG = process.env.DEFAULT_SLUG || ''; // slug yoksa zorla açılacak varsayılan (opsiyonel)
 
 if (!DATABASE_URL) {
   console.error('DATABASE_URL tanımlı değil!');
   process.exit(1);
 }
 
-// ---- __dirname
+// ---- __dirname (ESM)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
@@ -39,26 +37,32 @@ const pool = new Pool({ connectionString: DATABASE_URL });
 const app = express();
 app.set('trust proxy', true);
 
-// --- Güvenlik: pratik mod (CSP kapalı, frameguard kapalı => embed/iframe rahat)
+// Güvenlik (embed uyumlu)
 app.use(helmet({
   contentSecurityPolicy: false,
   frameguard: false,
   crossOriginEmbedderPolicy: false,
 }));
 
-// ---- KÖK YÖNLENDİRME (alan adına göre) — static'ten ÖNCE
+// -------------------------------------------------------
+// KÖK: alan adına göre davranış
+// - anket.mikroar.com  -> admin.html
+// - form.mikroar.com   -> index.html (form seç)
+// -------------------------------------------------------
 app.get('/', (req, res) => {
   const host = (req.hostname || '').toLowerCase();
-  const q    = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
 
   if (host === 'anket.mikroar.com') {
+    // İstersen sendFile da yapabilirsin; redirect tercih ettim
     return res.redirect(302, '/admin.html');
   }
-  // form.mikroar.com ve diğerleri
-  return res.redirect(302, '/form.html' + q);
+  return res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// ---- /form.html: slug yoksa en güncel/aktif formu otomatik aç
+// -------------------------------------------------------
+// /form.html (ve /form)
+// slug yoksa en güncel aktif forma yönlendir
+// -------------------------------------------------------
 app.get(['/form', '/form.html'], async (req, res, next) => {
   const slug = (req.query.slug || '').trim();
   if (slug) return next(); // slug varsa dosya normal servis edilsin
@@ -75,8 +79,6 @@ app.get(['/form', '/form.html'], async (req, res, next) => {
     if (r.rowCount) {
       return res.redirect(302, `/form.html?slug=${encodeURIComponent(r.rows[0].slug)}`);
     }
-
-    // Eğer hiç aktif form yoksa DEFAULT_SLUG denenir; o da yoksa 404
     if (DEFAULT_SLUG) {
       return res.redirect(302, `/form.html?slug=${encodeURIComponent(DEFAULT_SLUG)}`);
     }
@@ -86,7 +88,9 @@ app.get(['/form', '/form.html'], async (req, res, next) => {
   }
 });
 
-// ---- CORS + body parsers + log
+// -------------------------------------------------------
+// CORS + body parsers + log
+// -------------------------------------------------------
 app.use(cors({ origin: CORS_ORIGIN, credentials: false }));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -96,7 +100,7 @@ app.use(morgan('combined'));
 // ================   PUBLIC API’LER   ===================
 // =======================================================
 
-// Aktif formlar listesi (index.html bunu çağırır)
+// Aktif formlar listesi (index.html bununla dolar)
 async function listActiveForms(_req, res) {
   try {
     const { rows } = await pool.query(
@@ -111,7 +115,7 @@ async function listActiveForms(_req, res) {
   }
 }
 app.get('/api/forms-list', listActiveForms);
-app.get('/api/forms',      listActiveForms); // alias: eski çağrılar bozulmasın
+app.get('/api/forms',      listActiveForms); // alias
 
 // Tek form şeması
 app.get('/api/forms/:slug', async (req, res) => {
@@ -121,9 +125,9 @@ app.get('/api/forms/:slug', async (req, res) => {
       'SELECT slug, title, active, schema FROM forms WHERE slug=$1',
       [slug]
     );
-    if (!rows.length)     return res.status(404).json({ ok: false, error: 'Form bulunamadı' });
-    if (rows[0].active === false)
-                          return res.status(403).json({ ok: false, error: 'Form pasif' });
+    if (!rows.length)           return res.status(404).json({ ok: false, error: 'Form bulunamadı' });
+    if (rows[0].active === false) return res.status(403).json({ ok: false, error: 'Form pasif' });
+
     res.json({ ok: true, form: rows[0] });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -141,7 +145,7 @@ app.post('/api/forms/:slug/submit', async (req, res) => {
       ? xff[0]
       : (typeof xff === 'string' ? xff.split(',')[0].trim() : req.ip || null);
 
-    // Form aktif mi kontrol
+    // Form aktif mi?
     const chk = await pool.query(
       'SELECT 1 FROM forms WHERE slug=$1 AND (active IS DISTINCT FROM false)',
       [slug]
@@ -169,7 +173,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 // =======================================================
 // ===================   ADMIN API   =====================
 // =======================================================
-
 function adminOnly(req, res, next) {
   const user = basicAuth(req);
   if (!user || user.name !== ADMIN_USER || user.pass !== ADMIN_PASS) {
@@ -246,7 +249,7 @@ app.get('/admin/forms/:slug/stats', adminOnly, async (req, res) => {
   }
 });
 
-// ---- Health
+// Sağlık
 app.get('/health', async (_req, res) => {
   try {
     await pool.query('SELECT 1');
@@ -256,7 +259,7 @@ app.get('/health', async (_req, res) => {
   }
 });
 
-// ---- Start
+// Start
 app.listen(PORT, () => {
   console.log(`MikroAR Form API ${PORT} portunda çalışıyor`);
 });
