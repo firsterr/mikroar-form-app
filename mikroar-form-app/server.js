@@ -54,6 +54,15 @@ app.use(
     crossOriginEmbedderPolicy: false,
   })
 );
+// ⬇️ KÖK: /  (public/index.html)
+import path from 'path';
+import { fileURLToPath } from 'url';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
+
+app.get('/', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 // >>> KOPYALA-YAPIŞTIR — static'in ÜSTÜNE ekle
 app.get('/', (req, res) => {
   const h = (req.hostname || '').toLowerCase();
