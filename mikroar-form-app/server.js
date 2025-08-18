@@ -1,4 +1,4 @@
-// server.js — MikroAR Form App (ESM, sade ve tutarlı sürüm)
+// server.js — MikroAR Form App (ESM)
 
 import express from 'express';
 import dotenv from 'dotenv';
@@ -17,9 +17,13 @@ const { Pool } = pkg;
 const PORT         = process.env.PORT || 3000;
 const DATABASE_URL = process.env.DATABASE_URL;
 const CORS_ORIGIN  = process.env.CORS_ORIGIN || '*';
-const ADMIN_USER   = process.env.ADMIN_USER || 'admin';
-const ADMIN_PASS   = process.env.ADMIN_PASS || 'password';
-const DEFAULT_SLUG = process.env.DEFAULT_SLUG || ''; // slug yoksa zorla açılacak varsayılan (opsiyonel)
+
+// Tek yerde tanımlayalım (env yoksa verilen değerlere düşer)
+const ADMIN_USER   = process.env.ADMIN_USER || 'adminfirster';
+const ADMIN_PASS   = process.env.ADMIN_PASS || '10Yor!!de_';
+// İstemci (host bazlı) koruma aynı bilgileri kullansın
+const FRONT_USER   = process.env.FRONT_USER || ADMIN_USER;
+const FRONT_PASS   = process.env.FRONT_PASS || ADMIN_PASS;
 
 if (!DATABASE_URL) {
   console.error('DATABASE_URL tanımlı değil!');
@@ -44,6 +48,48 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
+// ---- Basit basic-auth yardımcıları
+function checkBasic(req, user, pass) {
+  const u = basicAuth(req);
+  return u && u.name === user && u.pass === pass;
+}
+function requireBasic(realm = 'MikroAR') {
+  return (req, res, next) => {
+    if (!checkBasic(req, FRONT_USER, FRONT_PASS)) {
+      res.set('WWW-Authenticate', `Basic realm="${realm}"`);
+      return res.status(401).send('Yetkisiz');
+    }
+    next();
+  };
+}
+function adminOnly(req, res, next) {
+  if (!checkBasic(req, ADMIN_USER, ADMIN_PASS)) {
+    res.set('WWW-Authenticate', 'Basic realm="MikroAR Admin API"');
+    return res.status(401).send('Yetkisiz');
+  }
+  next();
+}
+
+// ---- Host bazlı koruma (STATİK ve sayfalar için) — routes’tan ÖNCE
+app.use((req, res, next) => {
+  const host = (req.hostname || '').toLowerCase();
+  const p = req.path;
+
+  // 1) anket.mikroar.com -> tamamı şifreli (admin sayfası ve admin API’ler)
+  if (host === 'anket.mikroar.com') {
+    return requireBasic('MikroAR Anket (Admin)')(req, res, next);
+  }
+
+  // 2) form.mikroar.com -> sadece kök ve sonuçlar şifreli
+  if (host === 'form.mikroar.com') {
+    if (p === '/' || p === '/index.html' || p === '/results.html') {
+      return requireBasic('MikroAR Form Seçici')(req, res, next);
+    }
+  }
+
+  return next();
+});
+
 // -------------------------------------------------------
 // KÖK: alan adına göre davranış
 // - anket.mikroar.com  -> admin.html
@@ -53,19 +99,15 @@ app.get('/', (req, res) => {
   const host = (req.hostname || '').toLowerCase();
 
   if (host === 'anket.mikroar.com') {
-    // İstersen sendFile da yapabilirsin; redirect tercih ettim
     return res.redirect(302, '/admin.html');
   }
   return res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// -------------------------------------------------------
-// /form.html (ve /form)
-// slug yoksa en güncel aktif forma yönlendir
-// -------------------------------------------------------
+// /form.html (ve /form): slug yoksa en güncel aktif forma yönlendir
 app.get(['/form', '/form.html'], async (req, res, next) => {
   const slug = (req.query.slug || '').trim();
-  if (slug) return next(); // slug varsa dosya normal servis edilsin
+  if (slug) return next();
 
   try {
     const r = await pool.query(
@@ -75,15 +117,11 @@ app.get(['/form', '/form.html'], async (req, res, next) => {
         ORDER BY created_at DESC NULLS LAST, slug ASC
         LIMIT 1`
     );
-
     if (r.rowCount) {
       return res.redirect(302, `/form.html?slug=${encodeURIComponent(r.rows[0].slug)}`);
     }
-    if (DEFAULT_SLUG) {
-      return res.redirect(302, `/form.html?slug=${encodeURIComponent(DEFAULT_SLUG)}`);
-    }
     return res.status(404).send('Aktif form yok.');
-  } catch (e) {
+  } catch {
     return res.status(500).send('Sunucu hatası');
   }
 });
@@ -99,8 +137,6 @@ app.use(morgan('combined'));
 // =======================================================
 // ================   PUBLIC API’LER   ===================
 // =======================================================
-
-// Aktif formlar listesi (index.html bununla dolar)
 async function listActiveForms(_req, res) {
   try {
     const { rows } = await pool.query(
@@ -125,9 +161,8 @@ app.get('/api/forms/:slug', async (req, res) => {
       'SELECT slug, title, active, schema FROM forms WHERE slug=$1',
       [slug]
     );
-    if (!rows.length)           return res.status(404).json({ ok: false, error: 'Form bulunamadı' });
+    if (!rows.length)            return res.status(404).json({ ok: false, error: 'Form bulunamadı' });
     if (rows[0].active === false) return res.status(403).json({ ok: false, error: 'Form pasif' });
-
     res.json({ ok: true, form: rows[0] });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -138,7 +173,6 @@ app.get('/api/forms/:slug', async (req, res) => {
 app.post('/api/forms/:slug/submit', async (req, res) => {
   const { slug } = req.params;
   const payload  = req.body || {};
-
   try {
     const xff = req.headers['x-forwarded-for'];
     const ip  = Array.isArray(xff)
@@ -173,16 +207,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 // =======================================================
 // ===================   ADMIN API   =====================
 // =======================================================
-function adminOnly(req, res, next) {
-  const user = basicAuth(req);
-  if (!user || user.name !== ADMIN_USER || user.pass !== ADMIN_PASS) {
-    res.set('WWW-Authenticate', 'Basic realm="MikroAR Admin"');
-    return res.status(401).send('Yetkisiz');
-  }
-  next();
-}
-
-// Admin: formlar listesi
 app.get('/admin/api/forms', adminOnly, async (_req, res) => {
   try {
     const { rows } = await pool.query(
@@ -195,9 +219,6 @@ app.get('/admin/api/forms', adminOnly, async (_req, res) => {
 });
 
 // Admin: form oluştur/güncelle
-// Body örnekleri:
-// A) { slug, title, active, schema:{questions:[...] } }
-// B) { slug, title, active, questions:[...] }
 app.post('/admin/api/forms', adminOnly, async (req, res) => {
   try {
     let { slug, title, active = true, schema, questions } = req.body || {};
