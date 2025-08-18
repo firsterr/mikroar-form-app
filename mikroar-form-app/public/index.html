@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MikroAR – Anket Seç</title>
+  <style>
+    :root{color-scheme:light dark}
+    body{margin:0;font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Noto Sans","Helvetica Neue",Arial}
+    .wrap{max-width:860px;margin:48px auto;padding:0 16px}
+    h1{font-size:28px;margin:0 0 8px}
+    p.muted{opacity:.7;margin:0 0 24px}
+    .card{background:Canvas;padding:16px 20px;border-radius:12px;box-shadow:0 2px 18px rgb(0 0 0 / 8%);border:1px solid color-mix(in oklab, Canvas 90%, CanvasText 10%)}
+    .row{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0}
+    select,button{font:inherit;padding:10px 12px;border-radius:10px;border:1px solid color-mix(in oklab, Canvas 90%, CanvasText 10%)}
+    select{min-width:280px}
+    button{background:#1e7bff;color:#fff;border:none;padding:10px 16px;cursor:pointer}
+    button.secondary{background:transparent;color:inherit;border:1px solid color-mix(in oklab, Canvas 85%, CanvasText 15%)}
+    ul{list-style:none;padding:0;margin:8px 0 0}
+    li{padding:8px 0;border-bottom:1px dashed color-mix(in oklab, Canvas 85%, CanvasText 15%)}
+    small{opacity:.7}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Form seçin</h1>
+    <p class="muted">Bu sayfada aktif formlar listelenir. Bir form seçtiğinizde <code>/form.html?slug=…</code> ile anket sayfasına gidersiniz.</p>
+
+    <div class="card">
+      <div class="row">
+        <select id="formSelect" aria-label="Form seç">
+          <option value="">— Yükleniyor… —</option>
+        </select>
+        <button id="goBtn">Formu aç</button>
+        <button id="copyBtn" class="secondary" title="Bağlantıyı kopyala">Bağlantıyı kopyala</button>
+      </div>
+
+      <ul id="list"></ul>
+    </div>
+  </div>
+
+  <script>
+  (async function () {
+    // 1) URL’de slug varsa direkt form.html’e gönder
+    const params = new URLSearchParams(location.search);
+    const slugFromUrl = params.get('slug') || params.get('form') || params.get('s');
+    if (slugFromUrl) {
+      location.replace(`/form.html?slug=${encodeURIComponent(slugFromUrl)}`);
+      return;
+    }
+
+    // 2) Aktif formları çek ve doldur
+    const sel = document.getElementById('formSelect');
+    const list = document.getElementById('list');
+    try {
+      const r = await fetch('/api/forms'); // server.js’de ekledik
+      const data = await r.json();
+      if (!data.ok) throw new Error(data.error || 'Bilinmeyen hata');
+
+      sel.innerHTML = '<option value="">— Bir form seçin —</option>';
+      list.innerHTML = '';
+
+      data.rows.forEach(({slug, title}) => {
+        const opt = document.createElement('option');
+        opt.value = slug;
+        opt.textContent = `${title || slug} (${slug})`;
+        sel.appendChild(opt);
+
+        const li = document.createElement('li');
+        const a = document.createElement('a');
+        a.href = `/form.html?slug=${encodeURIComponent(slug)}`;
+        a.textContent = title || slug;
+        li.appendChild(a);
+        li.appendChild(document.createTextNode(' '));
+        const sm = document.createElement('small');
+        sm.textContent = `– ${slug}`;
+        li.appendChild(sm);
+        list.appendChild(li);
+      });
+    } catch (e) {
+      sel.innerHTML = '<option value="">(Liste alınamadı)</option>';
+      list.innerHTML = `<li>Hata: ${e.message}</li>`;
+    }
+
+    // 3) Butonlar
+    document.getElementById('goBtn').onclick = () => {
+      const v = sel.value;
+      if (!v) return alert('Önce bir form seçin.');
+      location.href = `/form.html?slug=${encodeURIComponent(v)}`;
+    };
+
+    document.getElementById('copyBtn').onclick = async () => {
+      const v = sel.value;
+      if (!v) return alert('Önce bir form seçin.');
+      const url = `${location.origin}/form.html?slug=${encodeURIComponent(v)}`;
+      await navigator.clipboard.writeText(url);
+      alert('Bağlantı kopyalandı:\n' + url);
+    };
+  })();
+  </script>
+</body>
+</html>
