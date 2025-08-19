@@ -18,8 +18,11 @@
     return;
   }
 
-  // İlk anda "yükleniyor" başlığı (FOUC engelleme)
-  els.title.textContent = "Anket yükleniyor…";
+ // Başlığı hemen koy (cache varsa ondan; yoksa slug)
+const cacheKey = `form_title_cache:${slug}`;
+const cachedTitle = slug ? localStorage.getItem(cacheKey) : "";
+els.title.textContent = (cachedTitle || slug || "Anket");
+document.title = `${els.title.textContent} – Anket`;
 
   function showLoading(on) {
     if (on) {
