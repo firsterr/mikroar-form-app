@@ -42,10 +42,7 @@ if (initialSlug) els.slug.value = initialSlug;
   }
 })();
 
-// === Veri çekme ve pivot ===
-// /api/forms/:slug -> { slug,title,active,schema:{questions:[...] } }
-// /admin/forms/:slug/responses.json -> { ok:true, rows:[{ id, payload:{answers:{}}, user_agent, ip, created_at }] }
-
+// === Veri çekme ===
 async function fetchForm(slug){
   const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`);
   const j = await r.json();
@@ -60,24 +57,83 @@ async function fetchResponses(slug){
   return j.rows; // []
 }
 
-// Array<string> -> "a, b, c"
+// --- Normalizasyon & eşleştirme yardımcıları ---
+const normalize = (v) =>
+  (v ?? '')
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/[^\p{L}\p{N}]+/gu, '-'); // harf/rakam dışını '-' yap
+
 const joinVals = (v) => Array.isArray(v) ? v.join(', ') : (v ?? '');
 
-function pivotRows(schemaQuestions, rows){
-  // Sütun başlıkları: Tarih, IP + soru etiketleri
-  const headers = ['Tarih', 'IP', ...schemaQuestions.map(q => q.label)];
+/**
+ * answers içindeki anahtarları farklı yazım biçimleriyle yakalayabilmek için
+ * bir anahtar seti üretir.
+ */
+function keyVariants(s, idx){
+  const out = new Set();
+  const raw = (s ?? '').toString();
+  out.add(raw);
+  out.add(raw.trim());
+  out.add(raw.toLowerCase());
+  out.add(normalize(raw));
+  if (idx != null) out.add(`q${idx}`);       // q0, q1...
+  // sık görülen başka varyasyonlar:
+  out.add(raw.replace(/\s+/g, ''));          // boşluksuz
+  out.add(raw.replace(/[:?.!]/g, '').trim());// noktalamasız
+  return out;
+}
 
-  const data = rows.map(row => {
+/**
+ * Tabloyu doldurmak için pivot.
+ * Şema sorularını sütun başlığı yapar; answers ile eşleştirirken esnek davranır.
+ */
+function pivotRows(schemaQuestions, rows){
+  const headers = ['Tarih', 'IP', ...schemaQuestions.map(q => q.label)];
+  const data = [];
+
+  for (const row of rows) {
     const answers = (row.payload && row.payload.answers) || {};
+    const answerKeys = Object.keys(answers);
+
+    // answers anahtarlarını normalize edilmiş -> gerçek değer eşlemesiyle haritala
+    const ansMap = new Map();
+    for (const k of answerKeys) {
+      const variants = keyVariants(k);
+      for (const v of variants) ansMap.set(normalize(v), answers[k]);
+    }
+
     const out = [
       new Date(row.created_at).toLocaleString('tr-TR'),
       row.ip || ''
     ];
-    for (const q of schemaQuestions) {
-      out.push(joinVals(answers[q.label] ?? answers[q.name] ?? answers[q.id]));
-    }
-    return out;
-  });
+
+    schemaQuestions.forEach((q, idx) => {
+      // soruya ait muhtemel anahtar varyasyonlarını sırayla dene
+      const candidates = [
+        ...(keyVariants(q.label, idx)),
+        ...(keyVariants(q.name,  idx)),
+        ...(keyVariants(q.id,    idx)),
+      ];
+
+      let val;
+      for (const c of candidates) {
+        const hit = ansMap.get(normalize(c));
+        if (hit !== undefined) { val = hit; break; }
+      }
+
+      // hiç eşleşemediyse answers içinde sıra bazlı fallback (bazı eski kayıtlarda olabilir)
+      if (val === undefined && answerKeys[idx] !== undefined) {
+        val = answers[ answerKeys[idx] ];
+      }
+
+      out.push(joinVals(val));
+    });
+
+    data.push(out);
+  }
 
   return { headers, data };
 }
@@ -156,7 +212,6 @@ async function load(slug){
   if (!slug) return;
   els.stats.textContent = 'yükleniyor…';
   try {
-    // Öneriye ekle
     knownSlugs.add(slug);
     localStorage.setItem(LS_KEY, JSON.stringify(Array.from(knownSlugs)));
     updateDatalist();
@@ -169,7 +224,6 @@ async function load(slug){
     const { headers, data } = pivotRows(schemaQuestions, rows);
     renderTable(headers, data);
 
-    // CSV-TSV butonları o anki tabloya bakacak
     els.btnCopy.onclick = () => copyTSV(headers, data);
     els.btnCsv.onclick  = () => downloadCSV(slug, headers, data);
 
@@ -181,9 +235,8 @@ async function load(slug){
   }
 }
 
-// UI olayları
+// UI
 els.btnLoad.addEventListener('click', () => load(els.slug.value.trim()));
 els.slug.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); load(els.slug.value.trim()); } });
 
-// Sayfa ilk açılışta URL param varsa otomatik yükle
 if (initialSlug) load(initialSlug);
