@@ -1,43 +1,118 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="tr">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Anket</title>
   <style>
-    :root{color-scheme:dark}
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0}
-    .wrap{max-width:980px;margin:48px auto;padding:0 16px}
-    header{display:flex;align-items:center;gap:16px;margin-bottom:24px}
-    .logo{width:56px;height:56px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(135deg,#3b82f6,#06b6d4);font-weight:700;color:#fff}
-    h1{margin:0;font-size:clamp(26px,4vw,44px);line-height:1.2}
-    .card{background:#0f172a;border:1px solid rgba(255,255,255,.06);padding:20px;border-radius:16px}
-    .hint{color:#a1a1aa;margin:0 0 20px}
-    .err{color:#ef4444;margin:12px 0 0;font-weight:600}
-    .field{margin:18px 0 22px}
-    .field label{display:block;font-weight:600;margin-bottom:8px}
-    .input,.textarea,.select{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:#0b1220;color:#fff}
-    .btn{appearance:none;border:0;background:#3b82f6;color:#fff;font-weight:700;padding:12px 22px;border-radius:12px;cursor:pointer}
-    .btn[disabled]{opacity:.5;cursor:not-allowed}
+    :root{
+      --bg:#0e1320;
+      --card:#121829;
+      --text:#e8eefc;
+      --muted:#98a2b3;
+      --accent:#3b82f6;
+      --line:#1f2740;
+    }
+    html,body{height:100%}
+    body{
+      margin:0; background:var(--bg); color:var(--text);
+      font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+    }
+    .container{max-width:900px; margin:40px auto; padding:0 16px}
+    .card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+      min-height: 220px; /* iskelet görünürken yüksekliği koru */
+    }
+    h1{
+      margin:0 0 18px; font-weight:800; letter-spacing:.2px; font-size:28px
+    }
+    .muted{color:var(--muted); font-size:14px}
+    button{
+      background:var(--accent); color:white; border:none; border-radius:10px;
+      padding:12px 18px; font-weight:700; cursor:pointer
+    }
+    button[disabled]{opacity:.6; cursor:wait}
+
+    /* --- Skeleton (iskelet) --- */
+    .skeleton-line{
+      height:16px; border-radius:8px; background:#0f162c; position:relative; overflow:hidden
+    }
+    .skeleton-line + .skeleton-line{margin-top:12px}
+    .skeleton-line.thick{height:22px}
+    .skeleton{
+      display:block; opacity:1; transition:opacity .25s ease;
+    }
+    .skeleton.hidden{opacity:0; pointer-events:none; height:0; overflow:hidden}
+    .shimmer::after{
+      content:""; position:absolute; inset:0;
+      transform:translateX(-100%);
+      background:linear-gradient(90deg, transparent, rgba(255,255,255,.06), transparent);
+      animation:shimmer 1.2s infinite;
+    }
+    @keyframes shimmer{
+      100%{ transform:translateX(100%) }
+    }
+
+    /* --- İçerik görünürken yumuşak giriş --- */
+    .content{opacity:0; transition:opacity .25s ease}
+    .content.visible{opacity:1}
+
+    .q{padding:12px 0; border-top:1px solid var(--line)}
+    .q:first-child{border-top:none}
+    .q label.q-text{display:block; font-weight:700; margin-bottom:8px}
+
+    .error{
+      margin-top:10px; color:#ff6b6b; font-weight:600
+    }
+    .ok{
+      margin-top:10px; color:#22c55e; font-weight:600
+    }
+    .row{
+      display:flex; gap:10px; align-items:center; justify-content:flex-end
+    }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <div class="logo">AR</div>
-      <h1 id="title">Anket</h1>
-    </header>
+  <div class="container">
+    <h1 id="pageTitle">Anket</h1>
 
     <div class="card">
-      <p class="hint">IP’niz korunur; tekrar oy engeli için kullanılır.</p>
-      <form id="form"></form>
-      <p id="err" class="err" hidden></p>
-      <div style="display:flex;justify-content:flex-end;margin-top:16px">
-        <button id="send" class="btn">Gönder</button>
+
+      <!-- İskelet / yükleme -->
+      <div id="skeleton" class="skeleton">
+        <div class="skeleton-line thick shimmer" style="width:45%;"></div>
+        <div class="skeleton-line shimmer" style="width:85%; margin-top:16px;"></div>
+        <div class="skeleton-line shimmer" style="width:70%;"></div>
+
+        <div style="height:14px"></div>
+
+        <div class="skeleton-line shimmer" style="width:90%;"></div>
+        <div class="skeleton-line shimmer" style="width:75%;"></div>
+        <div class="skeleton-line shimmer" style="width:60%;"></div>
       </div>
+
+      <!-- İçerik / form -->
+      <div id="content" class="content" hidden>
+        <p class="muted" id="formInfo">IP’niz korunur; tekrar oy engeli için kullanılır.</p>
+
+        <form id="theForm" autocomplete="off">
+          <div id="questions"></div>
+
+          <div class="row" style="margin-top:18px">
+            <button id="sendBtn" type="submit">Gönder</button>
+          </div>
+        </form>
+
+        <div id="msg" class="muted" style="margin-top:12px"></div>
+      </div>
+
     </div>
   </div>
 
-  <script src="/form.js" defer></script>
+  <script src="./form.js" defer></script>
 </body>
 </html>
