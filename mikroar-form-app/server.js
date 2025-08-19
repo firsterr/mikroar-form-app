@@ -155,8 +155,13 @@ app.post('/admin/api/forms/:slug/short-link', adminOnly, async (req, res) => {
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Kök -> index.html (form seçici varsa)
-app.get('/', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+app.get('/', (req, res) => {
+  // anket.mikroar.com köke gelirse admin'e git
+  if (req.hostname && req.hostname.startsWith('anket.')) {
+    return res.redirect(302, '/admin.html');
+  }
+  // diğer tüm hostlar (form.mikroar.com dahil) index.html (form seç)
+  return res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // 404
