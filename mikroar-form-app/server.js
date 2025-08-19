@@ -1,4 +1,4 @@
-// server.js — MikroAR Form App (ESM)
+// server.js — MikroAR Form App (ESM) + Kısa Link /f/:code
 
 import express from 'express';
 import dotenv from 'dotenv';
@@ -8,6 +8,7 @@ import morgan from 'morgan';
 import basicAuth from 'basic-auth';
 import pkg from 'pg';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 
 dotenv.config();
@@ -18,12 +19,12 @@ const PORT         = process.env.PORT || 3000;
 const DATABASE_URL = process.env.DATABASE_URL;
 const CORS_ORIGIN  = process.env.CORS_ORIGIN || '*';
 
-// Admin & Misafir hesapları
-const ADMIN_USER = process.env.ADMIN_USER || 'firster';
-const ADMIN_PASS = process.env.ADMIN_PASS || '24198823Gds!!';
+// Admin & Misafir (ENV varsa onları kullanır)
+const ADMIN_USER = (process.env.ADMIN_USER || 'adminfirster').trim();
+const ADMIN_PASS = (process.env.ADMIN_PASS || '10Yor!!de_').trim();
 
-const GUEST_USER = process.env.GUEST_USER || 'firsterx';
-const GUEST_PASS = process.env.GUEST_PASS || '2419_i';
+const GUEST_USER = (process.env.GUEST_USER || 'firsterx').trim();
+const GUEST_PASS = (process.env.GUEST_PASS || '2419_i').trim();
 
 if (!DATABASE_URL) {
   console.error('DATABASE_URL tanımlı değil!');
@@ -49,41 +50,37 @@ app.use(helmet({
 }));
 
 // -------------------------------------------------------
-// Yardımcılar: Basic Auth kontrol
+// Basic Auth yardımcıları
 // -------------------------------------------------------
 function isAdmin(req) {
-  const cred = basicAuth(req);
-  return cred && cred.name === ADMIN_USER && cred.pass === ADMIN_PASS;
+  const u = basicAuth(req);
+  return u && u.name === ADMIN_USER && u.pass === ADMIN_PASS;
 }
-
 function isGuest(req) {
-  const cred = basicAuth(req);
-  return cred && cred.name === GUEST_USER && cred.pass === GUEST_PASS;
+  const u = basicAuth(req);
+  return u && u.name === GUEST_USER && u.pass === GUEST_PASS;
 }
 
-// Belirli sayfalar için (admin VEYA misafir) koruması
+// Kök ve bazı sayfalar: admin VEYA misafir
 const PROTECTED_PAGES = new Set(['/', '/index.html', '/admin.html', '/results.html']);
-
 app.use((req, res, next) => {
   if (PROTECTED_PAGES.has(req.path)) {
     if (isAdmin(req) || isGuest(req)) return next();
-    res.set('WWW-Authenticate', 'Basic realm="MikroAR"');
+    res.set('WWW-Authenticate', 'Basic realm="MikroAR-Portal"');
     return res.status(401).send('Unauthorized');
   }
-  return next();
+  next();
 });
 
-// Sadece admin için koruma (API’ler)
-function adminOnly(_req, res, next) {
-  if (isAdmin(_req)) return next();
+// Admin API’leri: sadece admin
+function adminOnly(req, res, next) {
+  if (isAdmin(req)) return next();
   res.set('WWW-Authenticate', 'Basic realm="MikroAR Admin API"');
   return res.status(401).send('Yetkisiz');
 }
 
 // -------------------------------------------------------
-// KÖK: alan adına göre davranış
-// - anket.mikroar.com  -> /admin.html
-// - form.mikroar.com   -> /index.html (form seç)
+// KÖK: hosta göre
 // -------------------------------------------------------
 app.get('/', (req, res) => {
   const host = (req.hostname || '').toLowerCase();
@@ -97,7 +94,6 @@ app.get('/', (req, res) => {
 app.get(['/form', '/form.html'], async (req, res, next) => {
   const slug = (req.query.slug || '').trim();
   if (slug) return next();
-
   try {
     const r = await pool.query(
       `SELECT slug
@@ -190,6 +186,64 @@ app.post('/api/forms/:slug/submit', async (req, res) => {
   }
 });
 
+// =======================================================
+// ==============  KISA LİNK ÖZELLİĞİ  ===================
+// =======================================================
+
+// Basit kod üretici (9 karakter, URL-safe)
+function genCode(len = 9) {
+  return crypto.randomBytes(12).toString('base64url').slice(0, len);
+}
+
+// Kısa kodu çözen API (form.html burayı çağırır), tıklamayı da loglar
+app.get('/api/resolve-short/:code', async (req, res) => {
+  const { code } = req.params;
+  try {
+    const r = await pool.query('SELECT slug FROM short_links WHERE code=$1 AND (active IS DISTINCT FROM false)', [code]);
+    if (!r.rowCount) return res.status(404).json({ ok:false, error:'kod bulunamadı' });
+
+    // tıklama logu (opsiyonel)
+    const xff = req.headers['x-forwarded-for'];
+    const ip  = Array.isArray(xff) ? xff[0] : (typeof xff === 'string' ? xff.split(',')[0].trim() : req.ip || null);
+    await pool.query('INSERT INTO short_clicks (code, ip, user_agent) VALUES ($1,$2,$3)', [code, ip, req.get('user-agent') || null]);
+
+    res.json({ ok:true, slug:r.rows[0].slug });
+  } catch (e) {
+    res.status(500).json({ ok:false, error:e.message });
+  }
+});
+
+// Kısa yolın kendisi: /f/:code → form.html’i servis et (URL değişmeden)
+app.get('/f/:code', async (req, res) => {
+  // sayfa içeride /api/resolve-short/:code çağırarak slugu bulacak
+  res.sendFile(path.join(__dirname, 'public', 'form.html'));
+});
+
+// Admin: forma kısa kod üret / sorgula
+app.get('/admin/api/forms/:slug/short-link', adminOnly, async (req, res) => {
+  const { slug } = req.params;
+  try {
+    // mevcut aktif kodu getir ya da oluştur
+    let r = await pool.query('SELECT code FROM short_links WHERE slug=$1 AND active IS TRUE LIMIT 1', [slug]);
+    if (!r.rowCount) {
+      // yeni kod üret, çakışma olmasın
+      let code;
+      for (;;) {
+        code = genCode(9);
+        const c = await pool.query('SELECT 1 FROM short_links WHERE code=$1', [code]);
+        if (!c.rowCount) break;
+      }
+      await pool.query('INSERT INTO short_links (code, slug, active) VALUES ($1,$2,true)', [code, slug]);
+      r = { rows:[{ code }] };
+    }
+    const code = r.rows[0].code;
+    const url = `${req.protocol}://${req.get('host')}/f/${code}`;
+    res.json({ ok:true, code, url });
+  } catch (e) {
+    res.status(500).json({ ok:false, error:e.message });
+  }
+});
+
 // ---- Statik dosyalar (public/)
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -207,7 +261,6 @@ app.get('/admin/api/forms', adminOnly, async (_req, res) => {
   }
 });
 
-// Admin: form oluştur/güncelle
 app.post('/admin/api/forms', adminOnly, async (req, res) => {
   try {
     let { slug, title, active = true, schema, questions } = req.body || {};
@@ -224,6 +277,18 @@ app.post('/admin/api/forms', adminOnly, async (req, res) => {
        SET title=EXCLUDED.title, active=EXCLUDED.active, schema=EXCLUDED.schema`,
       [slug, title, active, schema]
     );
+
+    // kısa kod yoksa otomatik üret
+    let r = await pool.query('SELECT 1 FROM short_links WHERE slug=$1 AND active IS TRUE', [slug]);
+    if (!r.rowCount) {
+      let code;
+      for (;;) {
+        code = genCode(9);
+        const c = await pool.query('SELECT 1 FROM short_links WHERE code=$1', [code]);
+        if (!c.rowCount) break;
+      }
+      await pool.query('INSERT INTO short_links (code, slug, active) VALUES ($1,$2,true)', [code, slug]);
+    }
 
     res.json({ ok: true });
   } catch (e) {
