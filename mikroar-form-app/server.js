@@ -300,7 +300,48 @@ app.post('/admin/api/forms', adminOnly, async (req, res) => {
        SET title=EXCLUDED.title, active=EXCLUDED.active, schema=EXCLUDED.schema`,
       [slug, title, active, schema]
     );
+// --- Admin: kısa link üret ---
+app.get('/admin/api/shortlink', adminOnly, async (req, res) => {
+  try {
+    const slug = (req.query.slug || '').trim();
+    if (!slug) return res.status(400).json({ ok: false, error: 'slug gerekli' });
 
+    // slug var mı?
+    const exists = await pool.query(`select 1 from forms where slug=$1`, [slug]);
+    if (exists.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: 'slug bulunamadı' });
+    }
+
+    // daha önce üretilmişse getir
+    const old = await pool.query(
+      `select code from short_links where slug=$1 order by created_at desc limit 1`,
+      [slug]
+    );
+    let code = old.rows[0]?.code;
+
+    // yoksa yeni üret
+    if (!code) {
+      for (let i = 0; i < 5; i++) {
+        const candidate = randomBytes(5).toString('base64url'); // ~8–10 char
+        const ins = await pool.query(
+          `insert into short_links(slug, code)
+           values($1,$2)
+           on conflict (code) do nothing
+           returning code`,
+          [slug, candidate]
+        );
+        if (ins.rowCount) { code = ins.rows[0].code; break; }
+      }
+    }
+
+    if (!code) return res.status(500).json({ ok: false, error: 'code üretilemedi' });
+
+    const url = `https://form.mikroar.com/f/${code}`;
+    res.json({ ok: true, code, url });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
     // kısa kod yoksa otomatik üret
     let r = await pool.query('SELECT 1 FROM short_links WHERE slug=$1 AND active IS TRUE', [slug]);
     if (!r.rowCount) {
