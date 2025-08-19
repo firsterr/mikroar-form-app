@@ -149,6 +149,8 @@ document.title = `${els.title.textContent} – Anket`;
       // Başlık/bağlam
       document.title = `${form.title || slug} – Anket`;
       els.title.textContent = form.title || slug;
+      
+      try { localStorage.setItem(cacheKey, (form.title || slug || "")); } catch {}
 
       // Soruları oluştur
       els.questions.innerHTML = "";
