@@ -246,7 +246,29 @@ app.get('/admin/api/forms/:slug/short-link', adminOnly, async (req, res) => {
 
 // ---- Statik dosyalar (public/)
 app.use(express.static(path.join(__dirname, 'public')));
+// Statikler (örnek)
+app.use(express.static(path.join(__dirname, 'public')));
 
+// ─── KISA LİNK: /f/:code  ->  /form.html?slug=... ──────────────────────────────
+app.get('/f/:code', async (req, res) => {
+  try {
+    const code = req.params.code;
+    const { rows } = await pool.query(
+      'SELECT slug FROM short_links WHERE code = $1',
+      [code]
+    );
+    if (!rows.length) {
+      return res.status(404).send('Kısa kod bulunamadı.');
+    }
+    const slug = rows[0].slug;
+    res.set('Cache-Control', 'no-store');
+    return res.redirect(302, `/form.html?slug=${encodeURIComponent(slug)}`);
+  } catch (e) {
+    console.error('shortlink redirect error:', e);
+    return res.status(500).send('Shortlink yönlendirme hatası.');
+  }
+});
+// ───────────────────────────────────────────────────────────────────────────────
 // =======================================================
 // ===================   ADMIN API   =====================
 // =======================================================
