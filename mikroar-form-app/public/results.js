@@ -65,7 +65,8 @@ const normalize = (v) =>
 const joinVals = (v) => Array.isArray(v) ? v.join(', ') : (v ?? '');
 
 function looksLikeQKey(k){
-  const m = /^q(\d+)$/.exec((k||'').toString().trim().toLowerCase());
+  // q0, q_0, q-0, "q 0" hepsini yakala
+  const m = /^q[\s_\-]?(\d+)$/i.exec((k ?? '').toString().trim());
   return m ? Number(m[1]) : null;
 }
 
