@@ -1,119 +1,198 @@
-(function () {
-  const $  = (s, el=document) => el.querySelector(s);
-  const $$ = (s, el=document) => Array.from(el.querySelectorAll(s));
+(() => {
+  const qs = (sel, root = document) => root.querySelector(sel);
 
-  const els = { title: $('#title'), form: $('#form'), err: $('#err'), send: $('#send') };
+  const els = {
+    title: qs("#pageTitle"),
+    skeleton: qs("#skeleton"),
+    content: qs("#content"),
+    form: qs("#theForm"),
+    questions: qs("#questions"),
+    msg: qs("#msg"),
+    sendBtn: qs("#sendBtn")
+  };
 
-  async function resolveSlug() {
-    const qp = new URLSearchParams(location.search);
-    const s  = (qp.get('slug') || '').trim();
-    if (s) return s;
-    const m = location.pathname.match(/^\/f\/([A-Za-z0-9_-]{4,64})$/);
-    if (!m) throw new Error('slug veya kısa kod bulunamadı');
-    const code = m[1];
-    const r = await fetch(`/api/resolve-short/${encodeURIComponent(code)}`);
-    const j = await r.json();
-    if (!j.ok) throw new Error(j.error || 'Kısa kod çözülemedi');
-    return j.slug;
+  const slug = new URLSearchParams(location.search).get("slug") || "";
+  if (!slug) {
+    // slug yoksa seçim ekranına dön
+    location.href = "/index.html";
+    return;
   }
 
-  function clear(el){ while(el.firstChild) el.removeChild(el.firstChild); }
-  function el(tag, attrs={}, children=[]){
-    const n = document.createElement(tag);
-    for (const [k,v] of Object.entries(attrs)){ if(v==null) continue; if(k in n) n[k]=v; else n.setAttribute(k,String(v)); }
-    (Array.isArray(children)?children:[children]).forEach(c => n.appendChild(c instanceof Node?c:document.createTextNode(String(c))));
-    return n;
-  }
+  // İlk anda "yükleniyor" başlığı (FOUC engelleme)
+  els.title.textContent = "Anket yükleniyor…";
 
-  function renderForm(questions=[]){
-    clear(els.form);
-    questions.forEach((q, i) => {
-      const key  = q.key || q.name || `q_${i}`;
-      const text = q.text || q.title || `Soru ${i+1}`;
-      const type = String(q.type || 'text').toLowerCase();
-
-      const wrap = el('div',{className:'field'});
-      wrap.appendChild(el('label',{htmlFor:key},`${i+1}. ${text}`));
-
-      let input;
-      if (type==='text') input = el('input',{id:key,name:key,type:'text',className:'input'});
-      else if (type==='textarea') input = el('textarea',{id:key,name:key,rows:4,className:'textarea'});
-      else if (type==='select'){
-        input = el('select',{id:key,name:key,className:'select'});
-        (q.options||[]).forEach(opt=>input.appendChild(el('option',{value:String(opt)},String(opt))));
-      }
-      else if (type==='radio'){
-        input = el('div');
-        (q.options||[]).forEach((opt,k)=>{
-          const rid = `${key}_${k}`;
-          input.appendChild(el('label',{},[
-            el('input',{type:'radio',name:key,value:String(opt),id:rid}),
-            ' ', String(opt)
-          ]));
-        });
-      }
-      else if (type==='checkbox'){
-        input = el('div');
-        (q.options||[]).forEach((opt,k)=>{
-          const cid = `${key}_${k}`;
-          input.appendChild(el('label',{},[
-            el('input',{type:'checkbox',name:key,value:String(opt),id:cid}),
-            ' ', String(opt)
-          ]));
-        });
-      }
-      else input = el('input',{id:key,name:key,type:'text',className:'input'});
-
-      wrap.appendChild(input);
-      els.form.appendChild(wrap);
-    });
-  }
-
-  async function submitAnswers(slug){
-    try{
-      els.send.disabled = true;
-      const answers = {};
-      $$('input[type="text"], textarea, select', els.form).forEach(inp => answers[inp.name]=inp.value);
-      const radios = {}; $$('input[type="radio"]', els.form).forEach(r => (radios[r.name] ||= []).push(r));
-      Object.entries(radios).forEach(([n,arr]) => { const c = arr.find(r=>r.checked); answers[n]=c?c.value:''; });
-      const checks = {}; $$('input[type="checkbox"]', els.form).forEach(c => (checks[c.name] ||= []).push(c));
-      Object.entries(checks).forEach(([n,arr]) => { answers[n]=arr.filter(c=>c.checked).map(c=>c.value); });
-
-      const r = await fetch(`/api/forms/${encodeURIComponent(slug)}/submit`, {
-        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(answers)
-      });
-      const j = await r.json();
-      if (!j.ok) throw new Error(j.error || `Sunucu ${r.status}`);
-      els.err.hidden = true; els.err.textContent='';
-      alert('Teşekkürler! Cevabınız kaydedildi.');
-    }catch(e){
-      els.err.hidden=false; els.err.textContent=`Gönderilemedi: ${e.message||e}`;
-    }finally{ els.send.disabled=false; }
-  }
-
-  async function main(){
-    try{
-      const slug = await resolveSlug();
-      const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`);
-      const j = await r.json();
-      if (!j.ok) throw new Error(j.error || 'Form yüklenemedi');
-
-      const form = j.form || {};
-      const q = form.schema && Array.isArray(form.schema?.questions)
-        ? form.schema.questions
-        : (Array.isArray(form.schema) ? form.schema : []);
-
-      if (els.title) els.title.textContent = form.title || slug;
-      document.title = (form.title || slug) + ' – MikroAR';
-      renderForm(q);
-
-      els.send.onclick = (ev)=>{ ev.preventDefault(); submitAnswers(slug); };
-    }catch(e){
-      els.err.hidden=false; els.err.textContent=`Yüklenemedi: ${e.message||e}`;
-      if (els.send) els.send.disabled=true;
+  function showLoading(on) {
+    if (on) {
+      els.skeleton.classList.remove("hidden");
+      els.content.hidden = true;
+      els.content.classList.remove("visible");
+    } else {
+      els.skeleton.classList.add("hidden");
+      els.content.hidden = false;
+      // bir sonraki frame’de görünür yap
+      requestAnimationFrame(() => els.content.classList.add("visible"));
     }
   }
 
-  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', main);
-  else main();
+  function normalizeKey(s) {
+    return (s ?? "")
+      .toString()
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .replace(/[^\p{L}\p{N}\s]/gu, ""); // diacritics hariç tüm noktalama kaldır
+  }
+
+  function buildQuestion(q, idx) {
+    const wrap = document.createElement("div");
+    wrap.className = "q";
+
+    // Soru metni
+    const labelEl = document.createElement("label");
+    labelEl.className = "q-text";
+    labelEl.textContent = `${idx + 1}. ${q.label || q.text || "Soru"}`;
+    wrap.appendChild(labelEl);
+
+    // İsim: label varsa onu baz al, yoksa q_idx
+    const name = q.label ? `label::${normalizeKey(q.label)}` : `q_${idx}`;
+
+    if (q.type === "radio") {
+      (q.options || []).forEach(opt => {
+        const id = `q_${idx}_${normalizeKey(opt)}`;
+        const line = document.createElement("div");
+        const input = document.createElement("input");
+        input.type = "radio";
+        input.name = name;
+        input.value = opt;
+        input.id = id;
+        const l = document.createElement("label");
+        l.htmlFor = id;
+        l.textContent = opt;
+        line.appendChild(input);
+        line.appendChild(document.createTextNode(" "));
+        line.appendChild(l);
+        wrap.appendChild(line);
+      });
+    } else if (q.type === "checkbox") {
+      (q.options || []).forEach(opt => {
+        const id = `q_${idx}_${normalizeKey(opt)}`;
+        const line = document.createElement("div");
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.name = name;
+        input.value = opt;
+        input.id = id;
+        const l = document.createElement("label");
+        l.htmlFor = id;
+        l.textContent = opt;
+        line.appendChild(input);
+        line.appendChild(document.createTextNode(" "));
+        line.appendChild(l);
+        wrap.appendChild(line);
+      });
+    } else {
+      // text / textarea
+      const input = document.createElement(q.multiline ? "textarea" : "input");
+      if (!q.multiline) input.type = "text";
+      input.name = name;
+      input.placeholder = "Yanıtınız…";
+      input.style.width = "100%";
+      wrap.appendChild(input);
+    }
+
+    return wrap;
+  }
+
+  function collectAnswers(schema) {
+    const answers = {};
+    const toKey = (raw) => {
+      // label::... geldiyse label’ı anahtar yap, yoksa zaten q_idx
+      if (raw.startsWith("label::")) return raw.slice("label::".length);
+      return raw;
+    };
+
+    (schema.questions || []).forEach((q, idx) => {
+      const name = q.label ? `label::${normalizeKey(q.label)}` : `q_${idx}`;
+
+      if (q.type === "checkbox") {
+        const checked = [...els.form.querySelectorAll(`input[name="${CSS.escape(name)}"]:checked`)]
+          .map(i => i.value);
+        answers[toKey(name)] = checked;
+      } else if (q.type === "radio") {
+        const r = els.form.querySelector(`input[name="${CSS.escape(name)}"]:checked`);
+        answers[toKey(name)] = r ? r.value : "";
+      } else {
+        const t = els.form.querySelector(`[name="${CSS.escape(name)}"]`);
+        answers[toKey(name)] = t ? t.value : "";
+      }
+    });
+
+    return answers;
+  }
+
+  async function loadForm() {
+    try {
+      showLoading(true);
+
+      const res = await fetch(`/api/forms/${encodeURIComponent(slug)}`, { cache: "no-store" });
+      if (!res.ok) throw new Error("Form yüklenemedi");
+      const data = await res.json();
+      if (!data?.ok || !data.form) throw new Error("Form bulunamadı");
+
+      const form = data.form;
+      const schema = form.schema || {};
+      const questions = schema.questions || [];
+
+      // Başlık/bağlam
+      document.title = `${form.title || slug} – Anket`;
+      els.title.textContent = form.title || slug;
+
+      // Soruları oluştur
+      els.questions.innerHTML = "";
+      questions.forEach((q, idx) => {
+        els.questions.appendChild(buildQuestion(q, idx));
+      });
+
+      // Formu göster
+      showLoading(false);
+
+      // Gönder
+      els.form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        els.msg.textContent = "";
+        els.msg.className = "muted";
+        els.sendBtn.disabled = true;
+
+        try {
+          const answers = collectAnswers(schema);
+          const resp = await fetch(`/api/forms/${encodeURIComponent(slug)}/submit`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ answers })
+          });
+
+          const j = await resp.json().catch(() => ({}));
+          if (!resp.ok || !j.ok) throw new Error(j.error || "Kayıt başarısız");
+
+          els.msg.textContent = "Cevaplarınız kaydedildi. Teşekkürler!";
+          els.msg.className = "ok";
+          els.form.reset();
+        } catch (err) {
+          els.msg.textContent = "Gönderilemedi: " + (err.message || err);
+          els.msg.className = "error";
+        } finally {
+          els.sendBtn.disabled = false;
+        }
+      });
+    } catch (err) {
+      els.title.textContent = "Anket yüklenemedi";
+      els.msg.textContent = "Yüklenemedi: " + (err.message || err);
+      els.msg.className = "error";
+      showLoading(false);
+      // içerik boş kalmasın diye formu gizli bırak, mesaj görünsün
+      els.form.style.display = "none";
+    }
+  }
+
+  loadForm();
 })();
