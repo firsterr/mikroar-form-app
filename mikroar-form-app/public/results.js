@@ -92,7 +92,7 @@ function buildTable(schemaQuestions, rows){
   const extraKeyCols = new Map(); // normalize(key) -> columnIndex
 
   for (const row of rows) {
-    const answers = row?.payload?.answers || {};
+    const answers = row?.payload?.answers ?? row?.payload ?? {};
     for (const [k, v] of Object.entries(answers)) {
       // qN ise şemadaki sıraya düşer, şemaya ek sütun açmayız
       if (looksLikeQKey(k) != null) continue;
@@ -114,7 +114,7 @@ function buildTable(schemaQuestions, rows){
   // 2) Satırları doldur
   const data = [];
   for (const row of rows) {
-    const answers = row?.payload?.answers || {};
+    const answers = row?.payload?.answers ?? row?.payload ?? {};
 
     // satır arabelleği
     const arr = new Array(headers.length).fill('');
