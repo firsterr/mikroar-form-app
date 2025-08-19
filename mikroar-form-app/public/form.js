@@ -1,6 +1,5 @@
 (() => {
-  const qs = (sel, root = document) => root.querySelector(sel);
-
+  const qs = (s, r=document) => r.querySelector(s);
   const els = {
     title: qs("#pageTitle"),
     skeleton: qs("#skeleton"),
@@ -12,17 +11,11 @@
   };
 
   const slug = new URLSearchParams(location.search).get("slug") || "";
-  if (!slug) {
-    // slug yoksa seçim ekranına dön
-    location.href = "/index.html";
-    return;
-  }
+  if (!slug) { location.href = "/index.html"; return; }
 
- // Başlığı hemen koy (cache varsa ondan; yoksa slug)
-const cacheKey = `form_title_cache:${slug}`;
-const cachedTitle = slug ? localStorage.getItem(cacheKey) : "";
-els.title.textContent = (cachedTitle || slug || "Anket");
-document.title = `${els.title.textContent} – Anket`;
+  // Başlık: ilk karede HİÇ "yükleniyor" yazma; boşlukla yer tut.
+  els.title.textContent = "\u00A0"; // NBSP – yükseklik sabit kalsın
+  document.title = "Anket";
 
   function showLoading(on) {
     if (on) {
@@ -32,69 +25,46 @@ document.title = `${els.title.textContent} – Anket`;
     } else {
       els.skeleton.classList.add("hidden");
       els.content.hidden = false;
-      // bir sonraki frame’de görünür yap
       requestAnimationFrame(() => els.content.classList.add("visible"));
     }
   }
 
   function normalizeKey(s) {
-    return (s ?? "")
-      .toString()
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, " ")
-      .replace(/[^\p{L}\p{N}\s]/gu, ""); // diacritics hariç tüm noktalama kaldır
+    return (s ?? "").toString().trim().toLowerCase().replace(/\s+/g, " ").replace(/[^\p{L}\p{N}\s]/gu, "");
   }
 
   function buildQuestion(q, idx) {
     const wrap = document.createElement("div");
     wrap.className = "q";
 
-    // Soru metni
     const labelEl = document.createElement("label");
     labelEl.className = "q-text";
     labelEl.textContent = `${idx + 1}. ${q.label || q.text || "Soru"}`;
     wrap.appendChild(labelEl);
 
-    // İsim: label varsa onu baz al, yoksa q_idx
     const name = q.label ? `label::${normalizeKey(q.label)}` : `q_${idx}`;
 
     if (q.type === "radio") {
       (q.options || []).forEach(opt => {
         const id = `q_${idx}_${normalizeKey(opt)}`;
         const line = document.createElement("div");
-        const input = document.createElement("input");
-        input.type = "radio";
-        input.name = name;
-        input.value = opt;
-        input.id = id;
-        const l = document.createElement("label");
-        l.htmlFor = id;
+        const input = Object.assign(document.createElement("input"), { type:"radio", name, value:opt, id });
+        const l = Object.assign(document.createElement("label"), { htmlFor:id });
         l.textContent = opt;
-        line.appendChild(input);
-        line.appendChild(document.createTextNode(" "));
-        line.appendChild(l);
+        line.append(input, " ", l);
         wrap.appendChild(line);
       });
     } else if (q.type === "checkbox") {
       (q.options || []).forEach(opt => {
         const id = `q_${idx}_${normalizeKey(opt)}`;
         const line = document.createElement("div");
-        const input = document.createElement("input");
-        input.type = "checkbox";
-        input.name = name;
-        input.value = opt;
-        input.id = id;
-        const l = document.createElement("label");
-        l.htmlFor = id;
+        const input = Object.assign(document.createElement("input"), { type:"checkbox", name, value:opt, id });
+        const l = Object.assign(document.createElement("label"), { htmlFor:id });
         l.textContent = opt;
-        line.appendChild(input);
-        line.appendChild(document.createTextNode(" "));
-        line.appendChild(l);
+        line.append(input, " ", l);
         wrap.appendChild(line);
       });
     } else {
-      // text / textarea
       const input = document.createElement(q.multiline ? "textarea" : "input");
       if (!q.multiline) input.type = "text";
       input.name = name;
@@ -108,18 +78,12 @@ document.title = `${els.title.textContent} – Anket`;
 
   function collectAnswers(schema) {
     const answers = {};
-    const toKey = (raw) => {
-      // label::... geldiyse label’ı anahtar yap, yoksa zaten q_idx
-      if (raw.startsWith("label::")) return raw.slice("label::".length);
-      return raw;
-    };
+    const toKey = (raw) => raw.startsWith("label::") ? raw.slice(7) : raw;
 
     (schema.questions || []).forEach((q, idx) => {
       const name = q.label ? `label::${normalizeKey(q.label)}` : `q_${idx}`;
-
       if (q.type === "checkbox") {
-        const checked = [...els.form.querySelectorAll(`input[name="${CSS.escape(name)}"]:checked`)]
-          .map(i => i.value);
+        const checked = [...els.form.querySelectorAll(`input[name="${CSS.escape(name)}"]:checked`)].map(i => i.value);
         answers[toKey(name)] = checked;
       } else if (q.type === "radio") {
         const r = els.form.querySelector(`input[name="${CSS.escape(name)}"]:checked`);
@@ -137,6 +101,7 @@ document.title = `${els.title.textContent} – Anket`;
     try {
       showLoading(true);
 
+      // Form bilgisini getir (cache bypass)
       const res = await fetch(`/api/forms/${encodeURIComponent(slug)}`, { cache: "no-store" });
       if (!res.ok) throw new Error("Form yüklenemedi");
       const data = await res.json();
@@ -146,19 +111,15 @@ document.title = `${els.title.textContent} – Anket`;
       const schema = form.schema || {};
       const questions = schema.questions || [];
 
-      // Başlık/bağlam
-      document.title = `${form.title || slug} – Anket`;
+      // Başlığı HEMEN gerçek metinle değiştir
       els.title.textContent = form.title || slug;
-      
-      try { localStorage.setItem(cacheKey, (form.title || slug || "")); } catch {}
+      document.title = `${form.title || slug} – Anket`;
 
-      // Soruları oluştur
+      // Soruları çiz
       els.questions.innerHTML = "";
-      questions.forEach((q, idx) => {
-        els.questions.appendChild(buildQuestion(q, idx));
-      });
+      questions.forEach((q, idx) => els.questions.appendChild(buildQuestion(q, idx)));
 
-      // Formu göster
+      // Göster
       showLoading(false);
 
       // Gönder
@@ -175,7 +136,6 @@ document.title = `${els.title.textContent} – Anket`;
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ answers })
           });
-
           const j = await resp.json().catch(() => ({}));
           if (!resp.ok || !j.ok) throw new Error(j.error || "Kayıt başarısız");
 
@@ -190,11 +150,11 @@ document.title = `${els.title.textContent} – Anket`;
         }
       });
     } catch (err) {
-      els.title.textContent = "Anket yüklenemedi";
+      // Başlık yine boş görünmesin
+      if (!els.title.textContent.trim()) els.title.textContent = "Anket";
       els.msg.textContent = "Yüklenemedi: " + (err.message || err);
       els.msg.className = "error";
       showLoading(false);
-      // içerik boş kalmasın diye formu gizli bırak, mesaj görünsün
       els.form.style.display = "none";
     }
   }
