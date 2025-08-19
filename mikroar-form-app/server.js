@@ -1,5 +1,39 @@
 // server.js — MikroAR Form App (ESM)
 
+app.get('/f/:slug', async (req, res) => {
+  const { slug } = req.params;
+  try {
+    const { rows } = await pool.query(
+      'SELECT slug, title, active, schema FROM forms WHERE slug=$1',
+      [slug]
+    );
+    if (!rows.length || rows[0].active === false) {
+      return res.status(404).send('<!doctype html><meta charset="utf-8"><title>Bulunamadı</title><h1>Form bulunamadı</h1>');
+    }
+    const form = rows[0];
+    const json = JSON.stringify({ ok: true, form });
+
+    // Basit HTML + inline JSON + mevcut form.js
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(`<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>${form.title || slug}</title>
+<link rel="preload" href="/form.js" as="script">
+</head>
+<body>
+<div id="app"></div>
+<script id="__FORM_DATA__" type="application/json">${json}</script>
+<script src="/form.js" defer></script>
+</body>
+</html>`);
+  } catch (e) {
+    res.status(500).send('<!doctype html><meta charset="utf-8"><title>Hata</title><h1>Sunucu hatası</h1>');
+  }
+});
+
 import express from 'express';
 import dotenv from 'dotenv';
 import helmet from 'helmet';
