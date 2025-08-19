@@ -150,7 +150,14 @@ app.post('/admin/api/forms/:slug/short-link', adminOnly, async (req, res) => {
     res.json({ ok:true, code, url: `${origin}/f/${code}` });
   } catch (e) { res.status(500).json({ ok:false, error:e.message }); }
 });
+// Admin ekranı ve scripti Basic-Auth ile korunsun
+app.get('/admin.html', adminOnly, (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
 
+app.get('/admin.js', adminOnly, (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.js'));
+});
 // ===== Statik dosyalar =====
 app.use(express.static(path.join(__dirname, 'public')));
 
