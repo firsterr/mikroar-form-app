@@ -244,7 +244,18 @@ app.get('/admin/api/forms/:slug/short-link', adminOnly, async (req, res) => {
     res.status(500).json({ ok:false, error:e.message });
   }
 });
-
+// --- Public: kısa link çöz ve forma yönlendir ---
+app.get('/f/:code', async (req, res) => {
+  try {
+    const { code } = req.params;
+    const r = await pool.query(`select slug from short_links where code=$1`, [code]);
+    if (r.rowCount === 0) return res.status(404).send('Kısa kod bulunamadı.');
+    const slug = r.rows[0].slug;
+    res.redirect(302, `/form.html?slug=${encodeURIComponent(slug)}`);
+  } catch (e) {
+    res.status(500).send(e.message);
+  }
+});
 // ---- Statik dosyalar (public/)
 app.use(express.static(path.join(__dirname, 'public')));
 // Statikler (örnek)
