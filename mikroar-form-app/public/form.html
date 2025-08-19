@@ -10,15 +10,15 @@
     .wrap { max-width: 980px; margin: 48px auto; padding: 0 16px; }
     header { display:flex; align-items:center; gap:16px; margin-bottom:24px; }
     header .logo { width:56px; height:56px; border-radius:14px; display:grid; place-items:center;
-                   background:linear-gradient(135deg,#3b82f6,#06b6d4); font-weight:700; }
+                   background:linear-gradient(135deg,#3b82f6,#06b6d4); font-weight:700; color:#fff; }
     h1 { margin:0; font-size:clamp(26px,4vw,44px); line-height:1.2; }
     .card { background:#0f172a; border:1px solid rgba(255,255,255,.06);
             padding:20px; border-radius:16px; }
     .hint { color:#a1a1aa; margin:0 0 20px; }
     .err  { color:#ef4444; margin:12px 0 0; font-weight:600; }
-    .q { margin:18px 0 22px; }
-    .q legend { font-weight:600; margin-bottom:8px; }
-    .opt { display:flex; align-items:center; gap:10px; margin:6px 0; }
+    .field { margin:18px 0 22px; }
+    .field label { display:block; font-weight:600; margin-bottom:8px; }
+    .input, .textarea, .select { width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background:#0b1220; color:#fff; }
     .btn { appearance:none; border:0; background:#3b82f6; color:#fff; font-weight:700;
            padding:12px 22px; border-radius:12px; cursor:pointer; }
     .btn[disabled] { opacity:.5; cursor:not-allowed; }
@@ -41,49 +41,6 @@
     </div>
   </div>
 
-  <script>
-  (function () {
-    const $ = (s, r=document) => r.querySelector(s);
-    const el = { title: $('#title'), form: $('#form'), err: $('#err'), send: $('#send') };
-
-    // 1) slug tespiti: ?slug=... varsa onu kullan; yoksa /f/:code yolunda kodu çöz
-    async function resolveSlug() {
-      <script>
-(async () => {
-  const $ = s => document.querySelector(s);
-  const els = { title: $('#title'), form: $('#form'), err: $('#err'), send: $('#send') };
-
-  // 1) slug varsa doğrudan kullan; yoksa /f/<code>'dan çöz
-  async function resolveSlug() {
-    const qp = new URLSearchParams(location.search);
-    const s = (qp.get('slug') || '').trim();
-    if (s) return s;
-
-    const m = location.pathname.match(/^\/f\/([A-Za-z0-9_-]{4,64})$/);
-    if (!m) throw new Error('slug veya kısa kod bulunamadı.');
-
-    const code = m[1];
-    const r = await fetch(`/api/resolve-short/${encodeURIComponent(code)}`);
-    const j = await r.json();
-    if (!j.ok) throw new Error(j.error || 'Kısa kod çözülemedi.');
-    return j.slug;
-  }
-
-  try {
-    const slug = await resolveSlug();               // <<< DİKKAT: BURAYI KULLANIYORUZ
-    const resp = await fetch(`/api/forms/${encodeURIComponent(slug)}`);
-    const data = await resp.json();
-    if (!data.ok) throw new Error(data.error || 'Form bulunamadı.');
-
-    // (senin mevcut form çizim kodun)
-    els.title.textContent = data.form.title || slug;
-    // data.form.schema.questions ... -> formu oluştur
-  } catch (e) {
-    els.err.hidden = false;
-    els.err.textContent = `Yüklenemedi: ${e.message}`;
-    if (els.send) els.send.disabled = true;
-  }
-})();
-<script src="/form.js" defer></script>
+  <script src="/form.js" defer></script>
 </body>
 </html>
