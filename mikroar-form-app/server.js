@@ -253,7 +253,7 @@ app.get('/f/:code', async (req, res) => {
     } catch (_) {/* tablo yoksa sessiz */}
 
     res.set('Cache-Control', 'no-store');
-    return res.redirect(302, `/form.html?slug=${encodeURIComponent(slug)}`);
+   res.sendFile(path.join(__dirname, 'public', 'form.html'));
   } catch (e) {
     return res.status(500).send('Shortlink yönlendirme hatası.');
   }
