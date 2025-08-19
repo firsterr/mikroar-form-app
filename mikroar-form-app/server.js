@@ -10,6 +10,7 @@ import pkg from 'pg';
 import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
+import { randomBytes } from 'crypto';
 
 dotenv.config();
 const { Pool } = pkg;
