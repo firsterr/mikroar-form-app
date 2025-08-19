@@ -10,6 +10,56 @@
     sendBtn: qs("#sendBtn")
   };
 
+  // 1) Inline JSON var mı? (SSR yolu /f/:slug)
+  const inline = document.getElementById('__FORM_DATA__');
+  let presetData = null;
+  if (inline) {
+    try { presetData = JSON.parse(inline.textContent); } catch {}
+  }
+
+  // 2) Slug (yalnızca /form.html?slug=... için gerekiyor)
+  const slug = new URLSearchParams(location.search).get("slug") || (presetData?.form?.slug || "");
+
+  // ... aşağısı aynen kalsın; loadForm içinde:
+  async function loadForm() {
+    try {
+      showLoading(true);
+
+      let data;
+      if (presetData) {
+        // SSR ile geldi: direkt kullan
+        data = presetData;
+      } else {
+        // Eski yol: API'den çek
+        const res = await fetch(`/api/forms/${encodeURIComponent(slug)}`, { cache: "no-store" });
+        if (!res.ok) throw new Error("Form yüklenemedi");
+        data = await res.json();
+      }
+
+      if (!data?.ok || !data.form) throw new Error("Form bulunamadı");
+
+      const form = data.form;
+      const schema = form.schema || {};
+      const questions = schema.questions || [];
+
+      els.title && (els.title.textContent = form.title || slug);
+      document.title = `${form.title || slug} – Anket`;
+
+      els.questions.innerHTML = "";
+      questions.forEach((q, idx) => els.questions.appendChild(buildQuestion(q, idx)));
+
+      showLoading(false);
+
+      // submit ... (senin mevcut kodun)
+    } catch (err) {
+      // hata yönetimi ... (mevcut kodun)
+    }
+  }
+
+  // ... dosyanın kalanı aynı ...
+  loadForm();
+})();
+
   const slug = new URLSearchParams(location.search).get("slug") || "";
   if (!slug) { location.href = "/index.html"; return; }
 
