@@ -48,8 +48,43 @@
 
     // 1) slug tespiti: ?slug=... varsa onu kullan; yoksa /f/:code yolunda kodu çöz
     async function resolveSlug() {
-      const qp = new URLSearchParams(location.search);
-      const slug = (qp.get('slug') || '').trim();
+      <script>
+(async () => {
+  const $ = s => document.querySelector(s);
+  const els = { title: $('#title'), form: $('#form'), err: $('#err'), send: $('#send') };
+
+  // 1) slug varsa doğrudan kullan; yoksa /f/<code>'dan çöz
+  async function resolveSlug() {
+    const qp = new URLSearchParams(location.search);
+    const s = (qp.get('slug') || '').trim();
+    if (s) return s;
+
+    const m = location.pathname.match(/^\/f\/([A-Za-z0-9_-]{4,64})$/);
+    if (!m) throw new Error('slug veya kısa kod bulunamadı.');
+
+    const code = m[1];
+    const r = await fetch(`/api/resolve-short/${encodeURIComponent(code)}`);
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || 'Kısa kod çözülemedi.');
+    return j.slug;
+  }
+
+  try {
+    const slug = await resolveSlug();               // <<< DİKKAT: BURAYI KULLANIYORUZ
+    const resp = await fetch(`/api/forms/${encodeURIComponent(slug)}`);
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Form bulunamadı.');
+
+    // (senin mevcut form çizim kodun)
+    els.title.textContent = data.form.title || slug;
+    // data.form.schema.questions ... -> formu oluştur
+  } catch (e) {
+    els.err.hidden = false;
+    els.err.textContent = `Yüklenemedi: ${e.message}`;
+    if (els.send) els.send.disabled = true;
+  }
+})();
+</script>
       if (slug) return slug;
 
       const m = location.pathname.match(/^\/f\/([A-Za-z0-9_-]{4,64})$/);
