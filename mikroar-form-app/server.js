@@ -13,6 +13,30 @@ import { fileURLToPath } from 'url';
 dotenv.config();
 const { Pool } = pkg;
 
+// server.js (üst kısımda bir yere ekleyin)
+function pickClientIp(req) {
+  const chain = [
+    req.headers['cf-connecting-ip'],
+    req.headers['x-client-ip'],
+    req.headers['x-real-ip'],
+    req.headers['x-forwarded-for'], // "a, b, c" zinciri olabilir
+    req.ip,
+    req.socket?.remoteAddress,
+  ].filter(Boolean);
+
+  // IPv4 veya IPv6 yakala
+  const ipRE =
+    /(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?!$)|$)){4}|(?:(?:[A-F0-9]{1,4}:){1,7}[A-F0-9]{1,4})/i;
+
+  for (const v of chain) {
+    // zincirin ilk öğesini al, port varsa at
+    const first = String(v).split(',')[0].trim().replace(/:\d+$/, '');
+    const m = first.match(ipRE);
+    if (m) return m[0];
+  }
+  return null; // geçerli bir şey bulamadıysak
+}
+
 // ---- Env
 const PORT         = process.env.PORT || 3000;
 const DATABASE_URL = process.env.DATABASE_URL;
