@@ -142,17 +142,24 @@ async function listActiveForms(_req, res) {
 app.get('/api/forms-list', listActiveForms);
 app.get('/api/forms',      listActiveForms); // alias
 
-// Tek form şeması
-app.get('/api/forms/:slug', async (req, res) => {
+// --- RESPONSES LIST (for results.html) ---
+// Not: Basic Auth ile korunuyor
+app.get('/api/forms/:slug/responses', adminOnly, async (req, res) => {
   const { slug } = req.params;
   try {
     const { rows } = await pool.query(
-      'SELECT slug, title, active, schema FROM forms WHERE slug=$1',
+      `
+      SELECT 
+        created_at,
+        ip,
+        COALESCE(answers, payload) AS answers  -- answers yoksa payload
+      FROM responses
+      WHERE slug = $1
+      ORDER BY created_at DESC
+      `,
       [slug]
     );
-    if (!rows.length)             return res.status(404).json({ ok: false, error: 'Form bulunamadı' });
-    if (rows[0].active === false) return res.status(403).json({ ok: false, error: 'Form pasif' });
-    res.json({ ok: true, form: rows[0] });
+    res.json({ ok: true, rows });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
