@@ -13,7 +13,9 @@ import { fileURLToPath } from 'url';
 dotenv.config();
 const { Pool } = pkg;
 
-// server.js (üst kısımda bir yere ekleyin)
+// ───────────────────────────────────────────────────────────
+// IP seçimi (CF/Proxy zincirinden güvenle ayıkla)
+// ───────────────────────────────────────────────────────────
 function pickClientIp(req) {
   const chain = [
     req.headers['cf-connecting-ip'],
@@ -24,20 +26,21 @@ function pickClientIp(req) {
     req.socket?.remoteAddress,
   ].filter(Boolean);
 
-  // IPv4 veya IPv6 yakala
+  // IPv4 veya IPv6
   const ipRE =
     /(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?!$)|$)){4}|(?:(?:[A-F0-9]{1,4}:){1,7}[A-F0-9]{1,4})/i;
 
   for (const v of chain) {
-    // zincirin ilk öğesini al, port varsa at
-    const first = String(v).split(',')[0].trim().replace(/:\d+$/, '');
+    const first = String(v).split(',')[0].trim().replace(/:\d+$/, ''); // port varsa at
     const m = first.match(ipRE);
     if (m) return m[0];
   }
-  return null; // geçerli bir şey bulamadıysak
+  return null; // geçerli bir şey bulunamadı
 }
 
-// ---- Env
+// ───────────────────────────────────────────────────────────
+// Env
+// ───────────────────────────────────────────────────────────
 const PORT         = process.env.PORT || 3000;
 const DATABASE_URL = process.env.DATABASE_URL;
 const CORS_ORIGIN  = process.env.CORS_ORIGIN || '*';
@@ -54,38 +57,23 @@ if (!DATABASE_URL) {
   process.exit(1);
 }
 
-// ---- __dirname (ESM)
+// ───────────────────────────────────────────────────────────
+// __dirname (ESM)
+// ───────────────────────────────────────────────────────────
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
-// ---- DB
+// ───────────────────────────────────────────────────────────
+// DB
+// ───────────────────────────────────────────────────────────
 const pool = new Pool({ connectionString: DATABASE_URL });
 
-// ---- App
+// ───────────────────────────────────────────────────────────
+// App
+// ───────────────────────────────────────────────────────────
 const app = express();
 app.set('trust proxy', true);
-// İP'yi zincir içinden güvenli şekilde seçer
-function pickClientIp(req) {
-  const chain = [
-    req.headers['cf-connecting-ip'],
-    req.headers['x-client-ip'],
-    req.headers['x-real-ip'],
-    req.headers['x-forwarded-for'], // "a, b, c" şeklinde zincir olabilir
-    req.ip,
-    req.socket?.remoteAddress,
-  ].filter(Boolean);
 
-  // IPv4 veya IPv6
-  const ipRE =
-    /(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?!$)|$)){4}|(?:(?:[A-F0-9]{1,4}:){1,7}[A-F0-9]{1,4})/i;
-
-  for (const v of chain) {
-    const first = String(v).split(',')[0].trim().replace(/:\d+$/, ''); // varsa portu at
-    const m = first.match(ipRE);
-    if (m) return m[0];
-  }
-  return null;
-}
 // Güvenlik (embed uyumlu)
 app.use(helmet({
   contentSecurityPolicy: false,
@@ -93,43 +81,41 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-// -------------------------------------------------------
-// Yardımcılar: Basic Auth kontrol
-// -------------------------------------------------------
+// ───────────────────────────────────────────────────────────
+// Basic Auth yardımcıları
+// ───────────────────────────────────────────────────────────
 function isAdmin(req) {
   const cred = basicAuth(req);
   return cred && cred.name === ADMIN_USER && cred.pass === ADMIN_PASS;
 }
-
 function isGuest(req) {
   const cred = basicAuth(req);
   return cred && cred.name === GUEST_USER && cred.pass === GUEST_PASS;
 }
 
-// Belirli sayfalar için (admin VEYA misafir) koruması
+// Sayfa koruması (admin VEYA misafir)
 const PROTECTED_PAGES = new Set(['/', '/index.html', '/admin.html', '/results.html']);
-
 app.use((req, res, next) => {
   if (PROTECTED_PAGES.has(req.path)) {
     if (isAdmin(req) || isGuest(req)) return next();
     res.set('WWW-Authenticate', 'Basic realm="MikroAR"');
     return res.status(401).send('Unauthorized');
   }
-  return next();
+  next();
 });
 
 // Sadece admin için koruma (API’ler)
-function adminOnly(_req, res, next) {
-  if (isAdmin(_req)) return next();
+function adminOnly(req, res, next) {
+  if (isAdmin(req)) return next();
   res.set('WWW-Authenticate', 'Basic realm="MikroAR Admin API"');
   return res.status(401).send('Yetkisiz');
 }
 
-// -------------------------------------------------------
-// KÖK: alan adına göre davranış
-// - anket.mikroar.com  -> /admin.html
-// - form.mikroar.com   -> /index.html (form seç)
-// -------------------------------------------------------
+// ───────────────────────────────────────────────────────────
+// Alan adına göre kök yönlendirme
+// anket.mikroar.com  -> /admin.html
+// form.mikroar.com   -> /index.html
+// ───────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
   const host = (req.hostname || '').toLowerCase();
   if (host === 'anket.mikroar.com') {
@@ -160,17 +146,17 @@ app.get(['/form', '/form.html'], async (req, res, next) => {
   }
 });
 
-// -------------------------------------------------------
-// CORS + body parsers + log
-// -------------------------------------------------------
+// ───────────────────────────────────────────────────────────
+// CORS + Parsers + Log
+// ───────────────────────────────────────────────────────────
 app.use(cors({ origin: CORS_ORIGIN, credentials: false }));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('combined'));
 
-// =======================================================
-// ================   PUBLIC API’LER   ===================
-// =======================================================
+// ───────────────────────────────────────────────────────────
+// PUBLIC API’LER
+// ───────────────────────────────────────────────────────────
 async function listActiveForms(_req, res) {
   try {
     const { rows } = await pool.query(
@@ -187,8 +173,7 @@ async function listActiveForms(_req, res) {
 app.get('/api/forms-list', listActiveForms);
 app.get('/api/forms',      listActiveForms); // alias
 
-// --- RESPONSES LIST (for results.html) ---
-// Not: Basic Auth ile korunuyor
+// Sonuçlar (results.html) — Basic Auth ile korunuyor
 app.get('/api/forms/:slug/responses', adminOnly, async (req, res) => {
   const { slug } = req.params;
   try {
@@ -197,9 +182,9 @@ app.get('/api/forms/:slug/responses', adminOnly, async (req, res) => {
       SELECT 
         created_at,
         ip,
-        COALESCE(answers, payload) AS answers  -- answers yoksa payload
+        COALESCE(answers, payload) AS answers
       FROM responses
-      WHERE slug = $1
+      WHERE form_slug = $1
       ORDER BY created_at DESC
       `,
       [slug]
@@ -210,12 +195,13 @@ app.get('/api/forms/:slug/responses', adminOnly, async (req, res) => {
   }
 });
 
-// CEVAP KAYDI
+// Cevap Kaydı
 app.post('/api/forms/:slug/submit', async (req, res) => {
   const { slug } = req.params;
   const answers = req.body?.answers || {};
 
   try {
+    // Formu ve şemasını al
     const { rows } = await pool.query(
       'SELECT schema, active FROM forms WHERE slug=$1',
       [slug]
@@ -224,46 +210,45 @@ app.post('/api/forms/:slug/submit', async (req, res) => {
       return res.status(404).json({ ok: false, error: 'Form bulunamadı veya pasif' });
     }
 
+    // Zorunlu kontrolü
     const qs = rows[0].schema?.questions || [];
     const missing = [];
-
     for (let i = 0; i < qs.length; i++) {
       const q = qs[i] || {};
       if (!q.required) continue;
 
       // Hem q_0/q_1... hem de label anahtarlı gönderimleri kabul et
       const val = answers[`q_${i}`] ?? answers[q.label];
-
-      const doluMu = (q.type === 'checkbox')
+      const filled = (q.type === 'checkbox')
         ? Array.isArray(val) && val.length > 0
         : (val != null && String(val).trim() !== '');
-
-      if (!doluMu) missing.push(q.label || `Soru ${i + 1}`);
+      if (!filled) missing.push(q.label || `Soru ${i + 1}`);
     }
-
     if (missing.length) {
-      return res.status(400).json({
-        ok: false,
-        error: 'Eksik zorunlu alanlar',
-        missing
-      });
+      return res.status(400).json({ ok: false, error: 'Eksik zorunlu alanlar', missing });
     }
 
+    // IP'yi güvenli şekilde al
+    const ip = pickClientIp(req) || req.ip || null;
+
+    // Kaydet
     await pool.query(
       'INSERT INTO responses(form_slug, answers, ip) VALUES ($1, $2, $3)',
-      [slug, answers, req.ip]
+      [slug, answers, ip]
     );
+
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
-// ---- Statik dosyalar (public/)
+
+// Statik dosyalar
 app.use(express.static(path.join(__dirname, 'public')));
 
-// =======================================================
-// ===================   ADMIN API   =====================
-// =======================================================
+// ───────────────────────────────────────────────────────────
+// ADMIN API’LER
+// ───────────────────────────────────────────────────────────
 app.get('/admin/api/forms', adminOnly, async (_req, res) => {
   try {
     const { rows } = await pool.query(
@@ -275,7 +260,7 @@ app.get('/admin/api/forms', adminOnly, async (_req, res) => {
   }
 });
 
-// Admin: form oluştur/güncelle
+// Form oluştur/güncelle
 app.post('/admin/api/forms', adminOnly, async (req, res) => {
   try {
     let { slug, title, active = true, schema, questions } = req.body || {};
@@ -299,12 +284,21 @@ app.post('/admin/api/forms', adminOnly, async (req, res) => {
   }
 });
 
-// Admin: yanıtlar
+// Admin: yanıtlar (eski/veri uyumluluğu)
 app.get('/admin/forms/:slug/responses.json', adminOnly, async (req, res) => {
   const { slug } = req.params;
   try {
     const { rows } = await pool.query(
-      'SELECT id, payload, user_agent, ip, created_at FROM responses WHERE form_slug=$1 ORDER BY created_at DESC',
+      `
+      SELECT id,
+             COALESCE(answers, payload) AS answers,
+             user_agent,
+             ip,
+             created_at
+        FROM responses
+       WHERE form_slug=$1
+       ORDER BY created_at DESC
+      `,
       [slug]
     );
     res.json({ ok: true, rows });
@@ -313,7 +307,7 @@ app.get('/admin/forms/:slug/responses.json', adminOnly, async (req, res) => {
   }
 });
 
-// Admin: sayaç
+// Sayaç
 app.get('/admin/forms/:slug/stats', adminOnly, async (req, res) => {
   const { slug } = req.params;
   try {
