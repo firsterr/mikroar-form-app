@@ -65,6 +65,28 @@ const pool = new Pool({ connectionString: DATABASE_URL });
 const app = express();
 app.set('trust proxy', true);
 
+// İP'yi zincir içinden güvenli şekilde seçer
+function pickClientIp(req) {
+  const chain = [
+    req.headers['cf-connecting-ip'],
+    req.headers['x-client-ip'],
+    req.headers['x-real-ip'],
+    req.headers['x-forwarded-for'], // "a, b, c" şeklinde zincir olabilir
+    req.ip,
+    req.socket?.remoteAddress,
+  ].filter(Boolean);
+
+  // IPv4 veya IPv6
+  const ipRE =
+    /(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?!$)|$)){4}|(?:(?:[A-F0-9]{1,4}:){1,7}[A-F0-9]{1,4})/i;
+
+  for (const v of chain) {
+    const first = String(v).split(',')[0].trim().replace(/:\d+$/, ''); // port varsa at
+    const m = first.match(ipRE);
+    if (m) return m[0];
+  }
+  return null;
+}
 // Güvenlik (embed uyumlu)
 app.use(helmet({
   contentSecurityPolicy: false,
