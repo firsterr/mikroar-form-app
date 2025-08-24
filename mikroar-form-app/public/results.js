@@ -1,254 +1,183 @@
-/* Results page – robust binding + Turkish-safe column canonizer */
+// public/results.js
+(() => {
+  const $ = (s, p = document) => p.querySelector(s);
 
-const $ = (sel) => document.querySelector(sel);
-const elAny = (...ids) => {
-  for (const id of ids) {
-    const e = document.getElementById(id);
-    if (e) return e;
-  }
-  return null;
-};
-
-// ---------- Canonicalization (çift sütunları engeller)
-
-const canon = (v) => {
-  if (v == null) return "";
-  return v
-    .toString()
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "") // combining marks (İ'deki nokta dâhil)
-    .replace(/ı/g, "i")
-    .replace(/İ/g, "i")
-    .replace(/ş/g, "s")
-    .replace(/ğ/g, "g")
-    .replace(/ç/g, "c")
-    .replace(/ö/g, "o")
-    .replace(/ü/g, "u")
-    .replace(/â|ê|î|ô|û/g, (m) => m[0])
-    .replace(/[^a-z0-9]+/g, "")
-    .trim();
-};
-
-const txt = (v) => (Array.isArray(v) ? v.join(", ") : v == null ? "" : String(v));
-
-// ---------- API
-
-async function fetchSchema(slug) {
-  const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`, { credentials: "same-origin" });
-  if (!r.ok) throw new Error(`Şema yüklenemedi HTTP ${r.status}`);
-  const j = await r.json();
-  if (!j.ok) throw new Error(j.error || "Şema hatası");
-  return j.form;
-}
-
-async function fetchResponses(slug) {
-  const r = await fetch(`/admin/forms/${encodeURIComponent(slug)}/responses.json`, {
-    credentials: "same-origin",
-  });
-  if (!r.ok) throw new Error(`Yanıtlar yüklenemedi HTTP ${r.status}`);
-  return await r.json();
-}
-
-// ---------- Şema -> kolonlar
-
-function buildColumns(form) {
-  const cols = [
-    { label: "Tarih", key: "__date" },
-    { label: "IP", key: "__ip" },
-  ];
-  const seen = new Map();
-  seen.set(canon("Tarih"), 0);
-  seen.set(canon("IP"), 1);
-
-  const questions = (form?.schema?.questions ?? []).filter(Boolean);
-  questions.forEach((q, i) => {
-    const label = q?.label || `Soru ${i + 1}`;
-    const c = canon(label);
-    if (!seen.has(c)) {
-      seen.set(c, cols.length);
-      cols.push({ label, key: c });
-    }
-  });
-
-  return { cols, seen, questions };
-}
-
-// payload -> canonKey/value eşlemesi (answers / q_# / düz anahtar)
-function extractAnswerMap(payload, questions) {
-  const out = new Map();
-  if (!payload || typeof payload !== "object") return out;
-
-  // yeni
-  if (payload.answers && typeof payload.answers === "object") {
-    for (const [k, v] of Object.entries(payload.answers)) out.set(canon(k), txt(v));
-    return out;
-  }
-
-  // q_#
-  let usedIndex = false;
-  for (const [k, v] of Object.entries(payload)) {
-    const m = /^q_(\d+)$/i.exec(k);
-    if (m) {
-      usedIndex = true;
-      const ix = Number(m[1]);
-      const label = questions[ix]?.label || `Soru ${ix + 1}`;
-      out.set(canon(label), txt(v));
-    }
-  }
-  if (usedIndex) return out;
-
-  // düz
-  for (const [k, v] of Object.entries(payload)) out.set(canon(k), txt(v));
-  return out;
-}
-
-function buildRows(responses, cols, questions) {
-  const rows = [];
-  for (const rec of responses) {
-    const map = extractAnswerMap(rec.payload, questions);
-    const row = new Array(cols.length).fill("");
-    row[0] = rec.created_at ? new Date(rec.created_at).toLocaleString("tr-TR") : "";
-    row[1] = rec.ip || rec.ip_address || "";
-
-    for (let ci = 2; ci < cols.length; ci++) {
-      const key = cols[ci].key;
-      row[ci] = map.get(key) ?? "";
-    }
-    rows.push(row);
-  }
-  return rows;
-}
-
-// ---------- Render
-
-function renderTable(cols, rows) {
-  const thead = $("#tbl thead");
-  const tbody = $("#tbl tbody");
-  if (!thead || !tbody) return; // sayfa başka ise sessiz
-
-  thead.innerHTML = "";
-  tbody.innerHTML = "";
-
-  const trh = document.createElement("tr");
-  cols.forEach((c) => {
-    const th = document.createElement("th");
-    th.textContent = c.label;
-    trh.appendChild(th);
-  });
-  thead.appendChild(trh);
-
-  rows.forEach((r) => {
-    const tr = document.createElement("tr");
-    r.forEach((cell) => {
-      const td = document.createElement("td");
-      td.textContent = cell;
-      tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
-  });
-
-  const stats = elAny("stats", "statsBadge", "istatistik");
-  if (stats) stats.textContent = `kayıt: ${rows.length}, sütun: ${cols.length}`;
-}
-
-// ---------- Copy / CSV
-
-function toTSV(cols, rows) {
-  const esc = (s) => String(s ?? "").replace(/\t/g, " ").replace(/\r?\n/g, " ");
-  const head = cols.map((c) => esc(c.label)).join("\t");
-  const body = rows.map((r) => r.map(esc).join("\t")).join("\n");
-  return head + "\n" + body;
-}
-
-function toCSV(cols, rows) {
-  const esc = (s) => {
-    const str = String(s ?? "").replace(/"/g, '""');
-    return /[",\r\n]/.test(str) ? `"${str}"` : str;
+  const el = {
+    slug: $('#slug'),
+    load: $('#btnLoad'),
+    stat: $('#stat'),
+    copy: $('#btnCopy'),
+    csv: $('#btnCSV'),
+    thead: $('#thead'),
+    tbody: $('#tbody'),
   };
-  const head = cols.map((c) => esc(c.label)).join(",");
-  const body = rows.map((r) => r.map(esc).join(",")).join("\n");
-  return head + "\n" + body;
-}
 
-// ---------- Load
+  let lastCols = [], lastRows = [];
 
-async function load() {
-  const slugInput = elAny("slug", "slugInput");
-  const stats = elAny("stats", "statsBadge", "istatistik");
-  if (!slugInput) return;
-  const slug = (slugInput.value || "").trim();
-  if (!slug) return;
+  // Soru başlığı normalizasyonu (çoğalmayı önlemek için)
+  const normKey = s => (s || '')
+    .toString()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // aksanları at
+    .toLowerCase()
+    .replace(/\?/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 
-  if (stats) stats.textContent = "yükleniyor…";
+  el.load.addEventListener('click', load);
+  el.slug.addEventListener('keydown', (e) => { if (e.key === 'Enter') load(); });
+  el.copy.addEventListener('click', copyTSV);
+  el.csv.addEventListener('click', downloadCSV);
 
-  try {
-   const form = await fetchSchema(slug);
-const { cols, seen, questions } = buildColumns(form);
-const responsesRaw = await fetchResponses(slug);
+  async function load() {
+    const slug = (el.slug.value || '').trim();
+    if (!slug) return;
 
-// Çeşitli şekiller için normalize: [], {rows:[]}, {data:[]}, {items:[]}
-const responses = Array.isArray(responsesRaw)
-  ? responsesRaw
-  : Array.isArray(responsesRaw?.rows)
-  ? responsesRaw.rows
-  : Array.isArray(responsesRaw?.data)
-  ? responsesRaw.data
-  : Array.isArray(responsesRaw?.items)
-  ? responsesRaw.items
-  : [];
+    // UI reset + yükleniyor
+    el.stat.textContent = 'yükleniyor…';
+    el.thead.innerHTML = '';
+    el.tbody.innerHTML = '';
+    lastCols = []; lastRows = [];
 
-// Şemada olmayan ama yanıtlarda görülen extra anahtarlar için kolon aç
-for (const rec of responses) {
-  const m = extractAnswerMap(rec.payload, questions);
-  for (const k of m.keys()) {
-    if (!seen.has(k)) {
-      seen.set(k, cols.length);
-      cols.push({ label: k, key: k });
+    try {
+      // 1) Şema
+      const formRes = await fetchJSON(`/api/forms/${encodeURIComponent(slug)}`);
+      const schemaQ = Array.isArray(formRes?.form?.schema)
+        ? formRes.form.schema
+        : Array.isArray(formRes?.form?.schema?.questions)
+        ? formRes.form.schema.questions
+        : [];
+
+      // Kanonik başlıklar
+      const canonByNorm = new Map();
+      const cols = [
+        { key: 'created_at', label: 'Tarih' },
+        { key: 'ip',         label: 'IP' }
+      ];
+
+      for (const q of schemaQ) {
+        const label = q?.label ?? '';
+        const nk = normKey(label);
+        if (!canonByNorm.has(nk)) {
+          canonByNorm.set(nk, label);
+          cols.push({ key: label, label });
+        }
+      }
+
+      // 2) Yanıtlar
+      const raw = await fetchJSON(`/admin/forms/${encodeURIComponent(slug)}/responses.json`);
+      const responses = Array.isArray(raw)
+        ? raw
+        : Array.isArray(raw?.rows)
+        ? raw.rows
+        : Array.isArray(raw?.data)
+        ? raw.data
+        : Array.isArray(raw?.items)
+        ? raw.items
+        : [];
+
+      // Sadece yanıtlarda görünen yeni başlıklar
+      for (const rec of responses) {
+        const ans = answersObject(rec?.payload);
+        for (const k of Object.keys(ans)) {
+          const nk = normKey(k);
+          if (!canonByNorm.has(nk)) {
+            canonByNorm.set(nk, k);
+            cols.push({ key: k, label: canonByNorm.get(nk) });
+          }
+        }
+      }
+
+      // Başlık çiz
+      renderHead(cols);
+
+      // Satırlar
+      const rows = responses.map((rec) => {
+        const ans = answersObject(rec?.payload);
+        const base = {
+          created_at: fmt(rec.created_at || rec.createdAt || rec.created || rec.inserted_at),
+          ip: rec.ip || rec.ip_address || rec.client_ip || ''
+        };
+
+        // Yanıtları normalleştir → kanonik başlığa eşle
+        const byNorm = {};
+        for (const [k, v] of Object.entries(ans)) byNorm[normKey(k)] = v;
+
+        for (const c of cols.slice(2)) { // tarih+ip harici
+          const want = normKey(c.label);
+          let val = byNorm[want];
+          if (Array.isArray(val)) val = val.join(', ');
+          base[c.key] = (val ?? '').toString();
+        }
+        return base;
+      });
+
+      renderBody(cols, rows);
+      el.stat.textContent = `kayıt: ${rows.length}, sütun: ${cols.length}`;
+      lastCols = cols;
+      lastRows = rows;
+
+    } catch (err) {
+      console.error(err);
+      el.stat.textContent = `hata: ${err.message || err}`;
     }
   }
-}
 
-const rows = buildRows(responses, cols, questions);
-renderTable(cols, rows);
-
-    // Kopyala/CSV tuşları
-    const btnCopy = elAny("btnCopy", "copyBtn", "copyTSV");
-    const btnCsv = elAny("btnCsv", "csvBtn", "downloadCsv");
-    btnCopy && (btnCopy.onclick = async () => {
-      const tsv = toTSV(cols, rows);
-      await navigator.clipboard.writeText(tsv);
-      btnCopy.textContent = "Kopyalandı!";
-      setTimeout(() => (btnCopy.textContent = "Kopyala (TSV)"), 1200);
-    });
-    btnCsv && (btnCsv.onclick = () => {
-      const csv = toCSV(cols, rows);
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `${slug}.csv`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    });
-  } catch (e) {
-    console.error(e);
-    if (stats) stats.textContent = `hata: ${e.message}`;
+  function answersObject(payload) {
+    if (!payload) return {};
+    const obj = payload.answers ?? payload;
+    return (obj && typeof obj === 'object') ? obj : {};
   }
-}
 
-// ---------- Binding (ID farklarına toleranslı)
+  async function fetchJSON(url) {
+    const r = await fetch(url, { credentials: 'include' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  }
 
-(function bind() {
-  const loadBtn = elAny("loadBtn", "btnLoad", "yukleBtn");
-  const slugInput = elAny("slug", "slugInput");
+  function renderHead(cols) {
+    el.thead.innerHTML = `<tr>${cols.map(c => `<th>${esc(c.label)}</th>`).join('')}</tr>`;
+  }
 
-  loadBtn && loadBtn.addEventListener("click", load);
-  slugInput && slugInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") load();
-  });
+  function renderBody(cols, rows) {
+    el.tbody.innerHTML = rows.map(r => (
+      `<tr>${cols.map(c => `<td>${esc(r[c.key] ?? '')}</td>`).join('')}</tr>`
+    )).join('');
+  }
 
-  // sayfa açılışında input dolu ise otomatik yükle
-  window.addEventListener("DOMContentLoaded", () => {
-    if (slugInput && slugInput.value.trim()) load();
-  });
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, m => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[m]));
+  }
+
+  function tsv(cols, rows) {
+    const head = cols.map(c => c.label).join('\t');
+    const body = rows.map(r => cols.map(c => (r[c.key] ?? '').toString().replace(/\t/g, ' ').replace(/\r?\n/g, ' ')).join('\t'));
+    return [head, ...body].join('\n');
+  }
+
+  function copyTSV() {
+    if (!lastCols.length) return;
+    navigator.clipboard.writeText(tsv(lastCols, lastRows));
+  }
+
+  function downloadCSV() {
+    if (!lastCols.length) return;
+    const csv = tsv(lastCols, lastRows).replace(/\t/g, ',');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (el.slug.value.trim() || 'results') + '.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function fmt(x) {
+    if (!x) return '';
+    try {
+      const d = new Date(x);
+      if (!isNaN(d)) return d.toLocaleString('tr-TR');
+    } catch {}
+    return String(x);
+  }
 })();
