@@ -64,7 +64,6 @@ const pool = new Pool({ connectionString: DATABASE_URL });
 // ---- App
 const app = express();
 app.set('trust proxy', true);
-
 // İP'yi zincir içinden güvenli şekilde seçer
 function pickClientIp(req) {
   const chain = [
@@ -81,13 +80,12 @@ function pickClientIp(req) {
     /(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?!$)|$)){4}|(?:(?:[A-F0-9]{1,4}:){1,7}[A-F0-9]{1,4})/i;
 
   for (const v of chain) {
-    const first = String(v).split(',')[0].trim().replace(/:\d+$/, ''); // port varsa at
+    const first = String(v).split(',')[0].trim().replace(/:\d+$/, ''); // varsa portu at
     const m = first.match(ipRE);
     if (m) return m[0];
   }
   return null;
 }
-
 // Güvenlik (embed uyumlu)
 app.use(helmet({
   contentSecurityPolicy: false,
