@@ -5,62 +5,49 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Sonuçlar</title>
   <style>
-    :root{
-      --bg:#0b1220; --card:#121a2b; --muted:#7d8aa6; --text:#e8eefc; --accent:#3b82f6;
-      --row:#0f1626; --border:#202a40;
-    }
-    *{box-sizing:border-box}
-    html,body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif}
-    .container{max-width:1200px;margin:32px auto;padding:0 16px}
-    h1{margin:0 0 16px;font-weight:800;letter-spacing:.3px}
-    .bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:12px 0 20px}
-    .input, .btn{
-      height:40px;border-radius:10px;border:1px solid var(--border);
-      background:var(--card);color:var(--text);padding:0 12px;font-size:14px;
-    }
-    .input{min-width:260px}
-    .btn{background:var(--accent);border-color:transparent;color:#fff;cursor:pointer}
-    .chip{background:var(--card);border:1px solid var(--border);border-radius:999px;padding:8px 12px;color:var(--muted);font-size:14px}
-
-    /* ---- tablo ---- */
-    .table-wrap{border:1px solid var(--border);border-radius:12px;background:var(--card);overflow-x:auto}
-    table{border-collapse:separate;border-spacing:0;table-layout:fixed;min-width:100%}
-    thead{background:var(--row)}
-    th,td{border-bottom:1px solid var(--border);padding:14px 12px;vertical-align:top;word-break:break-word}
-    th{font-weight:700;text-align:left}
-    tr:last-child td{border-bottom:none}
-    /* sütun genişlikleri colgroup ile gelecek ama başlık uyumu için min-width yedekleri */
-    th.date,td.date{min-width:180px}
-    th.ip,td.ip{min-width:160px}
-    th.q,td.q{min-width:260px}
+    body{font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#0b1320;color:#e6edf6;margin:0}
+    .wrap{max-width:1200px;margin:32px auto;padding:0 16px}
+    h1{font-size:40px;margin:0 0 16px}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    input[type=text]{background:#0f1b2d;border:1px solid #2a3551;color:#e6edf6;border-radius:12px;padding:12px 14px;min-width:280px}
+    button{background:#2e63ff;border:0;color:#fff;padding:12px 16px;border-radius:12px;cursor:pointer}
+    button[disabled]{opacity:.45;cursor:not-allowed}
+    .badge{background:#0f1b2d;border:1px solid #2a3551;color:#b7c4e2;padding:10px 12px;border-radius:999px}
+    .pill{background:#0f1b2d;border:1px solid #2a3551;color:#b7c4e2;padding:8px 10px;border-radius:999px}
+    .spacer{flex:1}
+    .table-wrap{margin-top:16px;border:1px solid #2a3551;border-radius:16px;overflow:auto;background:#0f1b2d}
+    table{width:100%;border-collapse:collapse;min-width:800px}
+    th,td{border-bottom:1px solid #1e2a46;padding:12px 14px;vertical-align:top}
+    th{position:sticky;top:0;background:#0f1b2d;font-weight:700}
   </style>
 </head>
 <body>
-  <div class="container">
+  <main class="wrap">
     <h1>Sonuçlar</h1>
 
-    <div class="bar">
-      <label class="sr-only" for="slug"></label>
-      <input id="slug" class="input" placeholder="Slug" />
-      <button id="loadBtn" class="btn">Yükle</button>
-
-      <div id="meta" class="chip">kayıt: 0, sütun: 0</div>
-
-      <button id="copyBtn" class="btn" style="margin-left:auto;background:#334155">Kopyala (TSV)</button>
-      <button id="csvBtn" class="btn">CSV indir</button>
+    <div class="row">
+      <input id="slug" type="text" placeholder="slug (örn: 807612)" />
+      <button id="btnLoad">Yükle</button>
+      <span id="badgeMeta" class="badge">kayıt: 0, sütun: 0</span>
+      <div class="spacer"></div>
+      <button id="btnCopy" disabled>Kopyala (TSV)</button>
+      <button id="btnCsv" disabled>CSV indir</button>
     </div>
 
-    <div class="bar" id="tags"></div>
+    <div class="row" style="margin-top:12px">
+      <span id="badgeTitle" class="pill"></span>
+      <span id="badgeActive" class="pill"></span>
+    </div>
 
     <div class="table-wrap">
-      <table id="tbl">
-        <colgroup id="colgroup"><!-- JS doldurur --></colgroup>
-        <thead><tr id="headRow"></tr></thead>
-        <tbody id="bodyRows"></tbody>
+      <table>
+        <thead id="thead"></thead>
+        <tbody id="tbody"></tbody>
       </table>
     </div>
-  </div>
+  </main>
 
-  <script src="results.js"></script>
+  <!-- ÖNEMLİ: defer -->
+  <script src="results.js" defer></script>
 </body>
 </html>
