@@ -183,23 +183,34 @@ async function load() {
   if (stats) stats.textContent = "yükleniyor…";
 
   try {
-    const form = await fetchSchema(slug);
-    const { cols, seen, questions } = buildColumns(form);
-    const responses = await fetchResponses(slug);
+   const form = await fetchSchema(slug);
+const { cols, seen, questions } = buildColumns(form);
+const responsesRaw = await fetchResponses(slug);
 
-    // Şemada olmayan ama yanıtlarda görülen extra anahtarlar için kolon aç
-    for (const rec of responses) {
-      const m = extractAnswerMap(rec.payload, questions);
-      for (const k of m.keys()) {
-        if (!seen.has(k)) {
-          seen.set(k, cols.length);
-          cols.push({ label: k, key: k });
-        }
-      }
+// Çeşitli şekiller için normalize: [], {rows:[]}, {data:[]}, {items:[]}
+const responses = Array.isArray(responsesRaw)
+  ? responsesRaw
+  : Array.isArray(responsesRaw?.rows)
+  ? responsesRaw.rows
+  : Array.isArray(responsesRaw?.data)
+  ? responsesRaw.data
+  : Array.isArray(responsesRaw?.items)
+  ? responsesRaw.items
+  : [];
+
+// Şemada olmayan ama yanıtlarda görülen extra anahtarlar için kolon aç
+for (const rec of responses) {
+  const m = extractAnswerMap(rec.payload, questions);
+  for (const k of m.keys()) {
+    if (!seen.has(k)) {
+      seen.set(k, cols.length);
+      cols.push({ label: k, key: k });
     }
+  }
+}
 
-    const rows = buildRows(responses, cols, questions);
-    renderTable(cols, rows);
+const rows = buildRows(responses, cols, questions);
+renderTable(cols, rows);
 
     // Kopyala/CSV tuşları
     const btnCopy = elAny("btnCopy", "copyBtn", "copyTSV");
