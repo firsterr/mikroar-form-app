@@ -66,9 +66,9 @@ const joinVals = (v) => Array.isArray(v) ? v.join(', ') : (v ?? '');
 
 function looksLikeQKey(k){
   // q0, q_0, q-0, "q 0" hepsini yakala
-  const m = /^q[\s_\-]?(\d+)$/i.exec((k ?? '').toString().trim());
-  return m ? Number(m[1]) : null;
-}
+  //const m = /^q[\s_\-]?(\d+)$/i.exec((k ?? '').toString().trim());
+  //return m ? Number(m[1]) : null;
+//}
 
 // gevşek eşleşme: eşit || biri diğerini kapsıyor
 function isMatchLoose(a, b){
