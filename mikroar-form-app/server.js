@@ -259,14 +259,10 @@ app.get('/admin/forms/:slug/stats', adminOnly, async (req, res) => {
   }
 });
 
-// Sağlık
-app.get('/health', async (_req, res) => {
-  try {
-    await pool.query('SELECT 1');
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
+// --- Sağlık kontrolü (Render health-check için hafif uç) ---
+app.get('/health', (_req, res) => {
+  // DB'ye dokunmadan 200 OK dön
+  res.status(200).type('text/plain').send('ok');
 });
 
 // Start
