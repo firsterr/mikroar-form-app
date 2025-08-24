@@ -26,7 +26,7 @@ function pickClientIp(req) {
     req.socket?.remoteAddress,
   ].filter(Boolean);
 
-  // IPv4 veya IPv6
+  // IPv4 veya IPv6 (IPv6-mapped dahil)
   const ipRE =
     /(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?!$)|$)){4}|(?:(?:[A-F0-9]{1,4}:){1,7}[A-F0-9]{1,4})/i;
 
@@ -173,43 +173,25 @@ async function listActiveForms(_req, res) {
 app.get('/api/forms-list', listActiveForms);
 app.get('/api/forms',      listActiveForms); // alias
 
-app.post('/api/forms/:slug/submit', async (req, res) => {
+// Form detay (form.html bu rotayı kullanır)
+app.get('/api/forms/:slug', async (req, res) => {
   const { slug } = req.params;
-
-  // IP ve UA
-  const ip =
-    pickClientIp(req) ||
-    (req.headers['x-forwarded-for'] || '').split(',')[0].trim() ||
-    req.ip ||
-    '';
-  const ua = String(req.headers['user-agent'] || '');
-
-  // yük doğrulama
-  const payload = req.body;
-  if (!payload || typeof payload !== 'object') {
-    return res.status(400).json({ ok: false, error: 'invalid_payload' });
-  }
-
   try {
-    await pool.query(
-      `INSERT INTO responses (slug, ip, user_agent, payload)
-       VALUES ($1, $2, $3, $4)`,
-      [slug, ip, ua, payload]
+    const { rows } = await pool.query(
+      `SELECT slug, title, active, schema
+         FROM forms
+        WHERE slug = $1
+        LIMIT 1`,
+      [slug]
     );
-
-    return res.json({ ok: true });
-  } catch (e) {
-    // Aynı IP aynı formu daha önce göndermiş
-    if (e && e.code === '23505') {
-      return res
-        .status(409)
-        .json({ ok: false, error: 'already_submitted' });
+    if (!rows.length) {
+      return res.status(404).json({ ok: false, error: 'Form bulunamadı' });
     }
-    // diğer hatalar
-    return res.status(500).json({ ok: false, error: e.message });
+    res.json({ ok: true, form: rows[0] });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
-
 
 // Sonuçlar (results.html) — Basic Auth ile korunuyor
 app.get('/api/forms/:slug/responses', adminOnly, async (req, res) => {
@@ -233,10 +215,10 @@ app.get('/api/forms/:slug/responses', adminOnly, async (req, res) => {
   }
 });
 
-// Cevap Kaydı
+// Cevap Kaydı — TEK (doğru) submit rotası
 app.post('/api/forms/:slug/submit', async (req, res) => {
   const { slug } = req.params;
-  const answers = req.body?.answers || {};
+  const answers = (req.body && (req.body.answers ?? req.body)) || {};
 
   try {
     // Formu ve şemasını al
@@ -266,10 +248,10 @@ app.post('/api/forms/:slug/submit', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Eksik zorunlu alanlar', missing });
     }
 
-    // IP'yi güvenli şekilde al
+    // IP'yi güvenli şekilde al (inet tipine uygun)
     const ip = pickClientIp(req) || req.ip || null;
 
-    // Kaydet
+    // Kayıt (unique (form_slug, ip) varsa duplicate 409 döner)
     await pool.query(
       'INSERT INTO responses(form_slug, answers, ip) VALUES ($1, $2, $3)',
       [slug, answers, ip]
@@ -277,6 +259,10 @@ app.post('/api/forms/:slug/submit', async (req, res) => {
 
     res.json({ ok: true });
   } catch (e) {
+    if (e && e.code === '23505') {
+      // unique ihlali (aynı IP aynı formu tekrar denedi)
+      return res.status(409).json({ ok: false, error: 'already_submitted' });
+    }
     res.status(500).json({ ok: false, error: e.message });
   }
 });
