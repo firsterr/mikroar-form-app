@@ -122,42 +122,51 @@
       // Göster
       showLoading(false);
 
-      // Gönder
-      els.form.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        els.msg.textContent = "";
-        els.msg.className = "muted";
-        els.sendBtn.disabled = true;
+      formEl.addEventListener('submit', async (e) => {
+  e.preventDefault();
 
-        try {
-          const answers = collectAnswers(schema);
-          const resp = await fetch(`/api/forms/${encodeURIComponent(slug)}/submit`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ answers })
-          });
-          const j = await resp.json().catch(() => ({}));
-          if (!resp.ok || !j.ok) throw new Error(j.error || "Kayıt başarısız");
+  const qs = (currentForm.schema?.questions) || [];
+  const payload = { answers: {} };
+  const eksik = [];
 
-          els.msg.textContent = "Cevaplarınız kaydedildi. Teşekkürler!";
-          els.msg.className = "ok";
-          els.form.reset();
-        } catch (err) {
-          els.msg.textContent = "Gönderilemedi: " + (err.message || err);
-          els.msg.className = "error";
-        } finally {
-          els.sendBtn.disabled = false;
-        }
-      });
-    } catch (err) {
-      // Başlık yine boş görünmesin
-      if (!els.title.textContent.trim()) els.title.textContent = "Anket";
-      els.msg.textContent = "Yüklenemedi: " + (err.message || err);
-      els.msg.className = "error";
-      showLoading(false);
-      els.form.style.display = "none";
+  qs.forEach((q, i) => {
+    let val;
+
+    if (q.type === 'radio') {
+      const c = document.querySelector(`input[name="q${i}"]:checked`);
+      val = c ? c.value : '';
+    } else if (q.type === 'checkbox') {
+      val = [...document.querySelectorAll(`input[name="q${i}"]:checked`)].map(x => x.value);
+    } else {
+      const el = document.querySelector(`[name="q${i}"]`);
+      val = el ? el.value.trim() : '';
     }
+
+    payload.answers[`q_${i}`] = val;
+
+    if (q.required) {
+      const doluMu = (q.type === 'checkbox') ? (Array.isArray(val) && val.length > 0) : (val !== '');
+      if (!doluMu) eksik.push(q.label || `Soru ${i + 1}`);
+    }
+  });
+
+  if (eksik.length) {
+    alert(`Lütfen zorunlu soruları doldurun:\n- ${eksik.join('\n- ')}`);
+    return; // gönderme YOK
   }
 
-  loadForm();
-})();
+  const resp = await fetch(`/api/forms/${currentSlug}/submit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const data = await resp.json();
+
+  if (!resp.ok || !data.ok) {
+    alert(data.error || 'Kaydedilemedi');
+    return;
+  }
+
+  alert('Teşekkürler, yanıtınız kaydedildi.');
+  formEl.reset();
+});
