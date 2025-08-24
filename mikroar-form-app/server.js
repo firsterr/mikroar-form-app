@@ -158,38 +158,54 @@ app.get('/api/forms/:slug', async (req, res) => {
   }
 });
 
-// Yanıt kaydet
+// CEVAP KAYDI
 app.post('/api/forms/:slug/submit', async (req, res) => {
   const { slug } = req.params;
-  const payload  = req.body || {};
-  try {
-    const xff = req.headers['x-forwarded-for'];
-    const ip  = Array.isArray(xff)
-      ? xff[0]
-      : (typeof xff === 'string' ? xff.split(',')[0].trim() : req.ip || null);
+  const answers = req.body?.answers || {};
 
-    // Form aktif mi?
-    const chk = await pool.query(
-      'SELECT 1 FROM forms WHERE slug=$1 AND (active IS DISTINCT FROM false)',
+  try {
+    const { rows } = await pool.query(
+      'SELECT schema, active FROM forms WHERE slug=$1',
       [slug]
     );
-    if (chk.rowCount === 0) {
+    if (!rows.length || rows[0].active === false) {
       return res.status(404).json({ ok: false, error: 'Form bulunamadı veya pasif' });
     }
 
+    const qs = rows[0].schema?.questions || [];
+    const missing = [];
+
+    for (let i = 0; i < qs.length; i++) {
+      const q = qs[i] || {};
+      if (!q.required) continue;
+
+      // Hem q_0/q_1... hem de label anahtarlı gönderimleri kabul et
+      const val = answers[`q_${i}`] ?? answers[q.label];
+
+      const doluMu = (q.type === 'checkbox')
+        ? Array.isArray(val) && val.length > 0
+        : (val != null && String(val).trim() !== '');
+
+      if (!doluMu) missing.push(q.label || `Soru ${i + 1}`);
+    }
+
+    if (missing.length) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Eksik zorunlu alanlar',
+        missing
+      });
+    }
+
     await pool.query(
-      'INSERT INTO responses (form_slug, payload, user_agent, ip) VALUES ($1, $2, $3, $4)',
-      [slug, payload, req.get('user-agent') || null, ip]
+      'INSERT INTO responses(form_slug, answers, ip) VALUES ($1, $2, $3)',
+      [slug, answers, req.ip]
     );
     res.json({ ok: true });
   } catch (e) {
-    if (e.code === '23505') {
-      return res.status(409).json({ ok: false, error: 'Bu IP’den zaten yanıt gönderilmiş.' });
-    }
     res.status(500).json({ ok: false, error: e.message });
   }
 });
-
 // ---- Statik dosyalar (public/)
 app.use(express.static(path.join(__dirname, 'public')));
 
