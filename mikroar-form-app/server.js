@@ -86,7 +86,8 @@ function pickClientIp(req) {
     if (m) return m[0];
   }
   return null;
-}
+};
+
 // Güvenlik (embed uyumlu)
 app.use(helmet({
   contentSecurityPolicy: false,
