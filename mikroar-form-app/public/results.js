@@ -1,4 +1,4 @@
-/* MikroAR – Sonuçlar tablosu v2: sabit sütunlar + doğru eşleme */
+/* MikroAR – Sonuçlar tablosu v2.1: çok-biçimli alan eşleme */
 (async function () {
   const $ = (s) => document.querySelector(s);
   const slugInput = $('#slug');
@@ -27,35 +27,47 @@
     // 1) form şemasını al
     const formRes = await fetch(`/api/forms/${encodeURIComponent(slug)}`, { credentials: 'include' });
     if (!formRes.ok) { alert('Form bulunamadı / pasif.'); return; }
-    const formData = await formRes.json();
+    const formJson = await formRes.json();
 
-    const title = formData?.form?.title || '';
-    const qList = (formData?.form?.schema?.questions || []);
-    renderTags(title, formData?.form?.active, qList.length);
+    const title = formJson?.form?.title || '';
+    const qList = (formJson?.form?.schema?.questions || []);
+    renderTags(title, formJson?.form?.active, qList.length);
 
-    // 2) yanıtları al (BasicAuth gerektirir)
+    // 2) yanıtları al
     const respRes = await fetch(`/admin/forms/${encodeURIComponent(slug)}/responses.json`, { credentials: 'include' });
     if (!respRes.ok) { alert('Yanıtlar getirilemedi (auth / yetki).'); return; }
-    const respData = await respRes.json();
-    const rows = respData?.rows || [];
+    const respJson = await respRes.json();
 
-    // 3) tablo başlık + colgroup
+    // Farklı şekillerde dönebileceği için hepsini dene
+    const rows = (
+      respJson?.rows ||
+      respJson?.data ||
+      respJson?.items ||
+      (Array.isArray(respJson) ? respJson : [])
+    );
+
+    // 3) başlık + colgroup
     buildHeaderAndCols(qList);
 
-    // 4) satırları yaz
-    bodyRows.innerHTML = rows.map(r => {
-      const payload = r?.payload || {};
-      const answers = payload.answers || payload; // iki formatı da destekle
+    // 4) satırlar
+    bodyRows.innerHTML = rows.map((r) => {
+      // tarih: created_at / createdAt / created / inserted_at
+      const createdIso = r?.created_at ?? r?.createdAt ?? r?.created ?? r?.inserted_at ?? '';
+      // ip: ip / client_ip / remote_addr
+      const ip = r?.ip ?? r?.client_ip ?? r?.remote_addr ?? '';
+
+      // payload & answers
+      const payload  = r?.payload || {};
+      const answers  = payload?.answers || payload; // q_0, q_1… durumunu da destekler
 
       const cells = [];
-      cells.push(td(fmtDate(r.created_at), 'date'));
-      cells.push(td(r.ip || '', 'ip'));
+      cells.push(td(fmtDate(createdIso), 'date'));
+      cells.push(td(ip, 'ip'));
 
-      // şemadaki sıra ile yaz
       qList.forEach((q, i) => {
-        const label = q.label || `Soru ${i+1}`;
-        let v = (answers[label] !== undefined) ? answers[label] : answers[`q_${i}`];
-
+        const label = q?.label || `Soru ${i+1}`;
+        // Önce label ile, yoksa q_i ile
+        let v = (answers?.[label] !== undefined) ? answers[label] : answers[`q_${i}`];
         if (Array.isArray(v)) v = v.join(', ');
         if (v === undefined || v === null) v = '';
         cells.push(td(String(v), 'q'));
@@ -68,16 +80,12 @@
   }
 
   function buildHeaderAndCols(qList) {
-    // Başlık
     const heads = [];
     heads.push(th('Tarih','date'));
     heads.push(th('IP','ip'));
-    qList.forEach((q, i) => {
-      heads.push(th(q.label || `Soru ${i+1}`, 'q'));
-    });
+    qList.forEach((q, i) => heads.push(th(q?.label || `Soru ${i+1}`, 'q')));
     headRow.innerHTML = heads.join('');
 
-    // Colgroup – sütun genişliklerini sabitle
     const cols = [];
     cols.push(`<col style="width:180px">`); // Tarih
     cols.push(`<col style="width:160px">`); // IP
@@ -93,7 +101,7 @@
     `;
   }
 
-  /* --------- yardımcılar --------- */
+  /* ---- yardımcılar ---- */
   const th = (t, cls='') => `<th class="${cls}">${escapeHTML(t)}</th>`;
   const td = (t, cls='') => `<td class="${cls}">${escapeHTML(t)}</td>`;
 
@@ -119,12 +127,10 @@
       .replace(/'/g,'&#39;');
   }
 
-  /* ---- TSV ve CSV ---- */
+  /* ---- TSV & CSV ---- */
   function getTableMatrix(){
     const rows = [];
-    // header
     rows.push([...headRow.children].map(th=>th.textContent.trim()));
-    // body
     rows.push(...[...bodyRows.querySelectorAll('tr')].map(tr =>
       [...tr.children].map(td=>td.textContent.trim())
     ));
@@ -143,7 +149,6 @@
     const csv = getTableMatrix().map(r =>
       r.map(v => /[",\n]/.test(v) ? `"${v.replace(/"/g,'""')}"` : v).join(',')
     ).join('\n');
-
     const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
