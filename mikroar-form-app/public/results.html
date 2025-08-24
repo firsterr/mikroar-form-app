@@ -42,28 +42,18 @@
     <div class="toolbar">
       <label for="slug">Slug</label>
       <!-- select yerine input + datalist -->
-      <input id="slug" list="sluglist" placeholder="ör. formayvalik" />
-      <datalist id="sluglist"></datalist>
+    <input id="slug" placeholder="ör. formayvalik" />
+<button id="btnLoad">Yükle</button>
+<span id="stat"></span>
 
-      <button id="btnLoad" class="btn">Yükle</button>
+<button id="btnCopy">Kopyala (TSV)</button>
+<button id="btnCSV">CSV indir</button>
 
-      <span class="stats" id="stats">kayıt: 0, sütun: 0</span>
-      <button id="btnCopy" class="btn" title="Sekmeyle ayrılmış kopyala">Kopyala (TSV)</button>
-      <button id="btnCsv"  class="btn">CSV indir</button>
-    </div>
+<table class="table">
+  <thead id="thead"></thead>
+  <tbody id="tbody"></tbody>
+</table>
 
-    <p class="note">Not: Bu sayfa Basic Auth ister (admin kullanıcı/şifre).</p>
-
-    <div class="chips" id="meta"></div>
-
-    <div class="table-wrap">
-      <table id="grid">
-        <thead><tr id="thead"></tr></thead>
-        <tbody id="tbody"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <script src="./results.js"></script>
+<script src="/results.js?v=5"></script>
 </body>
 </html>
