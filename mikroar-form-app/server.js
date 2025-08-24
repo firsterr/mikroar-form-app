@@ -173,6 +173,32 @@ async function listActiveForms(_req, res) {
 app.get('/api/forms-list', listActiveForms);
 app.get('/api/forms',      listActiveForms); // alias
 
+// Tekil formu getir (form.html bununla çalışır)
+app.get('/api/forms/:slug', async (req, res) => {
+  const { slug } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `SELECT slug, title, active, schema
+         FROM forms
+        WHERE slug = $1
+        LIMIT 1`,
+      [slug]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ ok: false, error: 'Form bulunamadı' });
+    }
+    if (rows[0].active === false) {
+      return res.status(403).json({ ok: false, error: 'Form pasif' });
+    }
+
+    // form.html -> data.form.schema.questions yapısını bekliyor
+    return res.json({ ok: true, form: rows[0] });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // Sonuçlar (results.html) — Basic Auth ile korunuyor
 app.get('/api/forms/:slug/responses', adminOnly, async (req, res) => {
   const { slug } = req.params;
