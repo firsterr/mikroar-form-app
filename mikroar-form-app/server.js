@@ -173,28 +173,39 @@ async function listActiveForms(_req, res) {
 app.get('/api/forms-list', listActiveForms);
 app.get('/api/forms',      listActiveForms); // alias
 
-// Tekil formu getir (form.html bununla çalışır)
-app.get('/api/forms/:slug', async (req, res) => {
+app.post('/api/forms/:slug/submit', async (req, res) => {
   const { slug } = req.params;
+
+  // IP ve UA
+  const ip =
+    pickClientIp(req) ||
+    (req.headers['x-forwarded-for'] || '').split(',')[0].trim() ||
+    req.ip ||
+    '';
+  const ua = String(req.headers['user-agent'] || '');
+
+  // yük doğrulama
+  const payload = req.body;
+  if (!payload || typeof payload !== 'object') {
+    return res.status(400).json({ ok: false, error: 'invalid_payload' });
+  }
+
   try {
-    const { rows } = await pool.query(
-      `SELECT slug, title, active, schema
-         FROM forms
-        WHERE slug = $1
-        LIMIT 1`,
-      [slug]
+    await pool.query(
+      `INSERT INTO responses (slug, ip, user_agent, payload)
+       VALUES ($1, $2, $3, $4)`,
+      [slug, ip, ua, payload]
     );
 
-    if (!rows.length) {
-      return res.status(404).json({ ok: false, error: 'Form bulunamadı' });
-    }
-    if (rows[0].active === false) {
-      return res.status(403).json({ ok: false, error: 'Form pasif' });
-    }
-
-    // form.html -> data.form.schema.questions yapısını bekliyor
-    return res.json({ ok: true, form: rows[0] });
+    return res.json({ ok: true });
   } catch (e) {
+    // Aynı IP aynı formu daha önce göndermiş
+    if (e && e.code === '23505') {
+      return res
+        .status(409)
+        .json({ ok: false, error: 'already_submitted' });
+    }
+    // diğer hatalar
     return res.status(500).json({ ok: false, error: e.message });
   }
 });
