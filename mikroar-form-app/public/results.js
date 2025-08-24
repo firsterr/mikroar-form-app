@@ -53,14 +53,18 @@ async function fetchResponses(slug){
   return j.rows; // [{created_at, ip, payload:{answers:{...}}}, ...]
 }
 
-// === Eşleştirme yardımcıları ===
-const normalize = (v) =>
-  (v ?? '')
+// Yeni: aksanları ve “combining marks” temizle
+const normalize = (v) => {
+  if (v == null) return '';
+  return v
     .toString()
-    .toLowerCase()
+    .toLowerCase()                     // küçük harfe indir
+    .normalize('NFKD')                 // harfleri baz + combining biçimine ayır
+    .replace(/[\u0300-\u036f]/g, '')   // tüm combining işaretleri sil (u0307 dahil)
     .trim()
-    .replace(/\s+/g, ' ')
-    .replace(/[^\p{L}\p{N}]+/gu, '-'); // TR dahil unicode harf/rakam dışını '-'
+    .replace(/\s+/g, ' ')              // tek boşluğa indir
+    .replace(/[^\p{L}\p{N}]+/gu, '-'); // harf/rakam dışını '-' yap
+};
 
 const joinVals = (v) => Array.isArray(v) ? v.join(', ') : (v ?? '');
 
