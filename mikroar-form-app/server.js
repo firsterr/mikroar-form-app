@@ -210,24 +210,7 @@ app.post('/api/forms/:slug/submit', async (req, res) => {
   }
 });
 
-const resp = await fetch(`/api/forms/${slug}/submit`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(answers)
-});
 
-if (resp.status === 409) {
-  showError('Bu formu daha önce göndermişsiniz (aynı bağlantı/IP).'); // kendi UI metodunuz
-  return;
-}
-
-const data = await resp.json();
-if (!resp.ok || !data.ok) {
-  showError(data?.error || 'Gönderilemedi.');
-  return;
-}
-
-showSuccess('Cevabınız kaydedildi. Teşekkürler!');
 // Sonuçlar (results.html) — Basic Auth ile korunuyor
 app.get('/api/forms/:slug/responses', adminOnly, async (req, res) => {
   const { slug } = req.params;
