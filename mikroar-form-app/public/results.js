@@ -14,14 +14,18 @@
 
   let lastCols = [], lastRows = [];
 
-  // Soru başlığı normalizasyonu (çoğalmayı önlemek için)
-  const normKey = s => (s || '')
-    .toString()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // aksanları at
-    .toLowerCase()
-    .replace(/\?/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+ // Soru başlığı normalizasyonu (çakışmaları kesin çözer)
+const normKey = s => (s || '')
+  .toString()
+  .normalize('NFD')                 // aksanları ayır
+  .replace(/[\u0300-\u036f]/g, '')  // aksanları at
+  .toLowerCase()
+  // farklı apostrof türlerini ve & işaretini sadeleştir
+  .replace(/[\u2019\u2018'`´]/g, '')
+  .replace(/&amp;|&/g, 've')
+  // harf ve rakam Dışındaki her şeyi at → tamamen harf-rakam dizisi kalır
+  .replace(/[^a-z0-9]+/g, '')
+  .trim();
 
   el.load.addEventListener('click', load);
   el.slug.addEventListener('keydown', (e) => { if (e.key === 'Enter') load(); });
