@@ -1,4 +1,4 @@
-// server.js  —  ESM (import) ile yazıldı
+// server.js  —  ESM
 import express from "express";
 import helmet from "helmet";
 import cors from "cors";
@@ -19,8 +19,8 @@ const {
   CORS_ORIGIN = "*",
   ADMIN_USER = "admin",
   ADMIN_PASS = "admin",
-  FRAME_ANCESTORS = "",
-  DUPLICATE_POLICY = "BLOCK", // BLOCK | UPDATE
+  FRAME_ANCESTORS = "",           // <— sadece burada TANIMLI
+  DUPLICATE_POLICY = "BLOCK",      // BLOCK | UPDATE
 } = process.env;
 
 // ---- DB
@@ -35,7 +35,7 @@ const pool = new Pool({
 const app = express();
 app.set("trust proxy", true);
 
-// IP seçim
+// İstemci IP'si
 function pickClientIp(req) {
   const chain = [
     req.headers["cf-connecting-ip"],
@@ -45,6 +45,7 @@ function pickClientIp(req) {
     req.ip,
     req.socket?.remoteAddress,
   ].filter(Boolean);
+
   const ipRE =
     /(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:(?!$)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d))|(?:[A-F0-9]{1,4}:){1,7}[A-F0-9]{1,4}/i;
 
@@ -55,32 +56,39 @@ function pickClientIp(req) {
   }
   return null;
 }
+
 // ---- Güvenlik (CSP açık)
-const FRAME_ANCESTORS = process.env.FRAME_ANCESTORS || '';
 const faList = FRAME_ANCESTORS
-  ? FRAME_ANCESTORS.split(',').map(s => s.trim()).filter(Boolean)
+  ? FRAME_ANCESTORS.split(",").map(s => s.trim()).filter(Boolean)
   : [];
 
-app.use(helmet({
-  contentSecurityPolicy: {
-    useDefaults: true,
-    directives: {
-      "default-src": ["'self'"],
-      "frame-ancestors": faList.length ? faList : ["'self'"],
-      "script-src": ["'self'", "'unsafe-inline'"],
-      "connect-src": ["'self'"],
-      "img-src": ["'self'", "data:"],
-      "style-src": ["'self'", "'unsafe-inline'"]
-    }
-  },
-  frameguard: false,
-  crossOriginEmbedderPolicy: false
-}));
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        "default-src": ["'self'"],
+        // form sayfasını başka domain içine gömmek istiyorsanız env'den verin (örn: https://site.com)
+        "frame-ancestors": faList.length ? faList : ["'self'"],
+        // inline script ve aynı origin XHR/fetch için:
+        "script-src": ["'self'", "'unsafe-inline'"],
+        "connect-src": ["'self'"], // API çağrıları aynı origin
+        "img-src": ["'self'", "data:"],
+        "style-src": ["'self'", "'unsafe-inline'"],
+      },
+    },
+    frameguard: false,
+    crossOriginEmbedderPolicy: false,
+  })
+);
+
 // ---- Middlewares
-app.use(cors({
-  origin: CORS_ORIGIN === "*" ? true : CORS_ORIGIN.split(",").map(s => s.trim()),
-  credentials: false,
-}));
+app.use(
+  cors({
+    origin: CORS_ORIGIN === "*" ? true : CORS_ORIGIN.split(",").map(s => s.trim()),
+    credentials: false,
+  })
+);
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan("combined"));
@@ -122,9 +130,9 @@ app.get("/api/forms-list", async (_req, res) => {
         WHERE active = TRUE
         ORDER BY created_at DESC`
     );
-    return res.json({ ok: true, rows });
+    res.json({ ok: true, rows });
   } catch (e) {
-    return res.status(500).json({ ok: false, error: e.message });
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 
@@ -139,11 +147,22 @@ app.get("/api/forms/:slug", async (req, res) => {
         LIMIT 1`,
       [slug]
     );
-    if (!rows.length) return res.status(404).json({ ok: false, error: "not_found" });
-    if (rows[0].active === false) return res.status(403).json({ ok: false, error: "inactive" });
-    return res.json({ ok: true, form: rows[0] });
+    if (!rows.length)
+      return res.status(404).json({ ok: false, error: "not_found" });
+    if (rows[0].active === false)
+      return res.status(403).json({ ok: false, error: "inactive" });
+
+    // <-- ÖNEMLİ: schema text olarak gelirse parse et
+    const form = rows[0];
+    try {
+      if (typeof form.schema === "string") form.schema = JSON.parse(form.schema);
+    } catch (_) {
+      /* yut, zaten obje ise devam */
+    }
+
+    res.json({ ok: true, form });
   } catch (e) {
-    return res.status(500).json({ ok: false, error: e.message });
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 
