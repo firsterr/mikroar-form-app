@@ -29,8 +29,13 @@ const pool = new Pool({
 });
 
 // ---- App
-const app = express();
-app.set("trust proxy", 2);
+app.set("trust proxy", true); // (Render arkasında doğru host/hostname için)
+
+function getHost(req) {
+  return (
+    req.headers["x-forwarded-host"] || req.hostname || req.headers.host || ""
+  ).toLowerCase();
+}
 
 // IPv4 ve IPv6 regex'leri
 const IPv4_RE = /^(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}$/;
@@ -114,13 +119,14 @@ app.get("/health", async (_req, res) => {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
-// ---- anket.* guard: form sayfasını engelle, /health serbest
+
+// ---- anket.* altında form sayfasını kapat, /health'e izin ver
 app.use((req, res, next) => {
-  const host = (req.headers.host || "").toLowerCase();
+  const host = getHost(req);
   if (host.startsWith("anket.")) {
-    if (req.path === "/health") return next();          // Render health check için izin
+    if (req.path === "/health") return next();
     if (req.path.startsWith("/form.html")) {
-      return res.status(404).send("Not found");          // anket.* üzerinden form linki kapalı
+      return res.status(404).send("Not found");
     }
   }
   next();
@@ -140,7 +146,11 @@ app.use(express.urlencoded({ extended: true }));
 app.use(morgan("combined"));
 
 // ---- Statik
-app.use(express.static(path.join(__dirname, "public")));
+app.use(
+  express.static(path.join(__dirname, "public"), {
+    index: false, // otomatik index.html SERVİS ETME
+  })
+);
 
 // ---- Basic Auth (admin)
 function adminOnly(req, res, next) {
@@ -308,12 +318,12 @@ app.use((req, res, next) => {
   next();
 });
 
-// ---- Kök: host'a göre ana sayfa
-app.get("/", (req, res) => {
-  const host = (req.headers.host || "").toLowerCase();
+// ---- Kök ("/"): host'a göre ana sayfa
+, (req, res) => {
+  const host = getHost(req);
   const file = host.startsWith("anket.")
-    ? path.join(__dirname, "public", "admin.html")   // anket.mikroar.com → Admin/Builder
-    : path.join(__dirname, "public", "index.html");  // form.mikroar.com → Form seç
+    ? path.join(__dirname, "public", "admin.html")   // anket.mikroar.com
+    : path.join(__dirname, "public", "index.html");  // form.mikroar.com
   res.sendFile(file);
 });
 
