@@ -33,7 +33,47 @@ const pool = new Pool({
 
 // ---- App
 const app = express();
-app.set("trust proxy", true);
+app.set("trust proxy", 2);
+
+// IPv4 ve IPv6 regex'leri
+const IPv4_RE = /^(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}$/;
+const IPv6_RE = /^(([0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|(::1)|(([0-9A-Fa-f]{1,4}:){1,7}:)|(:{2}([0-9A-Fa-f]{1,4}:){1,6}[0-9A-Fa-f]{1,4}))$/;
+
+function normalizeIp(raw) {
+  if (!raw) return null;
+  let ip = String(raw).trim();
+
+  // IPv6-mapped IPv4: ::ffff:x.x.x.x -> x.x.x.x
+  if (ip.startsWith('::ffff:')) ip = ip.slice(7);
+
+  // X-Forwarded-For gibi "ip, ip2, ip3" alınmışsa ilkini alalım
+  if (ip.includes(',')) ip = ip.split(',')[0].trim();
+
+  // Sonunda port varsa (IPv4: ":12345") ayıkla
+  const withPort = ip.match(/^\[?([^\]]+)\]?:(\d+)$/);
+  if (withPort) ip = withPort[1];
+
+  if (IPv4_RE.test(ip) || IPv6_RE.test(ip)) return ip;
+  return null;
+}
+
+function pickClientIp(req) {
+  const h = (k) => req.headers[k] ? String(req.headers[k]) : '';
+  const chain = [
+    h('cf-connecting-ip'),
+    h('x-client-ip'),
+    h('x-real-ip'),
+    h('x-forwarded-for'),
+    req.ip,
+    req.socket?.remoteAddress
+  ].filter(Boolean);
+
+  for (const v of chain) {
+    const ip = normalizeIp(v);
+    if (ip) return ip;
+  }
+  return null; // 0.0.0.0 yazmak yerine null döndür
+}
 
 // İstemci IP'si
 function pickClientIp(req) {
@@ -166,42 +206,67 @@ app.get("/api/forms/:slug", async (req, res) => {
   }
 });
 
-// ---- SUBMIT
+// ---- SUBMIT (güncel)
 app.post("/api/forms/:slug/submit", async (req, res) => {
   const { slug } = req.params;
-  const answers = req.body?.answers || req.body;
-  const ip = pickClientIp(req) || "0.0.0.0";
+
+  // answers body’de plain objeyse JSONB'ye dönüşecek
+  const answersRaw = req.body?.answers ?? req.body;
+  if (!answersRaw || typeof answersRaw !== "object") {
+    return res.status(400).json({ ok: false, error: "invalid_payload" });
+  }
+  const answersJson = JSON.stringify(answersRaw);
+
+  // IP: bulunamazsa 0.0.0.0 yerine NULL gönderiyoruz
+  const clientIp = pickClientIp(req) || null;
 
   try {
-    const f = await pool.query("SELECT slug, active FROM forms WHERE slug = $1", [slug]);
+    const f = await pool.query(
+      "SELECT slug, active FROM forms WHERE slug = $1",
+      [slug]
+    );
     if (!f.rows.length) return res.status(404).json({ ok: false, error: "Form bulunamadı" });
     if (!f.rows[0].active) return res.status(403).json({ ok: false, error: "Form pasif" });
 
+    // UPDATE politikası (upsert)
     if (String(DUPLICATE_POLICY).toUpperCase() === "UPDATE") {
-      const q =
-        "INSERT INTO responses(form_slug, ip, answers, created_at) VALUES ($1,$2,$3,now()) " +
-        "ON CONFLICT (form_slug, ip) DO UPDATE SET answers = EXCLUDED.answers, created_at = now() " +
-        "RETURNING id, created_at";
-      const { rows } = await pool.query(q, [slug, ip, answers]);
+      const upsertSql = `
+        INSERT INTO responses (form_slug, ip, answers, created_at)
+        VALUES ($1, $2::inet, $3::jsonb, NOW())
+        ON CONFLICT (form_slug, ip)
+        DO UPDATE SET answers = EXCLUDED.answers, created_at = NOW()
+        RETURNING id, created_at
+      `;
+      const { rows } = await pool.query(upsertSql, [slug, clientIp, answersJson]);
       return res.json({ ok: true, updated: true, at: rows[0]?.created_at });
     }
 
+    // INSERT + unique ihlali yakalama
     try {
-      const q =
-        "INSERT INTO responses(form_slug, ip, answers, created_at) VALUES ($1,$2,$3, now()) RETURNING id, created_at";
-      const { rows } = await pool.query(q, [slug, ip, answers]);
+      const insertSql = `
+        INSERT INTO responses (form_slug, ip, answers, created_at)
+        VALUES ($1, $2::inet, $3::jsonb, NOW())
+        RETURNING id, created_at
+      `;
+      const { rows } = await pool.query(insertSql, [slug, clientIp, answersJson]);
       return res.json({ ok: true, created: true, at: rows[0]?.created_at });
     } catch (err) {
+      // unique ihlal: uniq_response_per_ip_per_form
       if (err?.code === "23505") {
         const old = await pool.query(
-          "SELECT created_at FROM responses WHERE form_slug = $1 AND ip = $2",
-          [slug, ip]
+          "SELECT created_at FROM responses WHERE form_slug = $1 AND ip = $2::inet",
+          [slug, clientIp]
         );
-        return res.json({ ok: true, alreadySubmitted: true, at: old.rows[0]?.created_at || null });
+        return res.json({
+          ok: true,
+          alreadySubmitted: true,
+          at: old.rows[0]?.created_at || null
+        });
       }
       throw err;
     }
   } catch (e) {
+    console.error(e);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
