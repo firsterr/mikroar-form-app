@@ -58,13 +58,11 @@
   }
 
   function parseSchema(raw){
-    // DB bazen JSONB’yi nesne, bazen string olarak döndürebiliyor
     let s = raw;
     if (typeof s === 'string'){
       try{ s = JSON.parse(s); }catch(e){ s = {}; }
     }
-    // Beklediğimiz: { questions: [...] }
-    if (s && s.schema && !s.questions) s = s.schema; // yanlış katman varsa
+    if (s && s.schema && !s.questions) s = s.schema;
     return s && Array.isArray(s.questions) ? s : { questions: [] };
   }
 
@@ -88,7 +86,6 @@
 
       if(q.type === 'radio'){
         (q.options || []).forEach(opt=>{
-          const id = `${name}_${opt}`;
           wrap.insertAdjacentHTML('beforeend',
             `<label><input type="radio" name="${name}" value="${opt}"> ${opt}</label>`);
         });
@@ -118,7 +115,6 @@
       const schema = parseSchema(data.form.schema);
       renderQuestions(schema);
 
-      // submit
       $frm.onsubmit = async (ev)=>{
         ev.preventDefault();
         const fd = new FormData($frm);
@@ -128,7 +124,6 @@
             if(Array.isArray(answers[k])) answers[k].push(v);
             else answers[k] = [answers[k], v];
           }else{
-            // checkbox’lar formData ile tek tek gelir; set halinde toparlayalım
             const el = $frm.querySelectorAll(`[name="${k}"][type="checkbox"]`);
             if(el.length>1){
               const arr = [...el].filter(x=>x.checked).map(x=>x.value);
@@ -139,7 +134,6 @@
           }
         }
 
-        // required kontrolü
         const requiredMiss = (schema.questions||[]).some((q,idx)=>{
           if(!q.required) return false;
           const key = `q_${idx}`;
