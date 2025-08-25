@@ -307,13 +307,13 @@ app.get("/api/admin/forms/:slug/responses", adminOnly, async (req, res) => {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
-// ---- ADMIN: form CREATE/UPDATE (save)
+// ---- ADMIN: form CREATE/UPDATE
 app.post("/api/admin/forms/save", adminOnly, async (req, res) => {
   try {
     // body: { slug, title, schema, active, prevSlug? }
     let { slug, title, schema, active, prevSlug } = req.body || {};
 
-    // slug güvenliği
+    // slug
     if (typeof slug !== "string" || !slug.trim()) {
       return res.status(400).json({ ok: false, error: "invalid_slug" });
     }
@@ -324,47 +324,50 @@ app.post("/api/admin/forms/save", adminOnly, async (req, res) => {
 
     // schema: string geldiyse parse et; obje ise olduğu gibi kullan
     if (typeof schema === "string") {
-      try { schema = JSON.parse(schema); } 
-      catch {
-        return res.status(400).json({ ok: false, error: "bad_schema_json" });
-      }
+      try { schema = JSON.parse(schema); }
+      catch { return res.status(400).json({ ok: false, error: "bad_schema_json" }); }
     }
     if (!schema || typeof schema !== "object") {
       return res.status(400).json({ ok: false, error: "invalid_schema" });
     }
     const schemaJson = JSON.stringify(schema); // ::jsonb için
 
-    // active sağlamlaştır
+    // active -> boolean
     const truthy = new Set([true, "true", "on", "1", 1, "aktif", "Aktif"]);
     active = truthy.has(active);
 
-    // prevSlug varsa slug değişimi demektir; yoksa upsert
+    // slug değişiyorsa
     if (prevSlug && prevSlug !== slug) {
-      // slug değiştir (transaction basit)
-      await pool.query(
-        `UPDATE forms
-           SET slug = $2, title = $3, schema = $4::jsonb, active = $5
-         WHERE slug = $1`,
-        [prevSlug, slug, title, schemaJson, active]
-      );
+      const q = `UPDATE forms
+                   SET slug = $2, title = $3, schema = $4::jsonb, active = $5
+                 WHERE slug = $1`;
+      await pool.query(q, [prevSlug, slug, title, schemaJson, active]);
       return res.json({ ok: true, updated: true, slug });
     }
 
-    // yoksa upsert
-    const q = `
+    // upsert
+    const upsert = `
       INSERT INTO forms (slug, title, schema, active, created_at)
       VALUES ($1, $2, $3::jsonb, $4, NOW())
       ON CONFLICT (slug)
-      DO UPDATE SET title = EXCLUDED.title,
+      DO UPDATE SET title  = EXCLUDED.title,
                     schema = EXCLUDED.schema,
                     active = EXCLUDED.active
       RETURNING slug
     `;
-    const { rows } = await pool.query(q, [slug, title, schemaJson, active]);
+    const { rows } = await pool.query(upsert, [slug, title, schemaJson, active]);
     return res.json({ ok: true, saved: true, slug: rows[0]?.slug || slug });
+
   } catch (e) {
     console.error("admin/save error:", e);
-    return res.status(500).json({ ok: false, error: e.message });
+    // Postgres hata detaylarını da dönelim ki ekranda gerçek sebep görünsün
+    return res.status(500).json({
+      ok: false,
+      error: e.message,
+      detail: e.detail,
+      code: e.code,
+      hint: e.hint
+    });
   }
 });
 // ---- Kök ("/"): host'a göre ana sayfa
