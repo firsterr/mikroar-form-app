@@ -2,79 +2,36 @@
 <html lang="tr">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>MikroAR • Form seç</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Form seç</title>
   <style>
     body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;background:#0b1220;color:#e6e6e6;margin:0}
     .wrap{max-width:960px;margin:40px auto;padding:0 16px}
     h1{font-size:40px;margin:0 0 24px}
     .card{background:#111a2b;border-radius:16px;padding:20px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
-    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-    select,button,input[type=text]{background:#0d1424;color:#fff;border:1px solid #21304c;border-radius:10px;padding:12px 14px;font-size:16px}
-    button{cursor:pointer}
-    .muted{opacity:.7}
-    .msg{margin-top:14px}
+    select,button{font-size:16px;border-radius:10px}
+    select{width:100%;max-width:480px;background:#0d1424;color:#fff;border:1px solid #21304c;padding:12px 14px}
+    button{background:#2f6feb;color:#fff;border:0;padding:12px 18px;cursor:pointer;margin-left:8px}
+    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .msg{margin-top:10px;opacity:.85}
+    .error{color:#ffb3c1}
   </style>
 </head>
 <body>
   <div class="wrap">
     <h1>Form seç</h1>
     <div class="card">
-      <p class="muted">Bu sayfada aktif formlar listelenir. Bir form seçince <code>form.html?slug=...</code> ile anket sayfasına gidilir.</p>
-      <div class="row" style="margin-top:10px">
-        <select id="formSelect" style="min-width:280px"><option>— Yükleniyor… —</option></select>
-        <button id="btnOpen">Formu aç</button>
-        <button id="btnCopy">Bağlantıyı kopyala</button>
+      <p>Bu sayfada aktif formlar listelenir. Bir form seçince <code>form.html?slug=…</code> ile anket sayfasına gidilir.</p>
+      <div class="row">
+        <select id="sel" disabled><option>— Yükleniyor… —</option></select>
+        <button id="open" disabled>Formu aç</button>
+        <button id="copy" disabled>Bağlantıyı kopyala</button>
       </div>
-      <div id="info" class="msg"></div>
+      <div id="msg" class="msg"></div>
     </div>
   </div>
 
-  <script>
-  const sel = document.getElementById('formSelect');
-  const info = document.getElementById('info');
-
-  function setInfo(t){ info.textContent = t || ''; }
-
-  async function loadForms(){
-    try{
-      const r = await fetch('/api/forms');
-      const data = await r.json();
-      if(!r.ok || data.ok === false) throw new Error(data.error || 'Form listesi alınamadı');
-      sel.innerHTML = '';
-      if(!data.rows || !data.rows.length){
-        sel.innerHTML = '<option>— Aktif form yok —</option>';
-        setInfo('Aktif form bulunamadı. anket.mikroar.com üzerinden bir form aktifleştir.');
-        return;
-      }
-      for(const f of data.rows){
-        const opt = document.createElement('option');
-        opt.value = f.slug;
-        opt.textContent = f.title || f.slug;
-        sel.appendChild(opt);
-      }
-      setInfo('Hazır.');
-    }catch(e){
-      setInfo('Hata: ' + e.message);
-      sel.innerHTML = '<option>— Hata —</option>';
-    }
-  }
-
-  document.getElementById('btnOpen').onclick = ()=>{
-    const slug = sel.value;
-    if(!slug || slug.startsWith('—')) return;
-    location.href = '/form.html?slug=' + encodeURIComponent(slug);
-  };
-
-  document.getElementById('btnCopy').onclick = async ()=>{
-    const slug = sel.value;
-    if(!slug || slug.startsWith('—')) return;
-    const url = location.origin + '/form.html?slug=' + encodeURIComponent(slug);
-    await navigator.clipboard.writeText(url);
-    setInfo('Kopyalandı: ' + url);
-  };
-
-  loadForms();
-  </script>
+  <!-- index.js bu element ID'lerini bekliyor -->
+  <script src="/index.js" defer></script>
 </body>
 </html>
