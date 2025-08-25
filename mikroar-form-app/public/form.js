@@ -1,252 +1,178 @@
-<!-- public/form.js -->
-<script>
-(() => {
-  // Kısa seçici
-  const $ = (s) => document.querySelector(s);
+// public/form.js
+document.addEventListener('DOMContentLoaded', () => {
+  const params = new URLSearchParams(location.search);
+  const slug = params.get('slug');
 
-  // --- Elemanlar (eski/yeni id'lerle uyumlu)
-  const els = {
-    form: document.getElementById('surveyForm') ||
-          document.getElementById('theForm')   ||
-          document.querySelector('form'),
-    list: document.getElementById('questions') ||
-          document.querySelector('[data-questions]'),
-    title: document.getElementById('form-title') ||
-           document.getElementById('pageTitle')  ||
-           document.querySelector('[data-form-title]'),
-    skeleton: document.getElementById('skeleton') ||
-              document.querySelector('[data-skeleton]'),
-    content: document.getElementById('content') ||
-             document.querySelector('#content'),
-    banner: document.getElementById('banner') ||
-            document.querySelector('[data-banner]')
-  };
+  const titleEl = document.getElementById('form-title');
+  const boxEl = document.getElementById('questions');
+  const formEl = document.getElementById('survey');
+  const noteEl = document.getElementById('note');
+  const statusEl = document.getElementById('status');
 
-  // Basit bildirim
-  function showBanner(msg, type = 'error') {
-    if (!els.banner) {
-      const b = document.createElement('div');
-      b.id = 'banner';
-      b.style.margin = '12px 0';
-      b.style.padding = '10px 14px';
-      b.style.borderRadius = '10px';
-      b.style.fontSize = '15px';
-      b.style.lineHeight = '1.4';
-      (els.form?.parentElement || document.body).prepend(b);
-      els.banner = b;
-    }
-    const isError = type === 'error';
-    els.banner.style.background = isError ? '#3a1212' : '#123a12';
-    els.banner.style.color = isError ? '#ffb4b4' : '#b9f6c5';
-    els.banner.textContent = msg;
+  if (!slug) {
+    if (statusEl) statusEl.textContent = 'Hatalı bağlantı. (slug yok)';
+    return;
   }
 
-  // İskeleti gizle, içeriği göster
-  function revealContent() {
-    if (els.skeleton) els.skeleton.style.display = 'none';
-    if (els.content) {
-      els.content.hidden = false;
-      els.content.classList.add('visible');
-    }
+  function setStatus(t) {
+    if (statusEl) statusEl.textContent = t || '';
   }
 
-  // Formu tamamen devre dışı bırak
-  function disableForm() {
-    if (!els.form) return;
-    [...els.form.querySelectorAll('input,button,select,textarea')].forEach(el => {
-      el.disabled = true;
+  function el(tag, attrs = {}, ...children) {
+    const n = document.createElement(tag);
+    Object.entries(attrs).forEach(([k, v]) => {
+      if (v == null) return;
+      if (k === 'class') n.className = v;
+      else if (k === 'for') n.htmlFor = v;
+      else n.setAttribute(k, v);
     });
-  }
-
-  // URL’den slug
-  const currentSlug = new URLSearchParams(location.search).get('slug') || '';
-
-  // Bellekte form
-  let currentForm = null;
-
-  // Soru çizimi
-  function drawForm(form) {
-    if (!els.list) return;
-
-    if (els.title) els.title.textContent = form.title || currentSlug;
-    els.list.innerHTML = '';
-
-    const qs = (form.schema?.questions) || [];
-    if (!qs.length) {
-      els.list.innerHTML = `<div style="opacity:.7">Bu formda soru yok.</div>`;
-      return;
-    }
-
-    qs.forEach((q, i) => {
-      const wrap = document.createElement('div');
-      wrap.className = 'q';
-      wrap.style.margin = '18px 0';
-
-      const label = document.createElement('div');
-      label.style.fontWeight = '600';
-      label.style.marginBottom = '10px';
-      label.textContent = `${i + 1}. ${q.label || ''}${q.required ? ' *' : ''}`;
-      wrap.appendChild(label);
-
-      if (q.type === 'radio') {
-        (q.options || []).forEach((opt, idx) => {
-          const line = document.createElement('label');
-          line.style.display = 'block';
-          line.style.margin = '6px 0';
-
-          const inp = document.createElement('input');
-          inp.type = 'radio';
-          inp.name = `q${i}`;
-          inp.value = opt;
-          inp.id = `q${i}_${idx}`;
-
-          const text = document.createElement('span');
-          text.textContent = ' ' + opt;
-
-          line.appendChild(inp);
-          line.appendChild(text);
-          wrap.appendChild(line);
-        });
-      } else if (q.type === 'checkbox') {
-        (q.options || []).forEach((opt, idx) => {
-          const line = document.createElement('label');
-          line.style.display = 'block';
-          line.style.margin = '6px 0';
-
-          const inp = document.createElement('input');
-          inp.type = 'checkbox';
-          inp.name = `q${i}`;
-          inp.value = opt;
-          inp.id = `q${i}_${idx}`;
-
-          const text = document.createElement('span');
-          text.textContent = ' ' + opt;
-
-          line.appendChild(inp);
-          line.appendChild(text);
-          wrap.appendChild(line);
-        });
-      } else {
-        const inp = document.createElement('input');
-        inp.type = 'text';
-        inp.name = `q${i}`;
-        inp.placeholder = 'Yanıtınız...';
-        inp.style.width = '100%';
-        inp.style.padding = '10px 12px';
-        inp.style.borderRadius = '10px';
-        wrap.appendChild(inp);
-      }
-
-      if (q.required) wrap.dataset.required = '1';
-      els.list.appendChild(wrap);
+    children.forEach(c => {
+      if (typeof c === 'string') n.appendChild(document.createTextNode(c));
+      else if (c) n.appendChild(c);
     });
+    return n;
   }
 
-  // Formu YÜKLE
   async function loadForm() {
-    if (!currentSlug) {
-      revealContent();
-      showBanner('Geçersiz bağlantı: slug parametresi yok.', 'error');
-      return;
-    }
-
+    setStatus('Yükleniyor…');
     try {
-      const r = await fetch(`/api/forms/${encodeURIComponent(currentSlug)}`, {
-        headers: { 'Accept': 'application/json' }
+      const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`, { credentials: 'same-origin' });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json(); // { ok, form:{title, schema:{questions:[...]}} }
+
+      if (!data.ok) throw new Error(data.error || 'Form getirilemedi');
+      const form = data.form || {};
+      const questions = (form.schema && form.schema.questions) || [];
+
+      // Başlık
+      if (titleEl) titleEl.textContent = form.title || slug;
+
+      // Soruları çiz
+      boxEl.innerHTML = '';
+      questions.forEach((q, idx) => {
+        const name = `q_${idx}`;
+        const wrap = el('div', { class: 'q' });
+        const label = el('label', { class: 'q-label' }, `${idx + 1}. ${q.label || ''}`, q.required ? ' *' : '');
+
+        wrap.appendChild(label);
+
+        if (q.type === 'radio') {
+          (q.options || []).forEach(opt => {
+            const id = `${name}_${opt}`;
+            const inp = el('input', { type: 'radio', id, name, value: opt, required: q.required || undefined });
+            const l = el('label', { for: id, class: 'opt' }, opt);
+            wrap.appendChild(el('div', { class: 'opt-row' }, inp, l));
+          });
+        } else if (q.type === 'checkbox') {
+          (q.options || []).forEach(opt => {
+            const id = `${name}_${opt}`;
+            const inp = el('input', { type: 'checkbox', id, name, value: opt });
+            const l = el('label', { for: id, class: 'opt' }, opt);
+            wrap.appendChild(el('div', { class: 'opt-row' }, inp, l));
+          });
+          // HTML5 required checkbox group için standart yok; submit öncesi doğrularız
+          if (q.required) wrap.dataset.requiredGroup = name;
+        } else {
+          // text
+          const inp = el('input', {
+            type: 'text',
+            name,
+            placeholder: 'Yanıtınızı yazınız',
+            required: q.required || undefined
+          });
+          wrap.appendChild(inp);
+        }
+
+        boxEl.appendChild(wrap);
       });
-      const data = await r.json();
 
-      if (!r.ok || data?.ok === false) {
-        throw new Error(data?.error || 'Form bulunamadı');
-      }
-
-      currentForm = data.form || data; // API iki farklı gövdeden birini dönebilir
-      drawForm(currentForm);
-      revealContent();
-    } catch (err) {
-      revealContent();
-      showBanner(`Form yüklenemedi: ${err.message}`, 'error');
+      // Formu göster
+      formEl.style.display = '';
+      setStatus('');
+    } catch (e) {
+      console.error(e);
+      setStatus('Form yüklenemedi');
     }
   }
 
-  // İstemci doğrulama + gönderim
-  document.addEventListener('submit', async (e) => {
-    if (!els.form || !els.form.contains(e.target)) return;
+  function collectAnswers() {
+    const answers = {};
+    // q_0, q_1, … isimli alanları toplayacağız
+    const groups = new Map();
+
+    Array.from(formEl.elements).forEach(elm => {
+      if (!elm.name || !/^q_\d+$/.test(elm.name)) return;
+
+      if (elm.type === 'checkbox') {
+        if (!groups.has(elm.name)) groups.set(elm.name, []);
+        if (elm.checked) groups.get(elm.name).push(elm.value);
+      } else if (elm.type === 'radio') {
+        if (elm.checked) answers[elm.name] = elm.value;
+      } else {
+        answers[elm.name] = elm.value ?? '';
+      }
+    });
+
+    groups.forEach((arr, name) => (answers[name] = arr));
+
+    return answers;
+  }
+
+  function validateRequiredCheckboxGroups() {
+    // data-required-group olan sarmalları kontrol et
+    const reqWraps = boxEl.querySelectorAll('[data-required-group]');
+    for (const w of reqWraps) {
+      const name = w.dataset.requiredGroup;
+      const anyChecked = !!boxEl.querySelector(`input[name="${name}"]:checked`);
+      if (!anyChecked) return false;
+    }
+    return true;
+  }
+
+  formEl.addEventListener('submit', async (e) => {
     e.preventDefault();
 
-    if (!currentForm) {
-      showBanner('Form henüz yüklenmedi.', 'error');
+    // checkbox zorunluluk kontrolü
+    if (!validateRequiredCheckboxGroups()) {
+      alert('Lütfen zorunlu soruları işaretleyin.');
       return;
     }
 
-    const qs = (currentForm.schema?.questions) || [];
-    const payload = { answers: {} };
-    const eksik = [];
-
-    qs.forEach((q, i) => {
-      let val;
-
-      if (q.type === 'radio') {
-        const checked = document.querySelector(`input[name="q${i}"]:checked`);
-        val = checked ? checked.value : '';
-      } else if (q.type === 'checkbox') {
-        val = [...document.querySelectorAll(`input[name="q${i}"]:checked`)].map(x => x.value);
-      } else {
-        const el = document.querySelector(`[name="q${i}"]`);
-        val = el ? el.value.trim() : '';
-      }
-
-      payload.answers[`q_${i}`] = val;
-
-      if (q.required) {
-        const dolu = (q.type === 'checkbox') ? (Array.isArray(val) && val.length) : (val !== '');
-        if (!dolu) eksik.push(q.label || `Soru ${i + 1}`);
-      }
-    });
-
-    if (eksik.length) {
-      showBanner(`Lütfen zorunlu soruları doldurun:\n- ${eksik.join('\n- ')}`, 'error');
-      return;
-    }
+    const answers = collectAnswers(); // { q_0: "Evet", q_1: ["Evet","Hayır"], q_2: "metin"... }
 
     try {
-      const r = await fetch(`/api/forms/${encodeURIComponent(currentSlug)}/submit`, {
+      setStatus('Gönderiliyor…');
+
+      const r = await fetch(`/api/forms/${encodeURIComponent(slug)}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        credentials: 'same-origin',
+        body: JSON.stringify({ answers })
       });
+
       const data = await r.json();
 
-      // Başarısızlık
-      if (!r.ok || data?.ok === false) {
-        // Sunucu "eksik alan" döndürebilir
-        if (Array.isArray(data?.missing) && data.missing.length) {
-          showBanner(`Eksik alanlar:\n- ${data.missing.join('\n- ')}`, 'error');
-          return;
+      if (!r.ok || !data.ok) {
+        const msg = (data && data.error) || `HTTP ${r.status}`;
+        // Bazı özel hatalar
+        if (/already/i.test(msg)) {
+          setStatus('Bu ankete yanıt vermiş görünüyorsunuz.');
+        } else if (/unique/i.test(msg) || /uniq_response_per_ip_per_form/i.test(msg)) {
+          setStatus('Bu ankete bu IP ile zaten oy verilmiş.');
+        } else {
+          setStatus(`Hata: ${msg}`);
         }
-
-        // Aynı IP’den tekrar oy hatası (unique constraint)
-        const msg = String(data?.error || '').toLowerCase();
-        if (msg.includes('duplicate key') || msg.includes('already') || data?.code === 'ALREADY_SUBMITTED') {
-          showBanner('Bu ankete daha önce yanıt verdiniz. Mevcut yanıtınız korunuyor.', 'ok');
-          disableForm();
-          return;
-        }
-
-        // Diğer hatalar
-        throw new Error(data?.error || 'Kaydedilemedi');
+        return;
       }
 
-      // Başarılı
-      showBanner('Teşekkürler, yanıtınız kaydedildi.', 'ok');
-      els.form.reset();
-      disableForm();
+      setStatus('Teşekkürler, yanıtınız kaydedildi.');
+      formEl.reset();
     } catch (err) {
-      showBanner(`İnternet/servis hatası: ${err.message}`, 'error');
+      console.error(err);
+      setStatus('Bağlantı/servis hatası.');
     }
   });
 
-  // Başlat
+  // başlangıç
   loadForm();
-})();
-</script>
+});
