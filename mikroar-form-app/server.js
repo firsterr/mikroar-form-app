@@ -1,4 +1,6 @@
 // server.js  —  ESM
+
+// ---- Imports
 import express from "express";
 import helmet from "helmet";
 import cors from "cors";
@@ -7,7 +9,7 @@ import pkg from "pg";
 const { Pool } = pkg;
 import path from "path";
 import { fileURLToPath } from "url";
-
+import net from "node:net";
 
 // ---- Env
 const {
@@ -16,7 +18,7 @@ const {
   CORS_ORIGIN = "*",
   ADMIN_USER = "admin",
   ADMIN_PASS = "admin",
-  FRAME_ANCESTORS = "",           // <— sadece burada TANIMLI
+  FRAME_ANCESTORS = "",           // sadece burada TANIMLI
   DUPLICATE_POLICY = "BLOCK",      // BLOCK | UPDATE
 } = process.env;
 
@@ -28,9 +30,11 @@ const pool = new Pool({
     : undefined,
 });
 
-// ---- App
-app.set("trust proxy", true); // (Render arkasında doğru host/hostname için)
+// ---- App (ÖNCE app oluştur, sonra her şeyi buna ekle)
+const app = express();
+app.set("trust proxy", true); // Render arkasında doğru host/hostname için
 
+// ---- yardımcılar
 function getHost(req) {
   return (
     req.headers["x-forwarded-host"] || req.hostname || req.headers.host || ""
@@ -46,10 +50,10 @@ function normalizeIp(raw) {
   let ip = String(raw).trim();
 
   // IPv6-mapped IPv4: ::ffff:x.x.x.x -> x.x.x.x
-  if (ip.startsWith('::ffff:')) ip = ip.slice(7);
+  if (ip.startsWith("::ffff:")) ip = ip.slice(7);
 
   // X-Forwarded-For gibi "ip, ip2, ip3" alınmışsa ilkini alalım
-  if (ip.includes(',')) ip = ip.split(',')[0].trim();
+  if (ip.includes(",")) ip = ip.split(",")[0].trim();
 
   // Sonunda port varsa (IPv4: ":12345") ayıkla
   const withPort = ip.match(/^\[?([^\]]+)\]?:(\d+)$/);
@@ -58,8 +62,6 @@ function normalizeIp(raw) {
   if (IPv4_RE.test(ip) || IPv6_RE.test(ip)) return ip;
   return null;
 }
-
-import net from "node:net"; // en üstlerde importlarınızın yanında olsun
 
 // Proxy arkasında doğru IP'yi bul
 function pickClientIp(req) {
@@ -88,7 +90,7 @@ function pickClientIp(req) {
 
 // ---- Güvenlik (CSP açık)
 const faList = FRAME_ANCESTORS
-  ? FRAME_ANCESTORS.split(",").map(s => s.trim()).filter(Boolean)
+  ? FRAME_ANCESTORS.split(",").map((s) => s.trim()).filter(Boolean)
   : [];
 
 app.use(
@@ -110,6 +112,7 @@ app.use(
     crossOriginEmbedderPolicy: false,
   })
 );
+
 // ---- Sağlık
 app.get("/health", async (_req, res) => {
   try {
@@ -131,13 +134,15 @@ app.use((req, res, next) => {
   }
   next();
 });
+
 // __dirname eşdeğeri
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
 // ---- Middlewares
 app.use(
   cors({
-    origin: CORS_ORIGIN === "*" ? true : CORS_ORIGIN.split(",").map(s => s.trim()),
+    origin: CORS_ORIGIN === "*" ? true : CORS_ORIGIN.split(",").map((s) => s.trim()),
     credentials: false,
   })
 );
@@ -166,8 +171,6 @@ function adminOnly(req, res, next) {
   }
   next();
 }
-
-
 
 // ---- LIST: aktif formlar
 app.get("/api/forms-list", async (_req, res) => {
@@ -200,7 +203,6 @@ app.get("/api/forms/:slug", async (req, res) => {
     if (rows[0].active === false)
       return res.status(403).json({ ok: false, error: "inactive" });
 
-    // <-- ÖNEMLİ: schema text olarak gelirse parse et
     const form = rows[0];
     try {
       if (typeof form.schema === "string") form.schema = JSON.parse(form.schema);
@@ -214,6 +216,7 @@ app.get("/api/forms/:slug", async (req, res) => {
   }
 });
 
+// ---- IP debug (opsiyonel)
 app.get("/api/__ip", (req, res) => {
   res.json({
     ok: true,
@@ -230,7 +233,7 @@ app.get("/api/__ip", (req, res) => {
   });
 });
 
-// ---- SUBMIT (güncel)
+// ---- SUBMIT
 app.post("/api/forms/:slug/submit", async (req, res) => {
   const { slug } = req.params;
 
@@ -305,19 +308,6 @@ app.get("/api/admin/forms/:slug/responses", adminOnly, async (req, res) => {
   }
 });
 
-// ---- Kök: index.html
-// ---- anket.* altında form sayfasını kapat, /health'e izin ver
-app.use((req, res, next) => {
-  const host = getHost(req);
-  if (host.startsWith("anket.")) {
-    if (req.path === "/health") return next();
-    if (req.path.startsWith("/form.html")) {
-      return res.status(404).send("Not found");
-    }
-  }
-  next();
-});
-
 // ---- Kök ("/"): host'a göre ana sayfa
 app.get("/", (req, res) => {
   const host = getHost(req);
@@ -327,6 +317,7 @@ app.get("/", (req, res) => {
   res.sendFile(file);
 });
 
+// ---- Sunucu
 app.listen(PORT, () => {
   console.log(`MikroAR form server listening on :${PORT}`);
 });
