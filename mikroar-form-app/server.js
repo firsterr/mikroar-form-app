@@ -122,14 +122,17 @@ app.get("/health", async (_req, res) => {
 });
 
 // ---- LIST: aktif formlar (index / form seçimi için)
-app.get("/api/forms", async (_req, res) => {
+app.get('/api/forms-list', async (_req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT slug, title FROM forms WHERE active = TRUE ORDER BY created_at DESC"
+      `SELECT slug, title
+         FROM forms
+        WHERE active = TRUE
+        ORDER BY created_at DESC`
     );
-    res.json({ ok: true, rows });
+    return res.json({ ok: true, rows });
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
+    return res.status(500).json({ ok: false, error: e.message });
   }
 });
 
