@@ -123,15 +123,17 @@ app.use(morgan("combined"));
 // ---- Statik
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
-// --- HOST'A GÖRE ANA SAYFA SEÇİMİ
+// ---- HOST'A GÖRE ANA SAYFA SEÇİMİ
 app.get("/", (req, res) => {
-  const host = (req.headers.host || "").toLowerCase();
+  // Express'te hostname en temiz çözümdür (proxy arkasında çalışır)
+  const host = (req.hostname || "").toLowerCase();
 
-  // anket.mikroar.com -> builder sayfası (admin.html)
-  const file = host.startsWith("anket.")
-    ? path.join(__dirname, "public", "admin.html")
-    // form.mikroar.com -> mevcut form seçme sayfası (index.html)
-    : path.join(__dirname, "public", "index.html");
+  const isAdmin =
+    host === "anket.mikroar.com" || host.startsWith("anket.");
+
+  const file = isAdmin
+    ? path.join(__dirname, "public", "admin.html")  // anket.mikroar.com
+    : path.join(__dirname, "public", "index.html"); // form.mikroar.com
 
   res.sendFile(file);
 });
@@ -297,10 +299,7 @@ app.get("/api/admin/forms/:slug/responses", adminOnly, async (req, res) => {
   }
 });
 
-// ---- Kök: index.html
-app.get("/", (_req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
+
 
 app.listen(PORT, () => {
   console.log(`MikroAR form server listening on :${PORT}`);
