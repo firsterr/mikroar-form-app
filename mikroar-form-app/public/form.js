@@ -1,17 +1,28 @@
+<!-- public/form.js -->
+<script>
 (() => {
+  // Kısa seçici
   const $ = (s) => document.querySelector(s);
 
-  // --- Elemanlar
+  // --- Elemanlar (eski/yeni id'lerle uyumlu)
   const els = {
-    form: document.getElementById('surveyForm') || document.getElementById('theForm') || document.querySelector('form'),
-    list: document.getElementById('questions') || document.querySelector('[data-questions]'),
-    // Hem eski (#form-title) hem yeni (#pageTitle) id'leri destekle
-    title: document.getElementById('form-title') || document.getElementById('pageTitle') || document.querySelector('[data-form-title]'),
-    skeleton: document.getElementById('skeleton') || document.querySelector('[data-skeleton]'),
-    content: document.getElementById('content') || document.querySelector('#content'),
-    banner: document.getElementById('banner') || document.querySelector('[data-banner]')
+    form: document.getElementById('surveyForm') ||
+          document.getElementById('theForm')   ||
+          document.querySelector('form'),
+    list: document.getElementById('questions') ||
+          document.querySelector('[data-questions]'),
+    title: document.getElementById('form-title') ||
+           document.getElementById('pageTitle')  ||
+           document.querySelector('[data-form-title]'),
+    skeleton: document.getElementById('skeleton') ||
+              document.querySelector('[data-skeleton]'),
+    content: document.getElementById('content') ||
+             document.querySelector('#content'),
+    banner: document.getElementById('banner') ||
+            document.querySelector('[data-banner]')
   };
 
+  // Basit bildirim
   function showBanner(msg, type = 'error') {
     if (!els.banner) {
       const b = document.createElement('div');
@@ -21,59 +32,42 @@
       b.style.borderRadius = '10px';
       b.style.fontSize = '15px';
       b.style.lineHeight = '1.4';
-      b.style.background = type === 'error' ? '#3a1212' : '#123a12';
-      b.style.color = type === 'error' ? '#ffb4b4' : '#b9f6c5';
       (els.form?.parentElement || document.body).prepend(b);
       els.banner = b;
     }
+    const isError = type === 'error';
+    els.banner.style.background = isError ? '#3a1212' : '#123a12';
+    els.banner.style.color = isError ? '#ffb4b4' : '#b9f6c5';
     els.banner.textContent = msg;
   }
 
-  function hideSkeletonAndReveal() {
+  // İskeleti gizle, içeriği göster
+  function revealContent() {
     if (els.skeleton) els.skeleton.style.display = 'none';
     if (els.content) {
-      els.content.hidden = false;          // <— GÖRÜNÜR YAP
+      els.content.hidden = false;
       els.content.classList.add('visible');
     }
   }
 
-  let currentSlug = new URLSearchParams(location.search).get('slug') || '';
+  // Formu tamamen devre dışı bırak
+  function disableForm() {
+    if (!els.form) return;
+    [...els.form.querySelectorAll('input,button,select,textarea')].forEach(el => {
+      el.disabled = true;
+    });
+  }
+
+  // URL’den slug
+  const currentSlug = new URLSearchParams(location.search).get('slug') || '';
+
+  // Bellekte form
   let currentForm = null;
 
-  if (!currentSlug) {
-    hideSkeletonAndReveal();
-    showBanner('Geçersiz bağlantı: slug parametresi yok.', 'error');
-    return;
-  }
-
-  async function submitAnswers(slug, answers) {
-  try {
-    const r = await fetch(`/api/forms/${slug}/submit`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ answers })
-    });
-    const data = await r.json();
-
-    if (!r.ok || data.ok === false) {
-      throw new Error(data.error || "Gönderim hatası");
-    }
-
-    // Yeni: duplicate olsa da hata değil, nazikçe bilgilendir
-    if (data.alreadySubmitted) {
-      showToast("Bu ankete daha önce yanıt verdiniz. Mevcut yanıtınız korunuyor.", "info");
-      disableForm(); // istersen butonu pasifleştir, tekrar denemesin
-      return;
-    }
-
-    showToast("Yanıtınız kaydedildi. Teşekkürler!", "success");
-    disableForm();
-  } catch (e) {
-    showToast(`İnternet/servis hatası: ${e.message}`, "error");
-  }
-}
-
+  // Soru çizimi
   function drawForm(form) {
+    if (!els.list) return;
+
     if (els.title) els.title.textContent = form.title || currentSlug;
     els.list.innerHTML = '';
 
@@ -148,11 +142,42 @@
     });
   }
 
-  // Gönderim + zorunlu kontrolü (istemci)
+  // Formu YÜKLE
+  async function loadForm() {
+    if (!currentSlug) {
+      revealContent();
+      showBanner('Geçersiz bağlantı: slug parametresi yok.', 'error');
+      return;
+    }
+
+    try {
+      const r = await fetch(`/api/forms/${encodeURIComponent(currentSlug)}`, {
+        headers: { 'Accept': 'application/json' }
+      });
+      const data = await r.json();
+
+      if (!r.ok || data?.ok === false) {
+        throw new Error(data?.error || 'Form bulunamadı');
+      }
+
+      currentForm = data.form || data; // API iki farklı gövdeden birini dönebilir
+      drawForm(currentForm);
+      revealContent();
+    } catch (err) {
+      revealContent();
+      showBanner(`Form yüklenemedi: ${err.message}`, 'error');
+    }
+  }
+
+  // İstemci doğrulama + gönderim
   document.addEventListener('submit', async (e) => {
     if (!els.form || !els.form.contains(e.target)) return;
     e.preventDefault();
-    if (!currentForm) { showBanner('Form yüklenmedi.', 'error'); return; }
+
+    if (!currentForm) {
+      showBanner('Form henüz yüklenmedi.', 'error');
+      return;
+    }
 
     const qs = (currentForm.schema?.questions) || [];
     const payload = { answers: {} };
@@ -160,15 +185,17 @@
 
     qs.forEach((q, i) => {
       let val;
+
       if (q.type === 'radio') {
-        const c = document.querySelector(`input[name="q${i}"]:checked`);
-        val = c ? c.value : '';
+        const checked = document.querySelector(`input[name="q${i}"]:checked`);
+        val = checked ? checked.value : '';
       } else if (q.type === 'checkbox') {
         val = [...document.querySelectorAll(`input[name="q${i}"]:checked`)].map(x => x.value);
       } else {
         const el = document.querySelector(`[name="q${i}"]`);
         val = el ? el.value.trim() : '';
       }
+
       payload.answers[`q_${i}`] = val;
 
       if (q.required) {
@@ -177,7 +204,10 @@
       }
     });
 
-    if (eksik.length) { showBanner(`Lütfen zorunlu soruları doldurun:\n- ${eksik.join('\n- ')}`, 'error'); return; }
+    if (eksik.length) {
+      showBanner(`Lütfen zorunlu soruları doldurun:\n- ${eksik.join('\n- ')}`, 'error');
+      return;
+    }
 
     try {
       const r = await fetch(`/api/forms/${encodeURIComponent(currentSlug)}/submit`, {
@@ -186,19 +216,37 @@
         body: JSON.stringify(payload)
       });
       const data = await r.json();
-      if (!r.ok || !data?.ok) {
-        const msg = data?.missing?.length
-          ? `Eksik alanlar:\n- ${data.missing.join('\n- ')}`
-          : (data?.error || 'Kaydedilemedi');
-        showBanner(msg, 'error');
-        return;
+
+      // Başarısızlık
+      if (!r.ok || data?.ok === false) {
+        // Sunucu "eksik alan" döndürebilir
+        if (Array.isArray(data?.missing) && data.missing.length) {
+          showBanner(`Eksik alanlar:\n- ${data.missing.join('\n- ')}`, 'error');
+          return;
+        }
+
+        // Aynı IP’den tekrar oy hatası (unique constraint)
+        const msg = String(data?.error || '').toLowerCase();
+        if (msg.includes('duplicate key') || msg.includes('already') || data?.code === 'ALREADY_SUBMITTED') {
+          showBanner('Bu ankete daha önce yanıt verdiniz. Mevcut yanıtınız korunuyor.', 'ok');
+          disableForm();
+          return;
+        }
+
+        // Diğer hatalar
+        throw new Error(data?.error || 'Kaydedilemedi');
       }
+
+      // Başarılı
       showBanner('Teşekkürler, yanıtınız kaydedildi.', 'ok');
       els.form.reset();
+      disableForm();
     } catch (err) {
-      showBanner('Gönderim hatası: ' + err.message, 'error');
+      showBanner(`İnternet/servis hatası: ${err.message}`, 'error');
     }
   });
 
+  // Başlat
   loadForm();
 })();
+</script>
