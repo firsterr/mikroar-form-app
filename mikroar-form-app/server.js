@@ -57,11 +57,15 @@ function pickClientIp(req) {
 }
 
 // ---- Güvenlik
-const faList = FRAME_ANCESTORS.split(",").map(s => s.trim()).filter(Boolean);
 app.use(helmet({
   contentSecurityPolicy: {
     useDefaults: true,
-    directives: { "frame-ancestors": faList.length ? faList : ["'self'"] },
+    directives: {
+      "frame-ancestors": faList.length ? faList : ["'self'"],
+      // ⬇️ inline scriptler ve aynı origin XHR/fetch izinleri
+      "script-src": ["'self'", "'unsafe-inline'"],
+      "connect-src": ["'self'"],
+    },
   },
   frameguard: false,
   crossOriginEmbedderPolicy: false,
