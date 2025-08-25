@@ -6,7 +6,7 @@ const toast = (m, type='')=>{
   t.textContent = m;
   t.style.display='block';
   t.style.borderColor = type==='err' ? '#ef4444' : type==='ok' ? '#22c55e' : 'var(--line)';
-  setTimeout(()=> t.style.display='none', 2000);
+  setTimeout(()=> t.style.display='none', 2200);
 };
 
 const els = {
@@ -28,6 +28,7 @@ const blankQ = () => ({
 });
 
 let questions = [];   // state
+let loadedSlug = null; // son yüklenen formun slug'ı (rename desteği için)
 
 function chip(k,v){
   const s = document.createElement('span');
@@ -110,42 +111,58 @@ function render(){
 function setForm(form){
   els.title.value  = form.title || '';
   els.active.value = (form.active === false ? 'false' : 'true');
-  questions = Array.isArray(form.schema?.questions) ? JSON.parse(JSON.stringify(form.schema.questions)) : [];
+  questions = Array.isArray(form.schema?.questions)
+    ? JSON.parse(JSON.stringify(form.schema.questions))
+    : [];
+  loadedSlug = form.slug || null;           // ← son yüklenen slug
   render();
 }
 
 async function load(){
-  const slug = els.slug.value.trim();
+  const slug = els.slug.value.trim().toLowerCase();
   if (!slug) return toast('Slug gerekli','err');
   try{
     const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`);
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || 'Bulunamadı');
+    // API bazı yerlerde form.slug döndürmüyor olabilir; güvenceye al
+    j.form.slug = j.form.slug || slug;
     setForm(j.form);
     toast('Yüklendi');
   }catch(e){ toast('Yüklenemedi: '+e.message,'err'); }
 }
 
 async function save(){
-  const slug = els.slug.value.trim();
+  const slug = els.slug.value.trim().toLowerCase();
   if (!slug) return toast('Slug gerekli','err');
-  const body = {
+
+  const payload = {
     slug,
     title: els.title.value.trim(),
     active: els.active.value === 'true',
-    schema: { questions }
+    schema: { questions },                 // ← OBJE gönderiyoruz (string değil)
+    prevSlug: loadedSlug && loadedSlug !== slug ? loadedSlug : null
   };
+
   try{
-    const r = await fetch('/admin/api/forms',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
-    const j = await r.json();
-    if (!j.ok) throw new Error(j.error||'Kaydedilemedi');
+    const r = await fetch('/api/admin/forms/save', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const j = await r.json().catch(()=> ({}));
+    if (!r.ok || !j.ok) {
+      const msg = j.detail || j.error || r.statusText || 'Kaydedilemedi';
+      throw new Error(msg);
+    }
+    loadedSlug = payload.slug;             // rename sonrası state’i güncelle
     toast('Kaydedildi ✓','ok');
   }catch(e){ toast('Hata: '+e.message,'err'); }
 }
 
 // UI
 els.btnAdd.onclick = ()=>{ questions.push(blankQ()); render(); };
-els.btnNew.onclick = ()=>{ els.title.value=''; els.active.value='true'; questions=[]; render(); };
+els.btnNew.onclick = ()=>{ els.title.value=''; els.active.value='true'; loadedSlug=null; questions=[]; render(); };
 els.btnLoad.onclick= load;
 els.btnSave.onclick= save;
 
