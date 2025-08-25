@@ -123,13 +123,32 @@ app.use(morgan("combined"));
 // ---- Statik
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
+// ---- HOST'A GÖRE ANA SAYFA SEÇİMİ
+app.get("/", (req, res) => {
+  const host = (req.headers.host || "").toLowerCase();
+  const file = host.startsWith("anket.")
+    ? path.join(__dirname, "public", "admin.html")
+    : path.join(__dirname, "public", "index.html");
+
+  res.sendFile(file);
+});
 // ---- FORM GÖSTERME (sadece form.mikroar.com altında)
 app.get("/form.html", (req, res) => {
   const host = (req.headers.host || "").toLowerCase();
   if (host.startsWith("form.")) {
     res.sendFile(path.join(__dirname, "public", "form.html"));
   } else {
-    res.status(403).send("Bu sayfa sadece form.mikroar.com üzerinden erişilebilir");
+    res.status(403).send("❌ Bu sayfa sadece form.mikroar.com üzerinden erişilebilir");
+  }
+});
+
+// ---- RESULTS (sadece form.mikroar.com altında)
+app.get("/results.html", (req, res) => {
+  const host = (req.headers.host || "").toLowerCase();
+  if (host.startsWith("form.")) {
+    res.sendFile(path.join(__dirname, "public", "results.html"));
+  } else {
+    res.status(403).send("❌ Bu sayfa sadece form.mikroar.com üzerinden erişilebilir");
   }
 });
 
