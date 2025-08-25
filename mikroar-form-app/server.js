@@ -55,10 +55,9 @@ function pickClientIp(req) {
   }
   return null;
 }
-
 // ---- Güvenlik
 
-// 1) frame-ancestors listesini güvenli şekilde hazırla (boşsa [] kalsın)
+// frame-ancestors listesini güvenli şekilde hazırla (boşsa [] kalsın)
 const FRAME_ANCESTORS = process.env.FRAME_ANCESTORS || '';
 const faList = FRAME_ANCESTORS
   ? FRAME_ANCESTORS.split(',').map(s => s.trim()).filter(Boolean)
@@ -70,10 +69,10 @@ app.use(helmet({
     directives: {
       "default-src": ["'self'"],
       "frame-ancestors": faList.length ? faList : ["'self'"],
-      // inline <script>’ler için ve aynı origin API çağrıları için:
+      // inline <script>’ler ve aynı origin API çağrıları için:
       "script-src": ["'self'", "'unsafe-inline'"],
       "connect-src": ["'self'"],
-      // (opsiyonel ama faydalı)
+      // opsiyonel ama faydalı:
       "img-src": ["'self'", "data:"],
       "style-src": ["'self'", "'unsafe-inline'"],
     },
