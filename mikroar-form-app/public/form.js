@@ -46,25 +46,32 @@
     return;
   }
 
-  async function loadForm() {
-    try {
-      const r = await fetch(`/api/forms/${encodeURIComponent(currentSlug)}`);
-      const data = await r.json();
+  async function submitAnswers(slug, answers) {
+  try {
+    const r = await fetch(`/api/forms/${slug}/submit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ answers })
+    });
+    const data = await r.json();
 
-      if (!r.ok || !data?.ok) {
-        hideSkeletonAndReveal();
-        showBanner(data?.error || 'Form yüklenemedi.', 'error');
-        return;
-      }
-
-      currentForm = data.form;
-      drawForm(currentForm);
-      hideSkeletonAndReveal();             // <— ÇİZİMDEN SONRA DA AÇ
-    } catch (e) {
-      hideSkeletonAndReveal();
-      showBanner('İnternet/servis hatası: ' + e.message, 'error');
+    if (!r.ok || data.ok === false) {
+      throw new Error(data.error || "Gönderim hatası");
     }
+
+    // Yeni: duplicate olsa da hata değil, nazikçe bilgilendir
+    if (data.alreadySubmitted) {
+      showToast("Bu ankete daha önce yanıt verdiniz. Mevcut yanıtınız korunuyor.", "info");
+      disableForm(); // istersen butonu pasifleştir, tekrar denemesin
+      return;
+    }
+
+    showToast("Yanıtınız kaydedildi. Teşekkürler!", "success");
+    disableForm();
+  } catch (e) {
+    showToast(`İnternet/servis hatası: ${e.message}`, "error");
   }
+}
 
   function drawForm(form) {
     if (els.title) els.title.textContent = form.title || currentSlug;
