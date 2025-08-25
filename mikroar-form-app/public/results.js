@@ -1,4 +1,4 @@
-/* MikroAR – Sonuçları Görüntüle */
+/* MikroAR – Sonuç Görüntüleme */
 const $ = s => document.querySelector(s);
 const els = {
   slug:    $("#slug"),
@@ -21,9 +21,7 @@ function toast(msg, kind="") {
 function toTsv(rows) {
   const header = Object.keys(rows[0] || {});
   const lines = [header.join("\t")];
-  for (const r of rows) {
-    lines.push(header.map(k => String(r[k] ?? "")).join("\t"));
-  }
+  for (const r of rows) lines.push(header.map(k => String(r[k] ?? "")).join("\t"));
   return lines.join("\n");
 }
 
@@ -42,11 +40,8 @@ function downloadCsv(filename, rows) {
 
 function renderTable(rows) {
   els.table.innerHTML = "";
-  if (!rows.length) {
-    els.table.textContent = "Kayıt yok.";
-    return;
-  }
-  const header = Object.keys(rows[0]);
+  if (!rows.length) { els.table.textContent = "Kayıt yok."; return; }
+  const header = Object.keys(rows[0] || {});
   const thead = document.createElement("thead");
   thead.innerHTML = `<tr>${header.map(h => `<th>${h}</th>`).join("")}</tr>`;
   const tbody = document.createElement("tbody");
@@ -60,30 +55,33 @@ function renderTable(rows) {
 }
 
 async function ensureAdminAuth() {
-  // 1) XHR ile ping yap – 401 ise Basic Auth’ı sayfa navigasyonu ile açtır
-  const ping = await fetch("/api/admin/ping");
-  if (ping.status === 401) {
-    // Giriş ekranını açtır ve tekrar bu sayfaya dön
+  try {
+    const ping = await fetch("/api/admin/ping", { cache: "no-store" });
+    if (ping.status === 401) {
+      location.href = "/admin/gate?next=" + encodeURIComponent(location.href);
+      return false;
+    }
+    if (!ping.ok) throw new Error("Auth ping başarısız");
+    return true;
+  } catch {
+    // ağ hatası vs: yine de gate’e gönder
     location.href = "/admin/gate?next=" + encodeURIComponent(location.href);
-    return false; // akışı durdur
+    return false;
   }
-  if (!ping.ok) throw new Error("Auth ping başarısız");
-  return true;
 }
 
 async function load() {
   const slug = els.slug.value.trim();
   if (!slug) return toast("Slug gerekli", "err");
 
-  // Önce admin girişini garanti altına al
   if (!(await ensureAdminAuth())) return;
 
   els.meta.textContent = "yükleniyor…";
   els.table.innerHTML = "";
 
   try {
-    const r = await fetch(`/api/admin/forms/${encodeURIComponent(slug)}/responses`);
-    if (r.status === 401) { // ilk kez bu noktada yakalanırsa
+    const r = await fetch(`/api/admin/forms/${encodeURIComponent(slug)}/responses`, { cache: "no-store" });
+    if (r.status === 401) {
       location.href = "/admin/gate?next=" + encodeURIComponent(location.href);
       return;
     }
@@ -91,11 +89,9 @@ async function load() {
     if (!j.ok) throw new Error(j.error || "yüklenemedi");
 
     // rows: [{created_at, ip, answers}]
-    // answers (jsonb) içindeki cevapları sütunlara açalım
     const flat = j.rows.map(x => {
       const base = { "Tarih": x.created_at, "IP": x.ip || "" };
       const a = x.answers || {};
-      // q_0, q_1 ... -> değerleri stringleştir
       for (const k of Object.keys(a)) {
         let v = a[k];
         if (Array.isArray(v)) v = v.join("; ");
@@ -108,7 +104,6 @@ async function load() {
     els.meta.textContent = `kayıt: ${flat.length}, sütun: ${Object.keys(flat[0]||{}).length}`;
     renderTable(flat);
 
-    // Kopyala/CSV butonları
     els.copyTsv.onclick = () => {
       if (!flat.length) return toast("Kopyalanacak veri yok");
       navigator.clipboard.writeText(toTsv(flat));
@@ -128,6 +123,6 @@ async function load() {
 
 els.load.onclick = load;
 
-// URL parametresi ile otomatik yükleme
+// URL parametresi ile otomatik slug set
 const uSlug = new URLSearchParams(location.search).get("slug");
-if (uSlug) { $("#slug").value = uSlug; }
+if (uSlug) els.slug.value = uSlug;
