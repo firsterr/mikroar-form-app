@@ -123,19 +123,14 @@ app.use(morgan("combined"));
 // ---- Statik
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
-// ---- HOST'A GÖRE ANA SAYFA SEÇİMİ
-app.get("/", (req, res) => {
-  // Express'te hostname en temiz çözümdür (proxy arkasında çalışır)
-  const host = (req.hostname || "").toLowerCase();
-
-  const isAdmin =
-    host === "anket.mikroar.com" || host.startsWith("anket.");
-
-  const file = isAdmin
-    ? path.join(__dirname, "public", "admin.html")  // anket.mikroar.com
-    : path.join(__dirname, "public", "index.html"); // form.mikroar.com
-
-  res.sendFile(file);
+// ---- FORM GÖSTERME (sadece form.mikroar.com altında)
+app.get("/form.html", (req, res) => {
+  const host = (req.headers.host || "").toLowerCase();
+  if (host.startsWith("form.")) {
+    res.sendFile(path.join(__dirname, "public", "form.html"));
+  } else {
+    res.status(403).send("Bu sayfa sadece form.mikroar.com üzerinden erişilebilir");
+  }
 });
 
 // ---- Basic Auth (admin)
