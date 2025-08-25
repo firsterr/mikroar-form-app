@@ -70,13 +70,12 @@ app.use(helmet({
       "script-src": ["'self'", "'unsafe-inline'"],
       "connect-src": ["'self'"],
       "img-src": ["'self'", "data:"],
-      "style-src": ["'self'", "'unsafe-inline'"],
-    },
+      "style-src": ["'self'", "'unsafe-inline'"]
+    }
   },
   frameguard: false,
-  crossOriginEmbedderPolicy: false,
+  crossOriginEmbedderPolicy: false
 }));
-
 // ---- Middlewares
 app.use(cors({
   origin: CORS_ORIGIN === "*" ? true : CORS_ORIGIN.split(",").map(s => s.trim()),
