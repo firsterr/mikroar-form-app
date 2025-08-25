@@ -296,8 +296,25 @@ app.get("/api/admin/forms/:slug/responses", adminOnly, async (req, res) => {
 });
 
 // ---- Kök: index.html
-app.get("/", (_req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+// ---- anket.* guard: form linkini engelle, /health serbest
+app.use((req, res, next) => {
+  const host = (req.headers.host || "").toLowerCase();
+  if (host.startsWith("anket.")) {
+    if (req.path === "/health") return next();
+    if (req.path.startsWith("/form.html")) {
+      return res.status(404).send("Not found");
+    }
+  }
+  next();
+});
+
+// ---- Kök: host'a göre ana sayfa
+app.get("/", (req, res) => {
+  const host = (req.headers.host || "").toLowerCase();
+  const file = host.startsWith("anket.")
+    ? path.join(__dirname, "public", "admin.html")   // anket.mikroar.com → Admin/Builder
+    : path.join(__dirname, "public", "index.html");  // form.mikroar.com → Form seç
+  res.sendFile(file);
 });
 
 app.listen(PORT, () => {
