@@ -8,6 +8,26 @@ const { Pool } = pkg;
 import path from "path";
 import { fileURLToPath } from "url";
 
+// ---- Sağlık
+app.get("/health", async (_req, res) => {
+  try {
+    await pool.query("SELECT 1");
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+// ---- anket.* guard: form sayfasını engelle, /health serbest
+app.use((req, res, next) => {
+  const host = (req.headers.host || "").toLowerCase();
+  if (host.startsWith("anket.")) {
+    if (req.path === "/health") return next();          // Render health check için izin
+    if (req.path.startsWith("/form.html")) {
+      return res.status(404).send("Not found");          // anket.* üzerinden form linki kapalı
+    }
+  }
+  next();
+});
 // __dirname eşdeğeri
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -138,15 +158,7 @@ function adminOnly(req, res, next) {
   next();
 }
 
-// ---- Sağlık
-app.get("/health", async (_req, res) => {
-  try {
-    await pool.query("SELECT 1");
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
+
 
 // ---- LIST: aktif formlar
 app.get("/api/forms-list", async (_req, res) => {
