@@ -306,7 +306,16 @@ app.get("/api/admin/forms/:slug/responses", adminOnly, async (req, res) => {
       "SELECT title, schema, active FROM forms WHERE slug = $1",
       [slug]
     );
-    if (!formRows.length) return res.status(404).json({ ok: false, error: "Form bulunamadı" });
+    if (!formRows.length) {
+      return res.status(404).json({ ok: false, error: "Form bulunamadı" });
+    }
+
+    // <-- şema her durumda obje olsun
+    const meta = formRows[0];
+    try {
+      if (typeof meta.schema === "string") meta.schema = JSON.parse(meta.schema);
+    } catch (_) { /* yutuyoruz */ }
+
     const { rows } = await pool.query(
       `SELECT created_at, ip::text AS ip, answers
          FROM responses
@@ -314,7 +323,8 @@ app.get("/api/admin/forms/:slug/responses", adminOnly, async (req, res) => {
         ORDER BY created_at DESC`,
       [slug]
     );
-    res.json({ ok: true, meta: formRows[0], rows });
+
+    res.json({ ok: true, meta, rows });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
