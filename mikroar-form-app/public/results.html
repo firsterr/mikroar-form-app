@@ -28,6 +28,145 @@
     <div id="toast"></div>
   </div>
   <!-- cache temiz olsun diye versiyon parametresi -->
-  <script src="results.js?v=2"></script>
+  <script>
+const $ = s => document.querySelector(s);
+const btnLoad = document.getElementById('btn-load');
+const inpSlug = document.getElementById('slug');
+const tbl = document.getElementById('table');
+const info = document.getElementById('info');
+const btnCopyTsv = document.getElementById('btn-copy');
+const btnCsv = document.getElementById('btn-csv');
+
+let lastData = null;
+
+// Basic auth header üretimi (sayfada zaten prompt ile alıyorsan koru)
+function authHeader() {
+  // Eğer sonuç sayfasını basic auth ile koruyorsan burada cred üret:
+  // const cred = prompt("admin kullanıcı:parola (örn: admin:admin)") || "";
+  // return { 'Authorization': 'Basic ' + btoa(cred) };
+  return {}; // RLS kapalıysa ya da proxy ile koruyorsan boş kalsın
+}
+
+btnLoad.addEventListener('click', load);
+
+async function load() {
+  const slug = inpSlug.value.trim();
+  if (!slug) return;
+
+  info.textContent = 'Yükleniyor...';
+  tbl.innerHTML = '';
+
+  const res = await fetch(`/api/admin/forms/${encodeURIComponent(slug)}/responses`, {
+    headers: { 'Accept': 'application/json', ...authHeader() }
+  });
+
+  if (!res.ok) {
+    info.textContent = `Hata: ${res.status}`;
+    return;
+  }
+
+  const data = await res.json();
+  if (!data.ok) {
+    info.textContent = `Hata: ${data.error || 'Bilinmeyen hata'}`;
+    return;
+  }
+
+  lastData = data;
+  render(data);
+}
+
+function render(data) {
+  const q = Array.isArray(data.meta?.schema?.questions) ? data.meta.schema.questions : [];
+
+  // Başlıkları hazırla (soru metinleriyle)
+  const headers = ['Tarih', 'IP', ...q.map(x => x.label || '')];
+
+  // Tablo başlıkları
+  const thead = document.createElement('thead');
+  const trH = document.createElement('tr');
+  headers.forEach(h => {
+    const th = document.createElement('th');
+    th.textContent = h;
+    trH.appendChild(th);
+  });
+  thead.appendChild(trH);
+
+  // Satırlar
+  const tbody = document.createElement('tbody');
+  data.rows.forEach(r => {
+    const tr = document.createElement('tr');
+
+    // Tarih
+    const tdT = document.createElement('td');
+    tdT.textContent = new Date(r.created_at).toISOString();
+    tr.appendChild(tdT);
+
+    // IP
+    const tdIp = document.createElement('td');
+    tdIp.textContent = r.ip || '';
+    tr.appendChild(tdIp);
+
+    // Cevaplar
+    q.forEach((_, idx) => {
+      const key = 'q_' + idx;
+      let v = r.answers?.[key];
+      if (Array.isArray(v)) v = v.join(', ');
+      if (v == null) v = '';
+      const td = document.createElement('td');
+      td.textContent = v;
+      tr.appendChild(td);
+    });
+
+    tbody.appendChild(tr);
+  });
+
+  tbl.innerHTML = '';
+  tbl.appendChild(thead);
+  tbl.appendChild(tbody);
+
+  // Özet
+  const colCount = headers.length;
+  const rowCount = data.rows.length;
+  info.textContent = `kayıt: ${rowCount}, sütun: ${colCount}`;
+}
+
+// --- TSV/CSV kopyalama (başlıklar soru label'larıyla)
+btnCopyTsv.addEventListener('click', () => downloadSeparated('\t'));
+btnCsv.addEventListener('click', () => downloadSeparated(','));
+
+function downloadSeparated(sep) {
+  if (!lastData) return;
+
+  const q = Array.isArray(lastData.meta?.schema?.questions) ? lastData.meta.schema.questions : [];
+  const headers = ['Tarih', 'IP', ...q.map(x => x.label || '')];
+
+  const lines = [];
+  lines.push(headers.join(sep));
+
+  lastData.rows.forEach(r => {
+    const row = [];
+    row.push(new Date(r.created_at).toISOString());
+    row.push(r.ip || '');
+    q.forEach((_, idx) => {
+      let v = r.answers?.['q_' + idx];
+      if (Array.isArray(v)) v = v.join(', ');
+      if (v == null) v = '';
+      // CSV için basit kaçış
+      v = String(v).replace(/"/g, '""');
+      if (sep === ',') v = `"${v}"`;
+      row.push(v);
+    });
+    lines.push(row.join(sep));
+  });
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = sep === ',' ? 'results.csv' : 'results.tsv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
 </body>
 </html>
