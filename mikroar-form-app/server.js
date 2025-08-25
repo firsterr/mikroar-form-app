@@ -131,22 +131,21 @@ app.use(
  */
 function wantsAuth(req) {
   const host = (req.headers.host || '').toLowerCase();
-  const p = req.path.toLowerCase();
+  const p = (req.path || '/').toLowerCase();
+
+  // Render health check buradan geçecek → asla şifre isteme
+  if (p === '/health') return false;
 
   const isFormSub = host.startsWith('form.');
   const isAnketSub = host.startsWith('anket.');
 
-  // form.html şifresiz (sadece form subdomain)
+  // Sadece form.mikroar.com altında, slug varsa form.html public
   const isPublicVotePage = isFormSub && p === '/form.html' && !!req.query.slug;
 
-  // results.html her zaman şifreli (form subdomain de olsa)
-  const isResults = p === '/results.html';
+  // results.html her zaman korumalı
+  if (p === '/results.html') return true;
 
-  if (isResults) return true; // sonuç sayfası her zaman korumalı
-
-  // admin (anket) ve form genel olarak korumalı; ama public form sayfası hariç
   if ((isFormSub || isAnketSub) && !isPublicVotePage) return true;
-
   return false;
 }
 
