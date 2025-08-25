@@ -123,6 +123,19 @@ app.use(morgan("combined"));
 // ---- Statik
 app.use(express.static(path.join(__dirname, "public")));
 
+// --- HOST'A GÖRE ANA SAYFA SEÇİMİ
+app.get("/", (req, res) => {
+  const host = (req.headers.host || "").toLowerCase();
+
+  // anket.mikroar.com -> builder sayfası (admin.html)
+  const file = host.startsWith("anket.")
+    ? path.join(__dirname, "public", "admin.html")
+    // form.mikroar.com -> mevcut form seçme sayfası (index.html)
+    : path.join(__dirname, "public", "index.html");
+
+  res.sendFile(file);
+});
+
 // ---- Basic Auth (admin)
 function adminOnly(req, res, next) {
   const hdr = req.headers.authorization || "";
