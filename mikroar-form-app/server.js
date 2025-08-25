@@ -57,24 +57,6 @@ function normalizeIp(raw) {
   return null;
 }
 
-function pickClientIp(req) {
-  const h = (k) => req.headers[k] ? String(req.headers[k]) : '';
-  const chain = [
-    h('cf-connecting-ip'),
-    h('x-client-ip'),
-    h('x-real-ip'),
-    h('x-forwarded-for'),
-    req.ip,
-    req.socket?.remoteAddress
-  ].filter(Boolean);
-
-  for (const v of chain) {
-    const ip = normalizeIp(v);
-    if (ip) return ip;
-  }
-  return null; // 0.0.0.0 yazmak yerine null döndür
-}
-
 // İstemci IP'si
 function pickClientIp(req) {
   const chain = [
