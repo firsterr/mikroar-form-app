@@ -171,7 +171,19 @@ function adminOnly(req, res, next) {
   }
   next();
 }
+// Basit ping – admin giriş kontrolü (XHR ile yoklama)
+app.get("/api/admin/ping", adminOnly, (_req, res) => {
+  res.json({ ok: true });
+});
 
+// Basic Auth penceresini göstermek için sayfa gezintisi
+// Giriş başarılı olunca 'next' URL'ine geri gönderir
+app.get("/admin/gate", adminOnly, (req, res) => {
+  const next = req.query.next || "/results.html";
+  res.set("Cache-Control", "no-store");
+  res.send(`<!doctype html><meta charset="utf-8">
+<script>location.replace(${JSON.stringify(next)});</script>`);
+});
 // ---- LIST: aktif formlar
 app.get("/api/forms-list", async (_req, res) => {
   try {
