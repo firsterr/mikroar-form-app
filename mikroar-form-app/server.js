@@ -55,11 +55,26 @@ function pickClientIp(req) {
   }
   return null;
 }
-// ---- Güvenlik (geçici sade ayar)
+// ---- Güvenlik (CSP açık)
+const FRAME_ANCESTORS = process.env.FRAME_ANCESTORS || '';
+const faList = FRAME_ANCESTORS
+  ? FRAME_ANCESTORS.split(',').map(s => s.trim()).filter(Boolean)
+  : [];
+
 app.use(helmet({
-  contentSecurityPolicy: false,      // CSP kapalı (geçici)
-  frameguard: false,                 // X-Frame-Options kapalı
-  crossOriginEmbedderPolicy: false,  // COEP kapalı
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      "default-src": ["'self'"],
+      "frame-ancestors": faList.length ? faList : ["'self'"],
+      "script-src": ["'self'", "'unsafe-inline'"],
+      "connect-src": ["'self'"],
+      "img-src": ["'self'", "data:"],
+      "style-src": ["'self'", "'unsafe-inline'"],
+    },
+  },
+  frameguard: false,
+  crossOriginEmbedderPolicy: false,
 }));
 
 // ---- Middlewares
