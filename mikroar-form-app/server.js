@@ -33,7 +33,7 @@ const pool = new Pool({
 
 // ---- App
 const app = express();
-app.set("trust proxy", 2);
+app.set("trust proxy", true);
 
 // IPv4 ve IPv6 regex'leri
 const IPv4_RE = /^(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}$/;
