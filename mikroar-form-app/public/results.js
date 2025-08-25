@@ -1,139 +1,133 @@
-// results.js  (tamamını yapıştırın)
+/* MikroAR – Sonuçları Görüntüle */
+const $ = s => document.querySelector(s);
+const els = {
+  slug:    $("#slug"),
+  load:    $("#btnLoad"),
+  copyTsv: $("#btnCopy"),
+  csv:     $("#btnCsv"),
+  meta:    $("#meta"),
+  table:   $("#table"),
+  toast:   $("#toast")
+};
 
-(async function () {
-  const $ = (sel) => document.querySelector(sel);
+function toast(msg, kind="") {
+  els.toast.textContent = msg;
+  els.toast.style.display = "block";
+  els.toast.style.borderColor =
+    kind === "err" ? "#ef4444" : kind === "ok" ? "#22c55e" : "var(--line)";
+  setTimeout(() => els.toast.style.display = "none", 2000);
+}
 
-  // UI elemanları
-  const slugInput = $('#slug');
-  const loadBtn   = $('#btnLoad');
-  const tsvBtn    = $('#btnCopy');
-  const csvBtn    = $('#btnCsv');
-  const tableWrap = $('#tableWrap');
-  const infoEl    = $('#info');
+function toTsv(rows) {
+  const header = Object.keys(rows[0] || {});
+  const lines = [header.join("\t")];
+  for (const r of rows) {
+    lines.push(header.map(k => String(r[k] ?? "")).join("\t"));
+  }
+  return lines.join("\n");
+}
 
-  // Yardımcılar
-  const fmtDate = (iso) => {
-    try {
-      const d = new Date(iso);
-      const dd = d.toLocaleDateString('tr-TR');
-      const tt = d.toLocaleTimeString('tr-TR', { hour12: false });
-      return `${dd} ${tt}`;
-    } catch { return iso || ''; }
-  };
+function downloadCsv(filename, rows) {
+  const header = Object.keys(rows[0] || {});
+  const csv = [header.join(",")].concat(
+    rows.map(r => header.map(k => `"${String(r[k] ?? "").replace(/"/g,'""')}"`).join(","))
+  ).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 
-  const toText = (v) => {
-    if (v == null) return '';
-    if (Array.isArray(v)) return v.join(', ');
-    if (typeof v === 'boolean') return v ? 'Evet' : 'Hayır';
-    return String(v);
-  };
+function renderTable(rows) {
+  els.table.innerHTML = "";
+  if (!rows.length) {
+    els.table.textContent = "Kayıt yok.";
+    return;
+  }
+  const header = Object.keys(rows[0]);
+  const thead = document.createElement("thead");
+  thead.innerHTML = `<tr>${header.map(h => `<th>${h}</th>`).join("")}</tr>`;
+  const tbody = document.createElement("tbody");
+  for (const r of rows) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = header.map(h => `<td>${r[h] ?? ""}</td>`).join("");
+    tbody.appendChild(tr);
+  }
+  els.table.appendChild(thead);
+  els.table.appendChild(tbody);
+}
 
-  const buildHeader = (questions) => {
-    // İlk iki sabit sütun
-    const ths = [
-      '<th>Tarih</th>',
-      '<th>IP</th>',
-      ...questions.map(q => `<th>${q.label}</th>`)
-    ];
-    return `<thead><tr>${ths.join('')}</tr></thead>`;
-  };
+async function ensureAdminAuth() {
+  // 1) XHR ile ping yap – 401 ise Basic Auth’ı sayfa navigasyonu ile açtır
+  const ping = await fetch("/api/admin/ping");
+  if (ping.status === 401) {
+    // Giriş ekranını açtır ve tekrar bu sayfaya dön
+    location.href = "/admin/gate?next=" + encodeURIComponent(location.href);
+    return false; // akışı durdur
+  }
+  if (!ping.ok) throw new Error("Auth ping başarısız");
+  return true;
+}
 
-  const buildRows = (rows, questions) => {
-    return rows.map(r => {
-      const a = r.answers || {}; // server COALESCE yaptı ama yine de koruyalım
-      const tds = [
-        `<td>${fmtDate(r.created_at)}</td>`,
-        `<td>${toText(r.ip)}</td>`,
-        ...questions.map(q => `<td>${toText(a[q.label])}</td>`)
-      ];
-      return `<tr>${tds.join('')}</tr>`;
-    }).join('');
-  };
+async function load() {
+  const slug = els.slug.value.trim();
+  if (!slug) return toast("Slug gerekli", "err");
 
-  const buildTable = ({ rows, questions }) => {
-    if (!rows.length) {
-      tableWrap.innerHTML = `<div class="empty">Kayıt yok</div>`;
-      infoEl.textContent  = `kayıt: 0, sütun: ${questions.length + 2}`;
+  // Önce admin girişini garanti altına al
+  if (!(await ensureAdminAuth())) return;
+
+  els.meta.textContent = "yükleniyor…";
+  els.table.innerHTML = "";
+
+  try {
+    const r = await fetch(`/api/admin/forms/${encodeURIComponent(slug)}/responses`);
+    if (r.status === 401) { // ilk kez bu noktada yakalanırsa
+      location.href = "/admin/gate?next=" + encodeURIComponent(location.href);
       return;
     }
-    const html = `
-      <table class="res">
-        ${buildHeader(questions)}
-        <tbody>
-          ${buildRows(rows, questions)}
-        </tbody>
-      </table>
-    `;
-    tableWrap.innerHTML = html;
-    infoEl.textContent  = `kayıt: ${rows.length}, sütun: ${questions.length + 2}`;
-  };
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || "yüklenemedi");
 
-  // TSV/CSV export
-  const tableToMatrix = () => {
-    const table = tableWrap.querySelector('table');
-    if (!table) return [];
-    const rows = [...table.querySelectorAll('tr')].map(tr => {
-      return [...tr.children].map(td => td.textContent.trim());
+    // rows: [{created_at, ip, answers}]
+    // answers (jsonb) içindeki cevapları sütunlara açalım
+    const flat = j.rows.map(x => {
+      const base = { "Tarih": x.created_at, "IP": x.ip || "" };
+      const a = x.answers || {};
+      // q_0, q_1 ... -> değerleri stringleştir
+      for (const k of Object.keys(a)) {
+        let v = a[k];
+        if (Array.isArray(v)) v = v.join("; ");
+        else if (v && typeof v === "object") v = JSON.stringify(v);
+        base[k] = v ?? "";
+      }
+      return base;
     });
-    return rows;
-  };
 
-  const copyTSV = () => {
-    const m = tableToMatrix();
-    if (!m.length) return;
-    const tsv = m.map(r => r.join('\t')).join('\n');
-    navigator.clipboard.writeText(tsv);
-  };
+    els.meta.textContent = `kayıt: ${flat.length}, sütun: ${Object.keys(flat[0]||{}).length}`;
+    renderTable(flat);
 
-  const downloadCSV = () => {
-    const m = tableToMatrix();
-    if (!m.length) return;
-    const esc = (s) => `"${String(s).replace(/"/g, '""')}"`;
-    const csv = m.map(r => r.map(esc).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url;
-    a.download = `${slugInput.value || 'sonuclar'}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+    // Kopyala/CSV butonları
+    els.copyTsv.onclick = () => {
+      if (!flat.length) return toast("Kopyalanacak veri yok");
+      navigator.clipboard.writeText(toTsv(flat));
+      toast("Kopyalandı", "ok");
+    };
+    els.csv.onclick = () => {
+      if (!flat.length) return toast("İndirilecek veri yok");
+      downloadCsv(`${slug}.csv`, flat);
+    };
 
-  // Ana yükleme
-  const load = async () => {
-    const slug = (slugInput.value || '').trim();
-    if (!slug) return;
+  } catch (e) {
+    console.error(e);
+    els.meta.textContent = "";
+    toast("Hata: " + e.message, "err");
+  }
+}
 
-    tableWrap.innerHTML = `<div class="loading">yükleniyor...</div>`;
-    infoEl.textContent  = '';
+els.load.onclick = load;
 
-    try {
-      // 1) Şemayı al
-      const formRes = await fetch(`/api/forms/${encodeURIComponent(slug)}`, { credentials: 'include' });
-      const formJs  = await formRes.json();
-      if (!formJs.ok) throw new Error(formJs.error || 'Form bulunamadı');
-
-      // İçeride schema.questions bekliyoruz
-      const questions = (formJs.form?.schema?.questions) || [];
-
-      // 2) Yanıtları al (COALESCE answers/payload)
-      const respRes = await fetch(`/api/forms/${encodeURIComponent(slug)}/responses`, { credentials: 'include' });
-      const respJs  = await respRes.json();
-      if (!respJs.ok) throw new Error(respJs.error || 'Yanıtlar alınamadı');
-
-      buildTable({ rows: respJs.rows || [], questions });
-
-    } catch (e) {
-      tableWrap.innerHTML = `<div class="error">hata: ${e.message}</div>`;
-      infoEl.textContent  = '';
-    }
-  };
-
-  // Butonlar
-  loadBtn?.addEventListener('click', load);
-  tsvBtn?.addEventListener('click', copyTSV);
-  csvBtn?.addEventListener('click', downloadCSV);
-
-  // Sayfa açılır açılmaz otomatik yüklemek isterseniz:
-  if (slugInput.value) load();
-})();
+// URL parametresi ile otomatik yükleme
+const uSlug = new URLSearchParams(location.search).get("slug");
+if (uSlug) { $("#slug").value = uSlug; }
