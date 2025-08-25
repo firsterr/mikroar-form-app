@@ -4,169 +4,160 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Sonuçlar</title>
-  <link rel="stylesheet" href="style.css" />
   <style>
-    .wrap{max-width:1100px;margin:40px auto;padding:0 16px}
-    .bar{display:flex;gap:12px;align-items:center;margin:16px 0}
-    #slug{flex:0 0 280px}
-    #table{width:100%;border-collapse:collapse;margin-top:12px}
-    #table th,#table td{border:1px solid #2c3440;padding:8px;text-align:left}
-    #toast{display:none;margin-top:12px;padding:8px;border:1px solid var(--line);border-radius:8px}
+    body{font-family:system-ui,Arial,sans-serif;padding:24px}
+    h1{font-size:42px;margin:0 0 20px}
+    input,button{font-size:18px;padding:10px 14px}
+    #info{margin:14px 0;color:#555}
+    table{border-collapse:collapse;width:100%;margin-top:12px}
+    th,td{border:1px solid #ccc;padding:10px;text-align:left;vertical-align:top}
+    th{background:#f6f6f6}
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>Sonuçlar</h1>
-    <div class="bar">
-      <input id="slug" placeholder="ör. formayvalik" />
-      <button id="btnLoad">Yükle</button>
-      <button id="btnCopy">Kopyala (TSV)</button>
-      <button id="btnCsv">CSV indir</button>
-    </div>
-    <div id="meta"></div>
-    <table id="table"></table>
-    <div id="toast"></div>
-  </div>
-  <!-- cache temiz olsun diye versiyon parametresi -->
+  <h1>Sonuçlar</h1>
+
+  <input id="slug" placeholder="ör. formayvalik" />
+  <button id="btn-load">Yükle</button>
+  <button id="btn-copy">Kopyala (TSV)</button>
+  <button id="btn-csv">CSV indir</button>
+
+  <div id="info"></div>
+  <table id="table"></table>
+
   <script>
-const $ = s => document.querySelector(s);
-const btnLoad = document.getElementById('btn-load');
-const inpSlug = document.getElementById('slug');
-const tbl = document.getElementById('table');
-const info = document.getElementById('info');
-const btnCopyTsv = document.getElementById('btn-copy');
-const btnCsv = document.getElementById('btn-csv');
+    const $ = s => document.querySelector(s);
+    const inpSlug = $('#slug');
+    const btnLoad = $('#btn-load');
+    const btnCopy = $('#btn-copy');
+    const btnCsv  = $('#btn-csv');
+    const info    = $('#info');
+    const tbl     = $('#table');
 
-let lastData = null;
+    let lastData = null;
 
-// Basic auth header üretimi (sayfada zaten prompt ile alıyorsan koru)
-function authHeader() {
-  // Eğer sonuç sayfasını basic auth ile koruyorsan burada cred üret:
-  // const cred = prompt("admin kullanıcı:parola (örn: admin:admin)") || "";
-  // return { 'Authorization': 'Basic ' + btoa(cred) };
-  return {}; // RLS kapalıysa ya da proxy ile koruyorsan boş kalsın
-}
+    // ---- Basic Auth: bir kez sor, sessionStorage'a koy
+    function authHeader(){
+      let cred = sessionStorage.getItem('resultsAuth');
+      if (!cred) {
+        const u = prompt('Admin kullanıcı adı:');
+        const p = prompt('Admin şifre:');
+        if (!u || !p) return {};
+        cred = btoa(u + ':' + p);
+        sessionStorage.setItem('resultsAuth', cred);
+      }
+      return { 'Authorization': 'Basic ' + cred };
+    }
 
-btnLoad.addEventListener('click', load);
-
-async function load() {
-  const slug = inpSlug.value.trim();
-  if (!slug) return;
-
-  info.textContent = 'Yükleniyor...';
-  tbl.innerHTML = '';
-
-  const res = await fetch(`/api/admin/forms/${encodeURIComponent(slug)}/responses`, {
-    headers: { 'Accept': 'application/json', ...authHeader() }
-  });
-
-  if (!res.ok) {
-    info.textContent = `Hata: ${res.status}`;
-    return;
-  }
-
-  const data = await res.json();
-  if (!data.ok) {
-    info.textContent = `Hata: ${data.error || 'Bilinmeyen hata'}`;
-    return;
-  }
-
-  lastData = data;
-  render(data);
-}
-
-function render(data) {
-  const q = Array.isArray(data.meta?.schema?.questions) ? data.meta.schema.questions : [];
-
-  // Başlıkları hazırla (soru metinleriyle)
-  const headers = ['Tarih', 'IP', ...q.map(x => x.label || '')];
-
-  // Tablo başlıkları
-  const thead = document.createElement('thead');
-  const trH = document.createElement('tr');
-  headers.forEach(h => {
-    const th = document.createElement('th');
-    th.textContent = h;
-    trH.appendChild(th);
-  });
-  thead.appendChild(trH);
-
-  // Satırlar
-  const tbody = document.createElement('tbody');
-  data.rows.forEach(r => {
-    const tr = document.createElement('tr');
-
-    // Tarih
-    const tdT = document.createElement('td');
-    tdT.textContent = new Date(r.created_at).toISOString();
-    tr.appendChild(tdT);
-
-    // IP
-    const tdIp = document.createElement('td');
-    tdIp.textContent = r.ip || '';
-    tr.appendChild(tdIp);
-
-    // Cevaplar
-    q.forEach((_, idx) => {
-      const key = 'q_' + idx;
-      let v = r.answers?.[key];
-      if (Array.isArray(v)) v = v.join(', ');
-      if (v == null) v = '';
-      const td = document.createElement('td');
-      td.textContent = v;
-      tr.appendChild(td);
+    btnLoad.addEventListener('click', load);
+    inpSlug.addEventListener('keydown', (e)=>{
+      if (e.key === 'Enter') load();
     });
+    btnCopy.addEventListener('click', ()=> downloadSeparated('\t'));
+    btnCsv.addEventListener('click',  ()=> downloadSeparated(','));
 
-    tbody.appendChild(tr);
-  });
+    async function load(){
+      const slug = inpSlug.value.trim();
+      if (!slug) return;
 
-  tbl.innerHTML = '';
-  tbl.appendChild(thead);
-  tbl.appendChild(tbody);
+      info.textContent = 'Yükleniyor...';
+      tbl.innerHTML = '';
 
-  // Özet
-  const colCount = headers.length;
-  const rowCount = data.rows.length;
-  info.textContent = `kayıt: ${rowCount}, sütun: ${colCount}`;
-}
+      try {
+        const res = await fetch(`/api/admin/forms/${encodeURIComponent(slug)}/responses`, {
+          headers: { 'Accept': 'application/json', ...authHeader() }
+        });
 
-// --- TSV/CSV kopyalama (başlıklar soru label'larıyla)
-btnCopyTsv.addEventListener('click', () => downloadSeparated('\t'));
-btnCsv.addEventListener('click', () => downloadSeparated(','));
+        if (!res.ok) {
+          info.textContent = `Hata: ${res.status} ${res.statusText}`;
+          return;
+        }
 
-function downloadSeparated(sep) {
-  if (!lastData) return;
+        const data = await res.json();
+        if (!data.ok) {
+          info.textContent = `Hata: ${data.error || 'Bilinmeyen hata'}`;
+          return;
+        }
 
-  const q = Array.isArray(lastData.meta?.schema?.questions) ? lastData.meta.schema.questions : [];
-  const headers = ['Tarih', 'IP', ...q.map(x => x.label || '')];
+        lastData = data;
+        render(data);
+      } catch (err) {
+        console.error(err);
+        info.textContent = 'Hata: ' + err.message;
+      }
+    }
 
-  const lines = [];
-  lines.push(headers.join(sep));
+    function render(data){
+      const q = Array.isArray(data.meta?.schema?.questions) ? data.meta.schema.questions : [];
+      const headers = ['Tarih', 'IP', ...q.map(x => x.label || '')];
 
-  lastData.rows.forEach(r => {
-    const row = [];
-    row.push(new Date(r.created_at).toISOString());
-    row.push(r.ip || '');
-    q.forEach((_, idx) => {
-      let v = r.answers?.['q_' + idx];
-      if (Array.isArray(v)) v = v.join(', ');
-      if (v == null) v = '';
-      // CSV için basit kaçış
-      v = String(v).replace(/"/g, '""');
-      if (sep === ',') v = `"${v}"`;
-      row.push(v);
-    });
-    lines.push(row.join(sep));
-  });
+      const thead = document.createElement('thead');
+      const trH = document.createElement('tr');
+      headers.forEach(h => {
+        const th = document.createElement('th'); th.textContent = h;
+        trH.appendChild(th);
+      });
+      thead.appendChild(trH);
 
-  const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = sep === ',' ? 'results.csv' : 'results.tsv';
-  a.click();
-  URL.revokeObjectURL(url);
-}
-</script>
+      const tbody = document.createElement('tbody');
+      data.rows.forEach(r => {
+        const tr = document.createElement('tr');
+
+        const tdT = document.createElement('td');
+        tdT.textContent = new Date(r.created_at).toISOString(); tr.appendChild(tdT);
+
+        const tdIp = document.createElement('td');
+        tdIp.textContent = r.ip || ''; tr.appendChild(tdIp);
+
+        q.forEach((_, idx)=>{
+          const key = 'q_' + idx;
+          let v = r.answers?.[key];
+          if (Array.isArray(v)) v = v.join(', ');
+          if (v == null) v = '';
+          const td = document.createElement('td');
+          td.textContent = v; tr.appendChild(td);
+        });
+
+        tbody.appendChild(tr);
+      });
+
+      tbl.innerHTML = '';
+      tbl.appendChild(thead);
+      tbl.appendChild(tbody);
+
+      info.textContent = `kayıt: ${data.rows.length}, sütun: ${headers.length}`;
+    }
+
+    function downloadSeparated(sep){
+      if (!lastData) return;
+      const q = Array.isArray(lastData.meta?.schema?.questions) ? lastData.meta.schema.questions : [];
+      const headers = ['Tarih', 'IP', ...q.map(x => x.label || '')];
+
+      const lines = [];
+      lines.push(headers.join(sep));
+      lastData.rows.forEach(r=>{
+        const row = [];
+        row.push(new Date(r.created_at).toISOString());
+        row.push(r.ip || '');
+        q.forEach((_,i)=>{
+          let v = r.answers?.['q_'+i];
+          if (Array.isArray(v)) v = v.join(', ');
+          if (v == null) v = '';
+          v = String(v).replace(/"/g,'""');
+          if (sep === ',') v = `"${v}"`;
+          row.push(v);
+        });
+        lines.push(row.join(sep));
+      });
+
+      const blob = new Blob([lines.join('\n')], {type:'text/plain;charset=utf-8'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = sep === ',' ? 'results.csv' : 'results.tsv';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  </script>
 </body>
 </html>
