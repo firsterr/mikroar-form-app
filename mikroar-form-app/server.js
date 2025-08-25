@@ -123,22 +123,37 @@ app.get("/health", async (_req, res) => {
   }
 });
 
-// ---- anket.* altında form sayfasını kapat, /health'e izin ver
-app.use((req, res, next) => {
-  const host = getHost(req);
-  if (host.startsWith("anket.")) {
-    if (req.path === "/health") return next();
-    if (req.path.startsWith("/form.html")) {
-      return res.status(404).send("Not found");
-    }
-  }
-  next();
-});
-
 // __dirname eşdeğeri
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+// ---- Subdomain bazlı Basic Auth + guard
+app.use((req, res, next) => {
+  const host = getHost(req);
 
+  // Render health check her zaman açık
+  if (req.path === "/health") return next();
+
+  // anket.mikroar.com -> tüm sayfalar şifreli, ayrıca /form.html yasak
+  if (host.startsWith("anket.")) {
+    if (req.path.startsWith("/form.html")) {
+      return res.status(404).send("Not found");
+    }
+    return adminOnly(req, res, next); // ADMIN_USER / ADMIN_PASS ile koru
+  }
+
+  // form.mikroar.com -> sadece portal sayfaları şifreli
+  if (host.startsWith("form.")) {
+    const isPortalPage =
+      req.method === "GET" &&
+      (req.path === "/" || req.path === "/index.html" || req.path === "/results.html");
+
+    if (isPortalPage) {
+      return adminOnly(req, res, next); // ADMIN_USER / ADMIN_PASS ile koru
+    }
+  }
+
+  next();
+});
 // ---- Middlewares
 app.use(
   cors({
@@ -175,6 +190,8 @@ function adminOnly(req, res, next) {
 app.get("/api/admin/ping", adminOnly, (_req, res) => {
   res.json({ ok: true });
 });
+
+
 
 // Basic Auth penceresini göstermek için sayfa gezintisi
 // Giriş başarılı olunca 'next' URL'ine geri gönderir
