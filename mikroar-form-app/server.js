@@ -121,7 +121,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(morgan("combined"));
 
 // ---- Statik
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 // --- HOST'A GÖRE ANA SAYFA SEÇİMİ
 app.get("/", (req, res) => {
