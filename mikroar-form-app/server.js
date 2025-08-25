@@ -57,24 +57,29 @@ function normalizeIp(raw) {
   return null;
 }
 
-// İstemci IP'si
+import net from "node:net"; // en üstlerde importlarınızın yanında olsun
+
+// Proxy arkasında doğru IP'yi bul
 function pickClientIp(req) {
   const chain = [
     req.headers["cf-connecting-ip"],
     req.headers["x-client-ip"],
     req.headers["x-real-ip"],
-    req.headers["x-forwarded-for"],
+    req.headers["x-forwarded-for"], // 'a, b, c' olabilir -> ilkini alacağız
     req.ip,
     req.socket?.remoteAddress,
   ].filter(Boolean);
 
-  const ipRE =
-    /(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:(?!$)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d))|(?:[A-F0-9]{1,4}:){1,7}[A-F0-9]{1,4}/i;
+  for (const raw of chain) {
+    // 'a, b, c' durumunda ilkini al, IPv6 köşeli parantez ve portları temizle
+    let first = String(raw).split(",")[0].trim();
+    first = first.replace(/^\[|\]$/g, "");   // [2a01:...]:443 -> 2a01:...
+    first = first.replace(/:\d+$/, "");      // 1.2.3.4:443 -> 1.2.3.4
 
-  for (const v of chain) {
-    const first = String(v).split(",")[0].trim().replace(/:\d+$/, "");
-    const m = first.match(ipRE);
-    if (m) return m[0];
+    // IPv6-mapped IPv4 (::ffff:1.2.3.4) sadeleştir
+    if (first.startsWith("::ffff:")) first = first.slice(7);
+
+    if (net.isIP(first)) return first;       // 4 veya 6'yı kabul eder
   }
   return null;
 }
@@ -188,29 +193,39 @@ app.get("/api/forms/:slug", async (req, res) => {
   }
 });
 
+app.get("/api/__ip", (req, res) => {
+  res.json({
+    ok: true,
+    ip: pickClientIp(req),
+    trustProxy: app.get("trust proxy"),
+    chain: {
+      cfConnectingIp: req.headers["cf-connecting-ip"] || null,
+      xClientIp: req.headers["x-client-ip"] || null,
+      xRealIp: req.headers["x-real-ip"] || null,
+      xForwardedFor: req.headers["x-forwarded-for"] || null,
+      reqIp: req.ip || null,
+      remoteAddress: req.socket?.remoteAddress || null,
+    },
+  });
+});
+
 // ---- SUBMIT (güncel)
 app.post("/api/forms/:slug/submit", async (req, res) => {
   const { slug } = req.params;
 
-  // answers body’de plain objeyse JSONB'ye dönüşecek
   const answersRaw = req.body?.answers ?? req.body;
   if (!answersRaw || typeof answersRaw !== "object") {
     return res.status(400).json({ ok: false, error: "invalid_payload" });
   }
   const answersJson = JSON.stringify(answersRaw);
 
-  // IP: bulunamazsa 0.0.0.0 yerine NULL gönderiyoruz
-  const clientIp = pickClientIp(req) || null;
+  const clientIp = pickClientIp(req) || null; // inet sütunu NULL kabul ediyor
 
   try {
-    const f = await pool.query(
-      "SELECT slug, active FROM forms WHERE slug = $1",
-      [slug]
-    );
+    const f = await pool.query("SELECT slug, active FROM forms WHERE slug = $1", [slug]);
     if (!f.rows.length) return res.status(404).json({ ok: false, error: "Form bulunamadı" });
     if (!f.rows[0].active) return res.status(403).json({ ok: false, error: "Form pasif" });
 
-    // UPDATE politikası (upsert)
     if (String(DUPLICATE_POLICY).toUpperCase() === "UPDATE") {
       const upsertSql = `
         INSERT INTO responses (form_slug, ip, answers, created_at)
@@ -223,7 +238,6 @@ app.post("/api/forms/:slug/submit", async (req, res) => {
       return res.json({ ok: true, updated: true, at: rows[0]?.created_at });
     }
 
-    // INSERT + unique ihlali yakalama
     try {
       const insertSql = `
         INSERT INTO responses (form_slug, ip, answers, created_at)
@@ -233,17 +247,12 @@ app.post("/api/forms/:slug/submit", async (req, res) => {
       const { rows } = await pool.query(insertSql, [slug, clientIp, answersJson]);
       return res.json({ ok: true, created: true, at: rows[0]?.created_at });
     } catch (err) {
-      // unique ihlal: uniq_response_per_ip_per_form
       if (err?.code === "23505") {
         const old = await pool.query(
           "SELECT created_at FROM responses WHERE form_slug = $1 AND ip = $2::inet",
           [slug, clientIp]
         );
-        return res.json({
-          ok: true,
-          alreadySubmitted: true,
-          at: old.rows[0]?.created_at || null
-        });
+        return res.json({ ok: true, alreadySubmitted: true, at: old.rows[0]?.created_at || null });
       }
       throw err;
     }
