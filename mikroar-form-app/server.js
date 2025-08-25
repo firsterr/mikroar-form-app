@@ -327,10 +327,6 @@ app.get('/', (req, res) => {
   res.sendFile(file);
 });
 
-// kök için default index (emniyet)
-app.get('/', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
 
 /* ------------------------------------------------------------------ */
 /*  Sunucu                                                             */
