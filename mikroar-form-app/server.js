@@ -10,7 +10,15 @@ const { Pool } = pkg;
 import path from "path";
 import { fileURLToPath } from "url";
 import net from "node:net";
+import crypto from "node:crypto";
 
+function makeCode(len = 7) {
+  const alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const buf = crypto.randomBytes(len);
+  let out = "";
+  for (let i = 0; i < len; i++) out += alphabet[buf[i] % alphabet.length];
+  return out;
+}
 // ---- Env
 const {
   PORT = 3000,
@@ -215,6 +223,74 @@ app.get("/form.html", async (req, res, next) => {
     return res.status(500).send("Sunucu hatası.");
   }
 });
+// --- /s/:code -> kısa linkten direkt anket SSR
+app.get("/s/:code", async (req, res) => {
+  const code = (req.params.code || "").trim();
+  if (!code) return res.status(404).send("Not found");
+
+  try {
+    // kısa link bilgisi
+    const { rows } = await pool.query(
+      "SELECT slug, expires_at, max_visits, coalesce(visits,0) as visits FROM shortlinks WHERE code=$1",
+      [code]
+    );
+    if (!rows.length) return res.status(404).send("Link bulunamadı");
+
+    const sl = rows[0];
+    const now = new Date();
+    if (sl.expires_at && new Date(sl.expires_at) < now) {
+      return res.status(410).send("Bu linkin süresi dolmuş.");
+    }
+    if (sl.max_visits != null && sl.visits >= sl.max_visits) {
+      return res.status(410).send("Bu linkin ziyaret limiti dolmuş.");
+    }
+
+    // formu getir
+    const fr = await pool.query(
+      "SELECT slug, title, active, schema FROM forms WHERE slug=$1 LIMIT 1",
+      [sl.slug]
+    );
+    if (!fr.rows.length || fr.rows[0].active === false) {
+      return res.status(404).send("Form bulunamadı veya pasif.");
+    }
+
+    const form = fr.rows[0];
+    try { if (typeof form.schema === "string") form.schema = JSON.parse(form.schema); } catch {}
+
+    // ziyaret sayısını arttır (arkaplanda)
+    pool.query("UPDATE shortlinks SET visits = coalesce(visits,0) + 1 WHERE code=$1", [code])
+        .catch(()=>{});
+
+    // SSR HTML (form.js SSR ile aynı çalışma)
+    const html = `<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>${(form.title || "Anket").replace(/</g,"&lt;")}</title>
+<style>
+  body{font-family:system-ui,Arial,sans-serif;max-width:900px;margin:24px auto;padding:0 16px}
+  h1{margin:0 0 16px}
+  .q{margin:14px 0;padding:12px;border:1px solid #e5e7eb;border-radius:10px}
+  .q label{font-weight:600;display:block;margin-bottom:8px}
+  .opt{display:block;margin:6px 0}
+  button{padding:10px 14px;font-size:16px;border-radius:10px;border:1px solid #d1d5db;background:#111827;color:#fff}
+  button:disabled{opacity:.5}
+</style>
+</head>
+<body>
+  <h1 id="form-title"></h1>
+  <form id="f"></form>
+  <script>window.__FORM__ = ${JSON.stringify(form)};</script>
+  <script src="/form.js?v=short1"></script>
+</body>
+</html>`;
+    return res.status(200).send(html);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).send("Sunucu hatası.");
+  }
+});
 // ---- Statik
 app.use(
   express.static(path.join(__dirname, "public"), {
@@ -241,7 +317,52 @@ app.get("/api/admin/ping", adminOnly, (_req, res) => {
   res.json({ ok: true });
 });
 
+// --- Kısa link oluştur (admin)
+// Örnek: https://form.mikroar.com/admin/api/shortlink/new?slug=chpakgecis
+app.get("/admin/api/shortlink/new", adminOnly, async (req, res) => {
+  try {
+    const slug = (req.query.slug || "").toString().trim().toLowerCase();
+    let code   = (req.query.code || "").toString().trim();
+    const days = req.query.days ? parseInt(req.query.days, 10) : null;
+    const max  = req.query.max  ? parseInt(req.query.max, 10)  : null;
 
+    if (!slug) return res.status(400).json({ ok: false, error: "slug gerekli" });
+
+    // form var mı?
+    const f = await pool.query("SELECT 1 FROM forms WHERE slug=$1", [slug]);
+    if (!f.rows.length) return res.status(404).json({ ok: false, error: "form yok" });
+
+    // code üret / doğrula
+    if (!code) {
+      for (let i = 0; i < 5; i++) {
+        const tryCode = makeCode(7);
+        const dup = await pool.query("SELECT 1 FROM shortlinks WHERE code=$1", [tryCode]);
+        if (!dup.rows.length) { code = tryCode; break; }
+      }
+      if (!code) return res.status(500).json({ ok: false, error: "kod üretilemedi" });
+    } else {
+      const dup = await pool.query("SELECT 1 FROM shortlinks WHERE code=$1", [code]);
+      if (dup.rows.length) return res.status(409).json({ ok: false, error: "code kullanımda" });
+    }
+
+    let expires = null;
+    if (days && days > 0) {
+      const d = new Date(); d.setDate(d.getDate() + days);
+      expires = d.toISOString();
+    }
+
+    await pool.query(
+      "INSERT INTO shortlinks(code, slug, expires_at, max_visits) VALUES ($1,$2,$3,$4)",
+      [code, slug, expires, (Number.isFinite(max) ? max : null)]
+    );
+
+    const host = req.headers["x-forwarded-host"] || req.headers.host;
+    const url  = `https://${host}/s/${code}`;
+    res.json({ ok: true, code, url, expires_at: expires, max_visits: max });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
 
 // Basic Auth penceresini göstermek için sayfa gezintisi
 // Giriş başarılı olunca 'next' URL'ine geri gönderir
