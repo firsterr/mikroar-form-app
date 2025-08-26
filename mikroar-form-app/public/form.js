@@ -102,9 +102,18 @@
       formEl.appendChild(wrap);
     });
 
-   // Gönder butonu
-const btn = el("button", { type: "submit", id: "btnSend" }, "Gönder");
-formEl.appendChild(btn);
+   // Gönder alanı: yapışkan bar + küçük bilgilendirme
+const bar  = el("div", { class: "sticky-submit" });
+const note = el("div", { class: "note" }, 
+  "Bu form mikroar.com alanında oluşturulmuştur. "
+);
+note.appendChild(
+  el("a", { href: "mailto:destek@mikroar.com" }, "İletişim")
+);
+const btn  = el("button", { type: "submit", id: "btnSend" }, "Gönder");
+
+bar.append(note, btn);
+formEl.appendChild(bar);
 
     formEl.onsubmit = async (e) => {
       e.preventDefault();
