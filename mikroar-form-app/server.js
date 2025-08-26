@@ -164,7 +164,57 @@ app.use(
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan("combined"));
+// --- SSR form: /form.html?slug=XYZ -> form verisini göm ve direkt render et
+app.get("/form.html", async (req, res, next) => {
+  const slug = (req.query.slug || "").toString().trim().toLowerCase();
+  if (!slug) return next(); // slug yoksa normal statik dosyaya düş
 
+  try {
+    const { rows } = await pool.query(
+      "SELECT slug, title, active, schema FROM forms WHERE slug = $1 LIMIT 1",
+      [slug]
+    );
+    if (!rows.length || rows[0].active === false) {
+      return res.status(404).send("Form bulunamadı veya pasif.");
+    }
+
+    const form = rows[0];
+    try {
+      if (typeof form.schema === "string") form.schema = JSON.parse(form.schema);
+    } catch (_) {}
+
+    const html = `<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>${(form.title || "Anket").replace(/</g,"&lt;")}</title>
+<style>
+  body{font-family:system-ui,Arial,sans-serif;max-width:900px;margin:24px auto;padding:0 16px}
+  h1{margin:0 0 16px}
+  .q{margin:14px 0;padding:12px;border:1px solid #e5e7eb;border-radius:10px}
+  .q label{font-weight:600;display:block;margin-bottom:8px}
+  .opt{display:block;margin:6px 0}
+  button{padding:10px 14px;font-size:16px;border-radius:10px;border:1px solid #d1d5db;background:#111827;color:#fff}
+  button:disabled{opacity:.5}
+</style>
+</head>
+<body>
+  <h1 id="form-title"></h1>
+  <form id="f"></form>
+  <script>
+    // Sunucudan gömülen veri:
+    window.__FORM__ = ${JSON.stringify(form)};
+  </script>
+  <script src="/form.js?v=ssr1"></script>
+</body>
+</html>`;
+    return res.status(200).send(html);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).send("Sunucu hatası.");
+  }
+});
 // ---- Statik
 app.use(
   express.static(path.join(__dirname, "public"), {
