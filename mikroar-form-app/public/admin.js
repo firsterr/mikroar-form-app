@@ -122,7 +122,7 @@ async function load(){
   const slug = els.slug.value.trim().toLowerCase();
   if (!slug) return toast('Slug gerekli','err');
   try{
-    const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`);
+    const r = await fetch(`/admin/api/forms/${encodeURIComponent(slug)}`);
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || 'Bulunamadı');
     // API bazı yerlerde form.slug döndürmüyor olabilir; güvenceye al
