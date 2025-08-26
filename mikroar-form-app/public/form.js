@@ -19,7 +19,47 @@
   function fmt(ts) {
     try { return new Date(ts).toLocaleString(); } catch { return ts || ""; }
   }
+// ---- sticky bar ve alt bilgi için minimal stil
+(() => {
+  const style = document.createElement("style");
+  style.textContent = `
+    /* sticky bar görünürken form içeriği alta gizlenmesin */
+    #f { padding-bottom: 88px; }
 
+    .sticky-submit{
+      position: sticky;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 12px 16px;
+      background: rgba(255,255,255,0.96);
+      backdrop-filter: saturate(180%) blur(8px);
+      border-top: 1px solid #e5e7eb;
+      display: flex;
+      flex-direction: column;       /* BUTON ÜSTTE, BİLGİ ALTA */
+      align-items: center;
+      gap: 12px;
+      z-index: 10;
+    }
+
+    .sticky-submit .info{
+      text-align: center;
+      line-height: 1.35;
+      color: #111;
+      font-size: 14px;
+    }
+    .sticky-submit .info a{
+      color: inherit;
+      text-decoration: underline;
+    }
+    .sticky-submit .info .brand{
+      margin-top: 2px;
+      font-size: 16px;     /* bir tık büyük */
+      font-weight: 700;    /* kalın */
+    }
+  `;
+  document.head.appendChild(style);
+})();
   // --- Pasif / kapalı form ekranı
   function renderClosed(msg) {
     const title = $("#form-title");
@@ -102,17 +142,18 @@
       formEl.appendChild(wrap);
     });
 
-   // Gönder alanı: yapışkan bar + küçük bilgilendirme
+   // Gönder alanı: yapışkan bar (buton üstte) + 3 satır alt bilgi
 const bar  = el("div", { class: "sticky-submit" });
-const note = el("div", { class: "note" }, 
-  "Bu form mikroar.com alanında oluşturulmuştur. "
-);
-note.appendChild(
-  el("a", { href: "mailto:destek@mikroar.com" }, "İletişim")
-);
 const btn  = el("button", { type: "submit", id: "btnSend" }, "Gönder");
 
-bar.append(note, btn);
+// 3 satır, ortalı, son satır daha büyük
+const info = el("div", { class: "info" }, `
+  <div>Bu form <strong>mikroar.com</strong> alanında oluşturulmuştur.</div>
+  <div>İletişim: <a href="mailto:iletisim@mikroar.com">iletisim@mikroar.com</a></div>
+  <div class="brand">MikroAR Araştırma</div>
+`);
+
+bar.append(btn, info);
 formEl.appendChild(bar);
 
     formEl.onsubmit = async (e) => {
