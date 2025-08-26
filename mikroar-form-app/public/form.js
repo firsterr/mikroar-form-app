@@ -102,9 +102,9 @@
       formEl.appendChild(wrap);
     });
 
-    // Gönder butonu
-    const btn = el("button", { type: "submit", id: "btnSend" }, "Gönder");
-    formEl.appendChild(btn);
+   // Gönder butonu
+const btn = el("button", { type: "submit", id: "btnSend" }, "Gönder");
+formEl.appendChild(btn);
 
     formEl.onsubmit = async (e) => {
       e.preventDefault();
