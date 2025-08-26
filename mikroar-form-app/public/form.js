@@ -1,4 +1,4 @@
-// MikroAR – Form (SSR destekli)  |  v=ipfix2
+// MikroAR – Form (SSR destekli)  |  v=ipfix2 + closed-guard
 (function () {
   const $ = (s) => document.querySelector(s);
 
@@ -20,12 +20,39 @@
     try { return new Date(ts).toLocaleString(); } catch { return ts || ""; }
   }
 
+  // --- Pasif / kapalı form ekranı
+  function renderClosed(msg) {
+    const title = $("#form-title");
+    const formEl = $("#f");
+    if (title) title.textContent = "Anket kapalı";
+    const text = msg || "Bu anket yayında değil veya süresi dolmuş olabilir.";
+
+    const html = `
+      <div style="
+        max-width:880px;margin:24px 0;padding:20px;
+        border:1px solid #30364a;border-radius:12px;background:#0f1221;color:#e7e7f1;
+      ">
+        <h3 style="margin:0 0 8px;font-size:22px">Anket kapalı</h3>
+        <p style="margin:0;line-height:1.6">${text}</p>
+      </div>
+    `;
+
+    if (formEl) {
+      formEl.innerHTML = html;
+    } else {
+      document.body.innerHTML = html;
+    }
+    document.title = "Anket kapalı";
+  }
+
   function renderForm(data) {
     state.form = data;
     const title = $("#form-title");
     const formEl = $("#f");
 
-    title.textContent = data.title || "Anket";
+    title && (title.textContent = data.title || "Anket");
+    if (!formEl) return;
+
     formEl.innerHTML = "";
 
     const qs = (data.schema && Array.isArray(data.schema.questions))
@@ -132,8 +159,12 @@
   }
 
   async function boot() {
-    // SSR'dan gelen veriyi varsa anında çiz
+    // SSR'dan gelen veri varsa (ve aktifse) anında çiz
     if (window.__FORM__ && window.__FORM__.slug) {
+      if (window.__FORM__.active === false) {
+        renderClosed();
+        return;
+      }
       renderForm(window.__FORM__);
       return;
     }
@@ -147,8 +178,22 @@
     }
     try {
       const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`);
+
+      if (r.status === 403) {
+        // Pasif form
+        renderClosed();
+        return;
+      }
+      if (!r.ok) {
+        document.body.innerHTML = "<h2>Form yüklenemedi.</h2>";
+        return;
+      }
+
       const j = await r.json();
-      if (!j.ok) throw new Error(j.error || "Form alınamadı");
+      if (!j.ok || !j.form) {
+        renderClosed();
+        return;
+      }
       renderForm(j.form);
     } catch (e) {
       console.error(e);
