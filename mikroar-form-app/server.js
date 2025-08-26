@@ -12,6 +12,7 @@ import { fileURLToPath } from "url";
 import net from "node:net";
 import crypto from "node:crypto";
 
+// ---- Kısa kod üretici
 function makeCode(len = 7) {
   const alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
   const buf = crypto.randomBytes(len);
@@ -19,6 +20,7 @@ function makeCode(len = 7) {
   for (let i = 0; i < len; i++) out += alphabet[buf[i] % alphabet.length];
   return out;
 }
+
 // ---- Env
 const {
   PORT = 3000,
@@ -26,8 +28,8 @@ const {
   CORS_ORIGIN = "*",
   ADMIN_USER = "admin",
   ADMIN_PASS = "admin",
-  FRAME_ANCESTORS = "",           // sadece burada TANIMLI
-  DUPLICATE_POLICY = "BLOCK",      // BLOCK | UPDATE
+  FRAME_ANCESTORS = "",
+  DUPLICATE_POLICY = "BLOCK", // BLOCK | UPDATE
 } = process.env;
 
 // ---- DB
@@ -38,80 +40,101 @@ const pool = new Pool({
     : undefined,
 });
 
-// ---- App (ÖNCE app oluştur, sonra her şeyi buna ekle)
+// ---- App
 const app = express();
-app.set("trust proxy", true); // Render arkasında doğru host/hostname için
+app.set("trust proxy", true);
 
 // ---- yardımcılar
 function getHost(req) {
-  return (
-    req.headers["x-forwarded-host"] || req.hostname || req.headers.host || ""
-  ).toLowerCase();
+  return (req.headers["x-forwarded-host"] || req.hostname || req.headers.host || "").toLowerCase();
 }
 
-// IPv4 ve IPv6 regex'leri
 const IPv4_RE = /^(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}$/;
 const IPv6_RE = /^(([0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|(::1)|(([0-9A-Fa-f]{1,4}:){1,7}:)|(:{2}([0-9A-Fa-f]{1,4}:){1,6}[0-9A-Fa-f]{1,4}))$/;
 
 function normalizeIp(raw) {
   if (!raw) return null;
   let ip = String(raw).trim();
-
-  // IPv6-mapped IPv4: ::ffff:x.x.x.x -> x.x.x.x
   if (ip.startsWith("::ffff:")) ip = ip.slice(7);
-
-  // X-Forwarded-For gibi "ip, ip2, ip3" alınmışsa ilkini alalım
   if (ip.includes(",")) ip = ip.split(",")[0].trim();
-
-  // Sonunda port varsa (IPv4: ":12345") ayıkla
   const withPort = ip.match(/^\[?([^\]]+)\]?:(\d+)$/);
   if (withPort) ip = withPort[1];
-
   if (IPv4_RE.test(ip) || IPv6_RE.test(ip)) return ip;
   return null;
 }
 
-// Proxy arkasında doğru IP'yi bul
 function pickClientIp(req) {
   const chain = [
     req.headers["cf-connecting-ip"],
     req.headers["x-client-ip"],
     req.headers["x-real-ip"],
-    req.headers["x-forwarded-for"], // 'a, b, c' olabilir -> ilkini alacağız
+    req.headers["x-forwarded-for"],
     req.ip,
     req.socket?.remoteAddress,
   ].filter(Boolean);
 
-  for (const raw of chain) {
-    // 'a, b, c' durumunda ilkini al, IPv6 köşeli parantez ve portları temizle
+  for (let raw of chain) {
     let first = String(raw).split(",")[0].trim();
-    first = first.replace(/^\[|\]$/g, "");   // [2a01:...]:443 -> 2a01:...
-    first = first.replace(/:\d+$/, "");      // 1.2.3.4:443 -> 1.2.3.4
-
-    // IPv6-mapped IPv4 (::ffff:1.2.3.4) sadeleştir
+    first = first.replace(/^\[|\]$/g, "").replace(/:\d+$/, "");
     if (first.startsWith("::ffff:")) first = first.slice(7);
-
-    if (net.isIP(first)) return first;       // 4 veya 6'yı kabul eder
+    if (net.isIP(first)) return first;
   }
   return null;
 }
 
-// ---- Güvenlik (CSP açık)
-const faList = FRAME_ANCESTORS
-  ? FRAME_ANCESTORS.split(",").map((s) => s.trim()).filter(Boolean)
-  : [];
+// ---- Preview bot tespiti (WA/FB/Twitter/LinkedIn/Slack/Discord)
+function isPreviewBot(ua = "") {
+  ua = String(ua || "").toLowerCase();
+  return (
+    ua.includes("facebookexternalhit") ||
+    ua.includes("facebot") ||
+    ua.includes("whatsapp") ||
+    ua.includes("twitterbot") ||
+    ua.includes("linkedinbot") ||
+    ua.includes("slackbot") ||
+    ua.includes("discordbot")
+  );
+}
 
+// ---- OG HTML üretici
+function renderOgHtml({ url, title, description, image }) {
+  return `<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${title}</title>
+
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="${title}">
+  <meta property="og:description" content="${description}">
+  <meta property="og:url" content="${url}">
+  <meta property="og:image" content="${image}">
+  <meta property="og:locale" content="tr_TR">
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="${title}">
+  <meta name="twitter:description" content="${description}">
+  <meta name="twitter:image" content="${image}">
+</head>
+<body>
+  <noscript><p><a href="${url}">${title}</a></p></noscript>
+  <script>location.replace(${JSON.stringify(url)});</script>
+</body>
+</html>`;
+}
+
+// ---- Güvenlik (CSP)
+const faList = FRAME_ANCESTORS ? FRAME_ANCESTORS.split(",").map(s => s.trim()).filter(Boolean) : [];
 app.use(
   helmet({
     contentSecurityPolicy: {
       useDefaults: true,
       directives: {
         "default-src": ["'self'"],
-        // form sayfasını başka domain içine gömmek istiyorsanız env'den verin (örn: https://site.com)
         "frame-ancestors": faList.length ? faList : ["'self'"],
-        // inline script ve aynı origin XHR/fetch için:
         "script-src": ["'self'", "'unsafe-inline'"],
-        "connect-src": ["'self'"], // API çağrıları aynı origin
+        "connect-src": ["'self'"],
         "img-src": ["'self'", "data:"],
         "style-src": ["'self'", "'unsafe-inline'"],
       },
@@ -121,71 +144,61 @@ app.use(
   })
 );
 
-// ---- Sağlık
-// Basit health (Render için) — sadece 200 döner
-app.get("/health", (_req, res) => {
-  res.status(200).send("ok");
-});
+// ---- Sağlık (Render için sade)
+app.get("/health", (_req, res) => res.status(200).send("ok"));
 
 // __dirname eşdeğeri
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
 // ---- Subdomain bazlı Basic Auth + guard
 app.use((req, res, next) => {
   const host = getHost(req);
-
-  // Render health check her zaman açık
   if (req.path === "/health") return next();
 
-  // anket.mikroar.com -> tüm sayfalar şifreli, ayrıca /form.html yasak
+  // anket.mikroar.com -> her şey şifreli + /form.html yasak
   if (host.startsWith("anket.")) {
-    if (req.path.startsWith("/form.html")) {
-      return res.status(404).send("Not found");
-    }
-    return adminOnly(req, res, next); // ADMIN_USER / ADMIN_PASS ile koru
+    if (req.path.startsWith("/form.html")) return res.status(404).send("Not found");
+    return adminOnly(req, res, next);
   }
 
-  // form.mikroar.com -> sadece portal sayfaları şifreli
+  // form.mikroar.com -> portal sayfaları şifreli (index/results)
   if (host.startsWith("form.")) {
-    const isPortalPage =
+    const isPortal =
       req.method === "GET" &&
       (req.path === "/" || req.path === "/index.html" || req.path === "/results.html");
-
-    if (isPortalPage) {
-      return adminOnly(req, res, next); // ADMIN_USER / ADMIN_PASS ile koru
-    }
+    if (isPortal) return adminOnly(req, res, next);
   }
-
   next();
 });
+
 // ---- Middlewares
 app.use(
   cors({
-    origin: CORS_ORIGIN === "*" ? true : CORS_ORIGIN.split(",").map((s) => s.trim()),
+    origin: CORS_ORIGIN === "*" ? true : CORS_ORIGIN.split(",").map(s => s.trim()),
     credentials: false,
   })
 );
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan("combined"));
-// --- SSR form: /form.html?slug=XYZ -> form verisini göm ve direkt render et
+
+// --- SSR form: /form.html?slug=XYZ (aktif değilse 200 + mesaj)
 app.get("/form.html", async (req, res, next) => {
   const slug = (req.query.slug || "").toString().trim().toLowerCase();
-  if (!slug) return next(); // slug yoksa normal statik dosyaya düş
+  if (!slug) return next();
 
   try {
     const { rows } = await pool.query(
       "SELECT slug, title, active, schema FROM forms WHERE slug = $1 LIMIT 1",
       [slug]
     );
-    if (!rows.length || rows[0].active === false) {
-      return res.status(404).send("Form bulunamadı veya pasif.");
-    }
+    if (!rows.length) return res.status(404).send("Form bulunamadı.");
 
     const form = rows[0];
-    try {
-      if (typeof form.schema === "string") form.schema = JSON.parse(form.schema);
-    } catch (_) {}
+    try { if (typeof form.schema === "string") form.schema = JSON.parse(form.schema); } catch {}
+
+    const isActive = form.active !== false;
 
     const html = `<!doctype html>
 <html lang="tr">
@@ -199,18 +212,16 @@ app.get("/form.html", async (req, res, next) => {
   .q{margin:14px 0;padding:12px;border:1px solid #e5e7eb;border-radius:10px}
   .q label{font-weight:600;display:block;margin-bottom:8px}
   .opt{display:block;margin:6px 0}
+  .muted{color:#6b7280}
   button{padding:10px 14px;font-size:16px;border-radius:10px;border:1px solid #d1d5db;background:#111827;color:#fff}
   button:disabled{opacity:.5}
 </style>
 </head>
 <body>
   <h1 id="form-title"></h1>
-  <form id="f"></form>
-  <script>
-    // Sunucudan gömülen veri:
-    window.__FORM__ = ${JSON.stringify(form)};
-  </script>
-  <script src="/form.js?v=ssr1"></script>
+  ${isActive ? `<form id="f"></form>` : `<p class="muted">Bu anketin süresi dolmuştur.</p>`}
+  <script>window.__FORM__ = ${JSON.stringify(form)};</script>
+  ${isActive ? `<script src="/form.js?v=ssr1"></script>` : ``}
 </body>
 </html>`;
     return res.status(200).send(html);
@@ -219,78 +230,99 @@ app.get("/form.html", async (req, res, next) => {
     return res.status(500).send("Sunucu hatası.");
   }
 });
-// --- /s/:code -> kısa linkten direkt anket SSR
+
+// --- /s/:code → OG önizleme (botlar) + insanlara yönlendirme + expire/limit + sayaç
 app.get("/s/:code", async (req, res) => {
   const code = (req.params.code || "").trim();
   if (!code) return res.status(404).send("Not found");
 
   try {
-    // kısa link bilgisi
     const { rows } = await pool.query(
-      "SELECT slug, expires_at, max_visits, coalesce(visits,0) as visits FROM shortlinks WHERE code=$1",
+      "SELECT slug, expires_at, max_visits, COALESCE(visits,0) AS visits FROM shortlinks WHERE code=$1 LIMIT 1",
       [code]
     );
     if (!rows.length) return res.status(404).send("Link bulunamadı");
 
     const sl = rows[0];
     const now = new Date();
+
+    // Expire / limit kontrolü (insan için 410, bota OG bilgi sayfası)
     if (sl.expires_at && new Date(sl.expires_at) < now) {
+      if (isPreviewBot(req.headers["user-agent"])) {
+        const base = `${req.protocol}://${req.get("host")}`;
+        const dest = `${base}/form.html?slug=${encodeURIComponent(sl.slug)}`;
+        const html = renderOgHtml({
+          url: dest,
+          title: "Anket kapalı",
+          description: "Bu anketin süresi dolmuştur.",
+          image: "https://img.gazetemerhaba.com/rcman/Cw480h270q95gc/storage/files/images/2025/08/16/ahmet-akin-ak-parti-chp-w7pn.jpg",
+        });
+        return res.status(200).send(html);
+      }
       return res.status(410).send("Bu linkin süresi dolmuş.");
     }
+
     if (sl.max_visits != null && sl.visits >= sl.max_visits) {
+      if (isPreviewBot(req.headers["user-agent"])) {
+        const base = `${req.protocol}://${req.get("host")}`;
+        const dest = `${base}/form.html?slug=${encodeURIComponent(sl.slug)}`;
+        const html = renderOgHtml({
+          url: dest,
+          title: "Limit doldu",
+          description: "Bu kısa linkin ziyaret limiti dolmuştur.",
+          image: "https://img.gazetemerhaba.com/rcman/Cw480h270q95gc/storage/files/images/2025/08/16/ahmet-akin-ak-parti-chp-w7pn.jpg",
+        });
+        return res.status(200).send(html);
+      }
       return res.status(410).send("Bu linkin ziyaret limiti dolmuş.");
     }
 
-    // formu getir
+    // Form başlığı/aktiflik
     const fr = await pool.query(
-      "SELECT slug, title, active, schema FROM forms WHERE slug=$1 LIMIT 1",
+      "SELECT title, active FROM forms WHERE slug=$1 LIMIT 1",
       [sl.slug]
     );
-    if (!fr.rows.length || fr.rows[0].active === false) {
-      return res.status(404).send("Form bulunamadı veya pasif.");
+    if (!fr.rows.length) return res.status(404).send("Form bulunamadı.");
+    const form = fr.rows[0];
+
+    const base = `${req.protocol}://${req.get("host")}`;
+    const dest = `${base}/form.html?slug=${encodeURIComponent(sl.slug)}`;
+
+    // Bot ise OG ver (WA/FB önizleme)
+    if (isPreviewBot(req.headers["user-agent"])) {
+      const html = renderOgHtml({
+        url: dest,
+        title: form.title || "MikroAR Anketi",
+        description: "Katılımınız değerlidir. Anketimize oy verin.",
+        // İstediğin görsel (küçük 480x270 olan)
+        image: "https://img.gazetemerhaba.com/rcman/Cw480h270q95gc/storage/files/images/2025/08/16/ahmet-akin-ak-parti-chp-w7pn.jpg",
+      });
+      res.set("Cache-Control", "public, max-age=600");
+      return res.status(200).send(html);
     }
 
-    const form = fr.rows[0];
-    try { if (typeof form.schema === "string") form.schema = JSON.parse(form.schema); } catch {}
+    // Sayaç (+1) arkaplanda
+    pool.query("UPDATE shortlinks SET visits = COALESCE(visits,0) + 1 WHERE code=$1", [code]).catch(()=>{});
 
-    // ziyaret sayısını arttır (arkaplanda)
-    pool.query("UPDATE shortlinks SET visits = coalesce(visits,0) + 1 WHERE code=$1", [code])
-        .catch(()=>{});
+    if (form.active === false) {
+      // insan kullanıcı ve pasif form
+      return res
+        .status(200)
+        .send("<!doctype html><meta charset=utf-8><h2>Bu anketin süresi dolmuştur.</h2>");
+    }
 
-    // SSR HTML (form.js SSR ile aynı çalışma)
-    const html = `<!doctype html>
-<html lang="tr">
-<head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>${(form.title || "Anket").replace(/</g,"&lt;")}</title>
-<style>
-  body{font-family:system-ui,Arial,sans-serif;max-width:900px;margin:24px auto;padding:0 16px}
-  h1{margin:0 0 16px}
-  .q{margin:14px 0;padding:12px;border:1px solid #e5e7eb;border-radius:10px}
-  .q label{font-weight:600;display:block;margin-bottom:8px}
-  .opt{display:block;margin:6px 0}
-  button{padding:10px 14px;font-size:16px;border-radius:10px;border:1px solid #d1d5db;background:#111827;color:#fff}
-  button:disabled{opacity:.5}
-</style>
-</head>
-<body>
-  <h1 id="form-title"></h1>
-  <form id="f"></form>
-  <script>window.__FORM__ = ${JSON.stringify(form)};</script>
-  <script src="/form.js?v=short1"></script>
-</body>
-</html>`;
-    return res.status(200).send(html);
+    // İnsan -> ankete yönlendir
+    return res.redirect(302, dest);
   } catch (e) {
     console.error(e);
     return res.status(500).send("Sunucu hatası.");
   }
 });
+
 // ---- Statik
 app.use(
   express.static(path.join(__dirname, "public"), {
-    index: false, // otomatik index.html SERVİS ETME
+    index: false,
   })
 );
 
@@ -308,10 +340,9 @@ function adminOnly(req, res, next) {
   }
   next();
 }
-// Basit ping – admin giriş kontrolü (XHR ile yoklama)
-app.get("/api/admin/ping", adminOnly, (_req, res) => {
-  res.json({ ok: true });
-});
+
+// Basit ping – admin giriş kontrolü
+app.get("/api/admin/ping", adminOnly, (_req, res) => res.json({ ok: true }));
 
 // --- Kısa link oluştur (admin)
 // Örnek: https://form.mikroar.com/admin/api/shortlink/new?slug=chpakgecis
@@ -323,12 +354,9 @@ app.get("/admin/api/shortlink/new", adminOnly, async (req, res) => {
     const max  = req.query.max  ? parseInt(req.query.max, 10)  : null;
 
     if (!slug) return res.status(400).json({ ok: false, error: "slug gerekli" });
-
-    // form var mı?
     const f = await pool.query("SELECT 1 FROM forms WHERE slug=$1", [slug]);
     if (!f.rows.length) return res.status(404).json({ ok: false, error: "form yok" });
 
-    // code üret / doğrula
     if (!code) {
       for (let i = 0; i < 5; i++) {
         const tryCode = makeCode(7);
@@ -360,22 +388,11 @@ app.get("/admin/api/shortlink/new", adminOnly, async (req, res) => {
   }
 });
 
-// Basic Auth penceresini göstermek için sayfa gezintisi
-// Giriş başarılı olunca 'next' URL'ine geri gönderir
-app.get("/admin/gate", adminOnly, (req, res) => {
-  const next = req.query.next || "/results.html";
-  res.set("Cache-Control", "no-store");
-  res.send(`<!doctype html><meta charset="utf-8">
-<script>location.replace(${JSON.stringify(next)});</script>`);
-});
-// ---- LIST: aktif formlar
+// ---- FORMS LIST (aktifler)
 app.get("/api/forms-list", async (_req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT slug, title
-         FROM forms
-        WHERE active = TRUE
-        ORDER BY created_at DESC`
+      `SELECT slug, title FROM forms WHERE active = TRUE ORDER BY created_at DESC`
     );
     res.json({ ok: true, rows });
   } catch (e) {
@@ -383,29 +400,19 @@ app.get("/api/forms-list", async (_req, res) => {
   }
 });
 
-// ---- GET: tek form
+// ---- GET: tek form (aktif kontrolü)
 app.get("/api/forms/:slug", async (req, res) => {
   const { slug } = req.params;
   try {
     const { rows } = await pool.query(
-      `SELECT slug, title, active, schema
-         FROM forms
-        WHERE slug = $1
-        LIMIT 1`,
+      `SELECT slug, title, active, schema FROM forms WHERE slug = $1 LIMIT 1`,
       [slug]
     );
-    if (!rows.length)
-      return res.status(404).json({ ok: false, error: "not_found" });
-    if (rows[0].active === false)
-      return res.status(403).json({ ok: false, error: "inactive" });
+    if (!rows.length) return res.status(404).json({ ok: false, error: "not_found" });
+    if (rows[0].active === false) return res.status(403).json({ ok: false, error: "inactive" });
 
     const form = rows[0];
-    try {
-      if (typeof form.schema === "string") form.schema = JSON.parse(form.schema);
-    } catch (_) {
-      /* yut, zaten obje ise devam */
-    }
-
+    try { if (typeof form.schema === "string") form.schema = JSON.parse(form.schema); } catch {}
     res.json({ ok: true, form });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -417,25 +424,19 @@ app.get("/admin/api/forms/:slug", adminOnly, async (req, res) => {
   const { slug } = req.params;
   try {
     const { rows } = await pool.query(
-      `SELECT slug, title, active, schema
-         FROM forms
-        WHERE slug = $1
-        LIMIT 1`,
+      `SELECT slug, title, active, schema FROM forms WHERE slug = $1 LIMIT 1`,
       [slug]
     );
     if (!rows.length) return res.status(404).json({ ok: false, error: "not_found" });
 
     const form = rows[0];
-    // schema text ise parse et
-    try {
-      if (typeof form.schema === "string") form.schema = JSON.parse(form.schema);
-    } catch (_) {}
-
+    try { if (typeof form.schema === "string") form.schema = JSON.parse(form.schema); } catch {}
     res.json({ ok: true, form });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
+
 // ---- IP debug (opsiyonel)
 app.get("/api/__ip", (req, res) => {
   res.json({
@@ -463,7 +464,7 @@ app.post("/api/forms/:slug/submit", async (req, res) => {
   }
   const answersJson = JSON.stringify(answersRaw);
 
-  const clientIp = pickClientIp(req) || null; // inet sütunu NULL kabul ediyor
+  const clientIp = pickClientIp(req) || null;
 
   try {
     const f = await pool.query("SELECT slug, active FROM forms WHERE slug = $1", [slug]);
@@ -514,15 +515,10 @@ app.get("/api/admin/forms/:slug/responses", adminOnly, async (req, res) => {
       "SELECT title, schema, active FROM forms WHERE slug = $1",
       [slug]
     );
-    if (!formRows.length) {
-      return res.status(404).json({ ok: false, error: "Form bulunamadı" });
-    }
+    if (!formRows.length) return res.status(404).json({ ok: false, error: "Form bulunamadı" });
 
-    // <-- şema her durumda obje olsun
     const meta = formRows[0];
-    try {
-      if (typeof meta.schema === "string") meta.schema = JSON.parse(meta.schema);
-    } catch (_) { /* yutuyoruz */ }
+    try { if (typeof meta.schema === "string") meta.schema = JSON.parse(meta.schema); } catch {}
 
     const { rows } = await pool.query(
       `SELECT created_at, ip::text AS ip, answers
@@ -537,22 +533,18 @@ app.get("/api/admin/forms/:slug/responses", adminOnly, async (req, res) => {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
+
 // ---- ADMIN: form CREATE/UPDATE
 app.post("/api/admin/forms/save", adminOnly, async (req, res) => {
   try {
-    // body: { slug, title, schema, active, prevSlug? }
     let { slug, title, schema, active, prevSlug } = req.body || {};
 
-    // slug
     if (typeof slug !== "string" || !slug.trim()) {
       return res.status(400).json({ ok: false, error: "invalid_slug" });
     }
     slug = slug.trim().toLowerCase();
-
-    // title
     if (typeof title !== "string") title = "";
 
-    // schema: string geldiyse parse et; obje ise olduğu gibi kullan
     if (typeof schema === "string") {
       try { schema = JSON.parse(schema); }
       catch { return res.status(400).json({ ok: false, error: "bad_schema_json" }); }
@@ -560,13 +552,11 @@ app.post("/api/admin/forms/save", adminOnly, async (req, res) => {
     if (!schema || typeof schema !== "object") {
       return res.status(400).json({ ok: false, error: "invalid_schema" });
     }
-    const schemaJson = JSON.stringify(schema); // ::jsonb için
+    const schemaJson = JSON.stringify(schema);
 
-    // active -> boolean
     const truthy = new Set([true, "true", "on", "1", 1, "aktif", "Aktif"]);
     active = truthy.has(active);
 
-    // slug değişiyorsa
     if (prevSlug && prevSlug !== slug) {
       const q = `UPDATE forms
                    SET slug = $2, title = $3, schema = $4::jsonb, active = $5
@@ -575,7 +565,6 @@ app.post("/api/admin/forms/save", adminOnly, async (req, res) => {
       return res.json({ ok: true, updated: true, slug });
     }
 
-    // upsert
     const upsert = `
       INSERT INTO forms (slug, title, schema, active, created_at)
       VALUES ($1, $2, $3::jsonb, $4, NOW())
@@ -590,22 +579,16 @@ app.post("/api/admin/forms/save", adminOnly, async (req, res) => {
 
   } catch (e) {
     console.error("admin/save error:", e);
-    // Postgres hata detaylarını da dönelim ki ekranda gerçek sebep görünsün
-    return res.status(500).json({
-      ok: false,
-      error: e.message,
-      detail: e.detail,
-      code: e.code,
-      hint: e.hint
-    });
+    return res.status(500).json({ ok: false, error: e.message, detail: e.detail, code: e.code, hint: e.hint });
   }
 });
+
 // ---- Kök ("/"): host'a göre ana sayfa
 app.get("/", (req, res) => {
   const host = getHost(req);
   const file = host.startsWith("anket.")
-    ? path.join(__dirname, "public", "admin.html")   // anket.mikroar.com
-    : path.join(__dirname, "public", "index.html");  // form.mikroar.com
+    ? path.join(__dirname, "public", "admin.html")
+    : path.join(__dirname, "public", "index.html");
   res.sendFile(file);
 });
 
