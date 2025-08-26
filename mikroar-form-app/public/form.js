@@ -1,178 +1,145 @@
-// public/form.js
-document.addEventListener('DOMContentLoaded', () => {
-  const params = new URLSearchParams(location.search);
-  const slug = params.get('slug');
+(function () {
+  const $ = (s) => document.querySelector(s);
 
-  const titleEl = document.getElementById('form-title');
-  const boxEl = document.getElementById('questions');
-  const formEl = document.getElementById('survey');
-  const noteEl = document.getElementById('note');
-  const statusEl = document.getElementById('status');
+  const state = {
+    form: null, // {slug,title,schema:{questions:[]}}
+  };
 
-  if (!slug) {
-    if (statusEl) statusEl.textContent = 'Hatalı bağlantı. (slug yok)';
-    return;
-  }
-
-  function setStatus(t) {
-    if (statusEl) statusEl.textContent = t || '';
-  }
-
-  function el(tag, attrs = {}, ...children) {
-    const n = document.createElement(tag);
-    Object.entries(attrs).forEach(([k, v]) => {
-      if (v == null) return;
-      if (k === 'class') n.className = v;
-      else if (k === 'for') n.htmlFor = v;
-      else n.setAttribute(k, v);
-    });
-    children.forEach(c => {
-      if (typeof c === 'string') n.appendChild(document.createTextNode(c));
-      else if (c) n.appendChild(c);
-    });
-    return n;
-  }
-
-  async function loadForm() {
-    setStatus('Yükleniyor…');
-    try {
-      const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`, { credentials: 'same-origin' });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const data = await r.json(); // { ok, form:{title, schema:{questions:[...]}} }
-
-      if (!data.ok) throw new Error(data.error || 'Form getirilemedi');
-      const form = data.form || {};
-      const questions = (form.schema && form.schema.questions) || [];
-
-      // Başlık
-      if (titleEl) titleEl.textContent = form.title || slug;
-
-      // Soruları çiz
-      boxEl.innerHTML = '';
-      questions.forEach((q, idx) => {
-        const name = `q_${idx}`;
-        const wrap = el('div', { class: 'q' });
-        const label = el('label', { class: 'q-label' }, `${idx + 1}. ${q.label || ''}`, q.required ? ' *' : '');
-
-        wrap.appendChild(label);
-
-        if (q.type === 'radio') {
-          (q.options || []).forEach(opt => {
-            const id = `${name}_${opt}`;
-            const inp = el('input', { type: 'radio', id, name, value: opt, required: q.required || undefined });
-            const l = el('label', { for: id, class: 'opt' }, opt);
-            wrap.appendChild(el('div', { class: 'opt-row' }, inp, l));
-          });
-        } else if (q.type === 'checkbox') {
-          (q.options || []).forEach(opt => {
-            const id = `${name}_${opt}`;
-            const inp = el('input', { type: 'checkbox', id, name, value: opt });
-            const l = el('label', { for: id, class: 'opt' }, opt);
-            wrap.appendChild(el('div', { class: 'opt-row' }, inp, l));
-          });
-          // HTML5 required checkbox group için standart yok; submit öncesi doğrularız
-          if (q.required) wrap.dataset.requiredGroup = name;
-        } else {
-          // text
-          const inp = el('input', {
-            type: 'text',
-            name,
-            placeholder: 'Yanıtınızı yazınız',
-            required: q.required || undefined
-          });
-          wrap.appendChild(inp);
-        }
-
-        boxEl.appendChild(wrap);
-      });
-
-      // Formu göster
-      formEl.style.display = '';
-      setStatus('');
-    } catch (e) {
-      console.error(e);
-      setStatus('Form yüklenemedi');
+  function el(tag, attrs = {}, html = "") {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === "class") e.className = v;
+      else if (k === "for") e.htmlFor = v;
+      else if (k.startsWith("on") && typeof v === "function") e[k] = v;
+      else e.setAttribute(k, v);
     }
+    if (html) e.innerHTML = html;
+    return e;
   }
 
-  function collectAnswers() {
-    const answers = {};
-    // q_0, q_1, … isimli alanları toplayacağız
-    const groups = new Map();
+  function renderForm(data) {
+    state.form = data;
+    const title = $("#form-title");
+    const formEl = $("#f");
 
-    Array.from(formEl.elements).forEach(elm => {
-      if (!elm.name || !/^q_\d+$/.test(elm.name)) return;
+    title.textContent = data.title || "Anket";
+    formEl.innerHTML = "";
 
-      if (elm.type === 'checkbox') {
-        if (!groups.has(elm.name)) groups.set(elm.name, []);
-        if (elm.checked) groups.get(elm.name).push(elm.value);
-      } else if (elm.type === 'radio') {
-        if (elm.checked) answers[elm.name] = elm.value;
-      } else {
-        answers[elm.name] = elm.value ?? '';
+    const qs = (data.schema && Array.isArray(data.schema.questions))
+      ? data.schema.questions
+      : [];
+
+    qs.forEach((q, idx) => {
+      const wrap = el("div", { class: "q" });
+      const qId = "q_" + idx;
+
+      const lbl = el("label", { for: qId }, (q.label || ("Soru " + (idx + 1))));
+      wrap.appendChild(lbl);
+
+      const required = !!q.required;
+
+      if (q.type === "text") {
+        const inp = el("input", { id: qId, name: qId, type: "text" });
+        if (required) inp.required = true;
+        wrap.appendChild(inp);
+      } else if (q.type === "textarea") {
+        const inp = el("textarea", { id: qId, name: qId, rows: "3" });
+        if (required) inp.required = true;
+        wrap.appendChild(inp);
+      } else if (q.type === "checkbox") {
+        (q.options || []).forEach((opt, i) => {
+          const id = qId + "_" + i;
+          const line = el("label", { class: "opt", for: id });
+          const box = el("input", { id, type: "checkbox", name: qId, value: opt });
+          // checkbox'ta 'required' bir tanesine uygulanırsa ilk seçimde native doğrulama tetiklenir
+          if (required && i === 0) box.required = true;
+          line.appendChild(box);
+          line.appendChild(document.createTextNode(" " + opt));
+          wrap.appendChild(line);
+        });
+      } else { // radio (default)
+        (q.options || []).forEach((opt, i) => {
+          const id = qId + "_" + i;
+          const line = el("label", { class: "opt", for: id });
+          const rb = el("input", { id, type: "radio", name: qId, value: opt });
+          if (required) rb.required = true;
+          line.appendChild(rb);
+          line.appendChild(document.createTextNode(" " + opt));
+          wrap.appendChild(line);
+        });
       }
+
+      formEl.appendChild(wrap);
     });
 
-    groups.forEach((arr, name) => (answers[name] = arr));
+    // Gönder butonu
+    const btn = el("button", { type: "submit", id: "btnSend" }, "Gönder");
+    formEl.appendChild(btn);
 
-    return answers;
+    formEl.onsubmit = async (e) => {
+      e.preventDefault();
+      const btn = $("#btnSend");
+      btn.disabled = true;
+
+      try {
+        const fd = new FormData(formEl);
+        const answers = {};
+        // checkbox çoklu değer topla
+        (state.form.schema.questions || []).forEach((q, idx) => {
+          const key = "q_" + idx;
+          if (q.type === "checkbox") {
+            answers[key] = fd.getAll(key);
+          } else {
+            answers[key] = fd.get(key);
+          }
+        });
+
+        const resp = await fetch(`/api/forms/${encodeURIComponent(state.form.slug)}/submit`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ answers })
+        });
+
+        const j = await resp.json().catch(() => ({}));
+        if (!resp.ok || !j.ok) {
+          alert(j.error || "Gönderilemedi");
+          btn.disabled = false;
+          return;
+        }
+        // teşekkür
+        location.href = "/thanks.html";
+      } catch (err) {
+        console.error(err);
+        alert("Hata: " + err.message);
+        btn.disabled = false;
+      }
+    };
   }
 
-  function validateRequiredCheckboxGroups() {
-    // data-required-group olan sarmalları kontrol et
-    const reqWraps = boxEl.querySelectorAll('[data-required-group]');
-    for (const w of reqWraps) {
-      const name = w.dataset.requiredGroup;
-      const anyChecked = !!boxEl.querySelector(`input[name="${name}"]:checked`);
-      if (!anyChecked) return false;
-    }
-    return true;
-  }
-
-  formEl.addEventListener('submit', async (e) => {
-    e.preventDefault();
-
-    // checkbox zorunluluk kontrolü
-    if (!validateRequiredCheckboxGroups()) {
-      alert('Lütfen zorunlu soruları işaretleyin.');
+  async function boot() {
+    // 1) SSR'dan gelen veri varsa anında çiz
+    if (window.__FORM__ && window.__FORM__.slug) {
+      renderForm(window.__FORM__);
       return;
     }
 
-    const answers = collectAnswers(); // { q_0: "Evet", q_1: ["Evet","Hayır"], q_2: "metin"... }
-
-    try {
-      setStatus('Gönderiliyor…');
-
-      const r = await fetch(`/api/forms/${encodeURIComponent(slug)}/submit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ answers })
-      });
-
-      const data = await r.json();
-
-      if (!r.ok || !data.ok) {
-        const msg = (data && data.error) || `HTTP ${r.status}`;
-        // Bazı özel hatalar
-        if (/already/i.test(msg)) {
-          setStatus('Bu ankete yanıt vermiş görünüyorsunuz.');
-        } else if (/unique/i.test(msg) || /uniq_response_per_ip_per_form/i.test(msg)) {
-          setStatus('Bu ankete bu IP ile zaten oy verilmiş.');
-        } else {
-          setStatus(`Hata: ${msg}`);
-        }
-        return;
-      }
-
-      setStatus('Teşekkürler, yanıtınız kaydedildi.');
-      formEl.reset();
-    } catch (err) {
-      console.error(err);
-      setStatus('Bağlantı/servis hatası.');
+    // 2) Fallback: eski yöntem (fetch)
+    const params = new URLSearchParams(location.search);
+    const slug = params.get("slug");
+    if (!slug) {
+      document.body.innerHTML = "<h2>Form bulunamadı (slug yok)</h2>";
+      return;
     }
-  });
+    try {
+      const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`);
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || "Form alınamadı");
+      renderForm(j.form);
+    } catch (e) {
+      console.error(e);
+      document.body.innerHTML = "<h2>Form yüklenemedi.</h2>";
+    }
+  }
 
-  // başlangıç
-  loadForm();
-});
+  document.addEventListener("DOMContentLoaded", boot);
+})();
