@@ -122,13 +122,9 @@ app.use(
 );
 
 // ---- Sağlık
-app.get("/health", async (_req, res) => {
-  try {
-    await pool.query("SELECT 1");
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
+// Basit health (Render için) — sadece 200 döner
+app.get("/health", (_req, res) => {
+  res.status(200).send("ok");
 });
 
 // __dirname eşdeğeri
