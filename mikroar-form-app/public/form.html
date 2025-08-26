@@ -35,7 +35,12 @@
       </form>
     </div>
   </div>
-
+<body>
+  <div class="main-wrap">
+    <h1 id="form-title">Anket</h1>
+    <form id="f"></form>
+  </div>
+</body>
   <script>
   const qs = (s)=>document.querySelector(s);
   const $title = qs('#title');
@@ -45,7 +50,7 @@
   const $btn = qs('#btnSend');
 
   function toast(msg, cls='ok'){
-    $toast.innerHTML = msg ? `<div class="toast ${cls}">${msg}</div>` : '';
+    $toast.innerHTML = msg ? `<div "toast ${cls}">${msg}</div>` : '';
   }
   function disableForm(){
     $btn.disabled = true;
@@ -70,7 +75,7 @@
   function renderQuestions(schema){
     const items = schema.questions || [];
     if(!items.length){
-      $questions.innerHTML = '<p class="muted">Bu formda soru bulunamadı.</p>';
+      $questions.innerHTML = '<p "muted">Bu formda soru bulunamadı.</p>';
       return;
     }
     $questions.innerHTML = '';
@@ -80,7 +85,7 @@
       const label = document.createElement('div');
       label.style.fontWeight = '600';
       label.style.marginBottom = '8px';
-      label.innerHTML = `${idx+1}. ${q.label || q.text || 'Soru'} ${q.required ? '<span class="muted">*</span>':''}`;
+      label.innerHTML = `${idx+1}. ${q.label || q.text || 'Soru'} ${q.required ? '<span "muted">*</span>':''}`;
       wrap.appendChild(label);
 
       const name = `q_${idx}`;
