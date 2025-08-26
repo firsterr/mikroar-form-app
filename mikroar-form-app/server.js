@@ -416,6 +416,30 @@ app.get("/api/forms/:slug", async (req, res) => {
   }
 });
 
+// --- ADMIN: formu aktif/pasif bakmadan getir
+app.get("/admin/api/forms/:slug", adminOnly, async (req, res) => {
+  const { slug } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `SELECT slug, title, active, schema
+         FROM forms
+        WHERE slug = $1
+        LIMIT 1`,
+      [slug]
+    );
+    if (!rows.length) return res.status(404).json({ ok: false, error: "not_found" });
+
+    const form = rows[0];
+    // schema text ise parse et
+    try {
+      if (typeof form.schema === "string") form.schema = JSON.parse(form.schema);
+    } catch (_) {}
+
+    res.json({ ok: true, form });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
 // ---- IP debug (opsiyonel)
 app.get("/api/__ip", (req, res) => {
   res.json({
