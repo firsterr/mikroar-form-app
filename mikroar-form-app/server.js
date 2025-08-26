@@ -262,13 +262,13 @@ function renderOgHtmlFull({ url, title, description, image, siteName = "MikroAR"
 </html>`;
 }
 
-// --- /s/:code -> kısa linkten direkt anket SSR + OG etiketleri
+// --- /s/:code -> kısa link (botlara OG, kullanıcılara redirect)
 app.get("/s/:code", async (req, res) => {
   const code = (req.params.code || "").trim();
   if (!code) return res.status(404).send("Not found");
 
   try {
-    // 1) Kısa link bilgisi
+    // kısa linki al
     const { rows } = await pool.query(
       `SELECT slug, expires_at, max_visits, COALESCE(visits,0) AS visits
          FROM shortlinks
@@ -286,108 +286,82 @@ app.get("/s/:code", async (req, res) => {
       return res.status(410).send("Bu linkin ziyaret limiti dolmuş.");
     }
 
-    // 2) Formu getir
+    // forma bak
     const fr = await pool.query(
-      `SELECT slug, title, active, schema
-         FROM forms
-        WHERE slug = $1
-        LIMIT 1`,
+      "SELECT slug, title, active, schema FROM forms WHERE slug=$1 LIMIT 1",
       [sl.slug]
     );
-    if (!fr.rows.length) return res.status(404).send("Form bulunamadı");
-
-    const form = fr.rows[0];
-    if (form.active === false) {
-      // Pasif ise insan ziyaretçiye kapalı mesajı ver, ama OG yine dolu olsun
-      // (Böylece paylaşım önizlemesi yine görsel çıkar)
+    if (!fr.rows.length || fr.rows[0].active === false) {
+      return res.status(404).send("Form bulunamadı veya pasif.");
     }
-    try {
-      if (typeof form.schema === "string") form.schema = JSON.parse(form.schema);
-    } catch {}
+    const form = fr.rows[0];
 
-    // 3) OG içerikleri
-    const esc = (s) =>
-      String(s ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
+    // Bot tespiti (WhatsApp/Facebook/Twitter/LinkedIn/Slack vb.)
+    const ua = (req.headers["user-agent"] || "").toLowerCase();
+    const isBot = /(facebookexternalhit|facebot|twitterbot|linkedinbot|pinterest|slackbot|whatsapp|discordbot|telegrambot|vkshare|embedly|quora|googlebot|bingbot|duckduckbot|yandex)/i.test(
+      ua
+    );
+    const forcePreview = "preview" in req.query;
 
-    const host = (req.headers["x-forwarded-host"] || req.hostname || req.headers.host || "").toLowerCase();
-    const selfUrl = `https://${host}/s/${encodeURIComponent(code)}`;
+    const target = `/form.html?slug=${encodeURIComponent(form.slug)}`;
 
-    // İstersen .env’ye DEFAULT_OG_IMAGE koy: DEFAULT_OG_IMAGE=https://.../varsayilan.jpg
-    const DEFAULT_OG_IMAGE = process.env.DEFAULT_OG_IMAGE
-      || "https://img.gazetemerhaba.com/rcman/Cw480h270q95gc/storage/files/images/2025/08/16/ahmet-akin-ak-parti-chp-w7pn.jpg";
+    // İnsanlar -> direkt ankete
+    if (!isBot && !forcePreview) {
+      return res.redirect(302, target);
+    }
 
-    const ogTitle = form.title || "MikroAR Anketi";
-    // Açıklama yoksa ilk soruyu kullan (kısa bir teaser iyi oluyor)
-    const firstLabel =
-      Array.isArray(form.schema?.questions) && form.schema.questions[0]?.label
-        ? form.schema.questions[0].label
-        : "Katılmak için tıklayın";
-    const ogDesc = firstLabel;
-    const ogImage = DEFAULT_OG_IMAGE;
+    // Botlar (veya ?preview=1) -> OG meta ver
+    const site = `https://${req.headers.host}`;
+    const ogUrl = `${site}/s/${code}`;
 
-    // 4) Ziyaret sayacını arkada arttır (hataya düşerse yut)
-    pool
-      .query("UPDATE shortlinks SET visits = COALESCE(visits,0) + 1 WHERE code = $1", [code])
-      .catch(() => {});
+    // (isterseniz burada slug’a özel bir görsel/başlık/özet kurgulayabilirsiniz)
+    const ogTitle = String(form.title || "MikroAR Anketi");
+    const ogDesc =
+      "CHP'li Belediye Başkanlarının Ak Parti'ye geçişlerini nasıl değerlendiriyorsunuz?";
+    const ogImage =
+      req.query.img ||
+      "https://img.gazetemerhaba.com/rcman/Cw480h270q95gc/storage/files/images/2025/08/16/ahmet-akin-ak-parti-chp-w7pn.jpg";
 
-    // 5) SSR + açık OG etiketleri
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.send(`<!doctype html>
+    res.set("Cache-Control", "public, s-maxage=600, max-age=600");
+    res.type("html").send(`<!doctype html>
 <html lang="tr">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>${esc(ogTitle)}</title>
-
-  <!-- Open Graph -->
+  <title>${escapeHtml(ogTitle)}</title>
+  <link rel="canonical" href="${ogUrl}" />
+  <meta property="og:url" content="${ogUrl}">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="${esc(selfUrl)}">
-  <meta property="og:title" content="${esc(ogTitle)}">
-  <meta property="og:description" content="${esc(ogDesc)}">
-  <meta property="og:image" content="${esc(ogImage)}">
-  <meta property="og:image:secure_url" content="${esc(ogImage)}">
-  <meta property="og:locale" content="tr_TR">
-
-  <!-- Twitter (X) -->
+  <meta property="og:title" content="${escapeHtml(ogTitle)}">
+  <meta property="og:description" content="${escapeHtml(ogDesc)}">
+  <meta property="og:image" content="${ogImage}">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="${esc(ogTitle)}">
-  <meta name="twitter:description" content="${esc(ogDesc)}">
-  <meta name="twitter:image" content="${esc(ogImage)}">
-
-  <link rel="canonical" href="${esc(selfUrl)}">
-  <meta name="robots" content="index,follow">
-  <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;line-height:1.4;margin:24px}
-    .card{max-width:820px;margin:auto}
-    .btn{display:inline-block;margin-top:12px;padding:10px 14px;border:1px solid #ccc;border-radius:8px;text-decoration:none}
-  </style>
+  <meta name="twitter:title" content="${escapeHtml(ogTitle)}">
+  <meta name="twitter:description" content="${escapeHtml(ogDesc)}">
+  <meta name="twitter:image" content="${ogImage}">
+  <meta property="og:locale" content="tr_TR">
+  <meta name="robots" content="noindex,follow">
 </head>
-<body>
-  <div class="card">
-    <h1>${esc(ogTitle)}</h1>
-    ${
-      form.active === false
-        ? `<p>Bu anket kapanmıştır.</p>`
-        : `<p>${esc(ogDesc)}</p>
-           <p><a class="btn" href="/form.html?slug=${encodeURIComponent(form.slug)}">Ankete git</a></p>`
-    }
-  </div>
-  <script>
-    // İnsan kullanıcılar için client-side render (botlar OG'yi aldı bile)
-    window.__FORM__ = ${JSON.stringify({ slug: form.slug, title: form.title, active: form.active, schema: form.schema })};
-  </script>
-  <script src="/form.js?v=short1" defer></script>
-</body>
+<body><!-- intentionally empty for bots --></body>
 </html>`);
+    // ziyaret sayısını arttır (arka planda)
+    pool.query("UPDATE shortlinks SET visits = COALESCE(visits,0)+1 WHERE code=$1", [code]).catch(()=>{});
   } catch (e) {
     console.error(e);
     res.status(500).send("Server error");
   }
 });
+
+// küçük kaçış yardımcıları
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 
 // ---- Statik
 app.use(
