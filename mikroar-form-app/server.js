@@ -262,82 +262,130 @@ function renderOgHtmlFull({ url, title, description, image, siteName = "MikroAR"
 </html>`;
 }
 
-// --- /s/:code → OG her zaman; aktifse JS ile forma yönlendir, pasifse uyarı göster
+// --- /s/:code -> kısa linkten direkt anket SSR + OG etiketleri
 app.get("/s/:code", async (req, res) => {
   const code = (req.params.code || "").trim();
   if (!code) return res.status(404).send("Not found");
 
   try {
-    // short link (tablo adı sende 'shortlinks' ise aynen kalsın;
-    // 'short_links' kullanıyorsan sorgudaki ismi değiştir.)
+    // 1) Kısa link bilgisi
     const { rows } = await pool.query(
-      "SELECT slug, expires_at, max_visits, COALESCE(visits,0) AS visits FROM shortlinks WHERE code=$1 LIMIT 1",
+      `SELECT slug, expires_at, max_visits, COALESCE(visits,0) AS visits
+         FROM shortlinks
+        WHERE code = $1`,
       [code]
     );
     if (!rows.length) return res.status(404).send("Link bulunamadı");
 
     const sl = rows[0];
     const now = new Date();
-
-    // expire / limit kontrolü
     if (sl.expires_at && new Date(sl.expires_at) < now) {
-      const html = renderOgHtmlFull({
-        url: `${req.protocol}://${req.get("host")}/form.html?slug=${encodeURIComponent(sl.slug)}`,
-        title: "Anket kapalı",
-        description: "Bu anketin süresi dolmuştur.",
-        image: "https://img.gazetemerhaba.com/rcman/Cw480h270q95gc/storage/files/images/2025/08/16/ahmet-akin-ak-parti-chp-w7pn.jpg",
-        bodyHtml: `<h2 style="font-family:system-ui,Arial">Bu anketin süresi dolmuştur.</h2>`
-      });
-      res.set("Cache-Control", "public, max-age=600");
-      return res.status(200).send(html);
+      return res.status(410).send("Bu linkin süresi dolmuş.");
     }
     if (sl.max_visits != null && sl.visits >= sl.max_visits) {
-      const html = renderOgHtmlFull({
-        url: `${req.protocol}://${req.get("host")}/form.html?slug=${encodeURIComponent(sl.slug)}`,
-        title: "Limit doldu",
-        description: "Bu kısa linkin ziyaret limiti dolmuştur.",
-        image: "https://img.gazetemerhaba.com/rcman/Cw480h270q95gc/storage/files/images/2025/08/16/ahmet-akin-ak-parti-chp-w7pn.jpg",
-        bodyHtml: `<h2 style="font-family:system-ui,Arial">Bu kısa linkin ziyaret limiti dolmuştur.</h2>`
-      });
-      res.set("Cache-Control", "public, max-age=600");
-      return res.status(200).send(html);
+      return res.status(410).send("Bu linkin ziyaret limiti dolmuş.");
     }
 
-    // form durumu
-    const fr = await pool.query("SELECT title, active FROM forms WHERE slug=$1 LIMIT 1", [sl.slug]);
-    if (!fr.rows.length) return res.status(404).send("Form bulunamadı.");
+    // 2) Formu getir
+    const fr = await pool.query(
+      `SELECT slug, title, active, schema
+         FROM forms
+        WHERE slug = $1
+        LIMIT 1`,
+      [sl.slug]
+    );
+    if (!fr.rows.length) return res.status(404).send("Form bulunamadı");
+
     const form = fr.rows[0];
-
-    const dest = `${req.protocol}://${req.get("host")}/form.html?slug=${encodeURIComponent(sl.slug)}`;
-
-    // pasif form → OG + bilgilendirme (redirect yok)
     if (form.active === false) {
-      const html = renderOgHtmlFull({
-        url: dest,
-        title: form.title || "MikroAR Anketi",
-        description: "Bu anketin süresi dolmuştur.",
-        image: "https://img.gazetemerhaba.com/rcman/Cw480h270q95gc/storage/files/images/2025/08/16/ahmet-akin-ak-parti-chp-w7pn.jpg",
-        bodyHtml: `<h2 style="font-family:system-ui,Arial">Bu anketin süresi dolmuştur.</h2>`
-      });
-      res.set("Cache-Control", "public, max-age=600");
-      return res.status(200).send(html);
+      // Pasif ise insan ziyaretçiye kapalı mesajı ver, ama OG yine dolu olsun
+      // (Böylece paylaşım önizlemesi yine görsel çıkar)
     }
+    try {
+      if (typeof form.schema === "string") form.schema = JSON.parse(form.schema);
+    } catch {}
 
-    // aktif form → OG + JS redirect (insanlar için)
-    // (Ziyaret sayaç +1 — botlar da bu sayfayı isteyebilir, istersen sayaç kodunu kaldır)
-    pool.query("UPDATE shortlinks SET visits = COALESCE(visits,0) + 1 WHERE code=$1", [code]).catch(() => {});
-    const html = renderOgHtmlFull({
-      url: dest,
-      title: form.title || "MikroAR Anketi",
-      description: "Katılımınız değerlidir. Anketimize oy verin.",
-      image: "https://img.gazetemerhaba.com/rcman/Cw480h270q95gc/storage/files/images/2025/08/16/ahmet-akin-ak-parti-chp-w7pn.jpg"
-      // bodyHtml boş bırakılırsa otomatik JS redirect ekler
-    });
-    res.set("Cache-Control", "public, max-age=600");
-    return res.status(200).send(html);
+    // 3) OG içerikleri
+    const esc = (s) =>
+      String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+
+    const host = (req.headers["x-forwarded-host"] || req.hostname || req.headers.host || "").toLowerCase();
+    const selfUrl = `https://${host}/s/${encodeURIComponent(code)}`;
+
+    // İstersen .env’ye DEFAULT_OG_IMAGE koy: DEFAULT_OG_IMAGE=https://.../varsayilan.jpg
+    const DEFAULT_OG_IMAGE = process.env.DEFAULT_OG_IMAGE
+      || "https://img.gazetemerhaba.com/rcman/Cw480h270q95gc/storage/files/images/2025/08/16/ahmet-akin-ak-parti-chp-w7pn.jpg";
+
+    const ogTitle = form.title || "MikroAR Anketi";
+    // Açıklama yoksa ilk soruyu kullan (kısa bir teaser iyi oluyor)
+    const firstLabel =
+      Array.isArray(form.schema?.questions) && form.schema.questions[0]?.label
+        ? form.schema.questions[0].label
+        : "Katılmak için tıklayın";
+    const ogDesc = firstLabel;
+    const ogImage = DEFAULT_OG_IMAGE;
+
+    // 4) Ziyaret sayacını arkada arttır (hataya düşerse yut)
+    pool
+      .query("UPDATE shortlinks SET visits = COALESCE(visits,0) + 1 WHERE code = $1", [code])
+      .catch(() => {});
+
+    // 5) SSR + açık OG etiketleri
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(`<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>${esc(ogTitle)}</title>
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="${esc(selfUrl)}">
+  <meta property="og:title" content="${esc(ogTitle)}">
+  <meta property="og:description" content="${esc(ogDesc)}">
+  <meta property="og:image" content="${esc(ogImage)}">
+  <meta property="og:image:secure_url" content="${esc(ogImage)}">
+  <meta property="og:locale" content="tr_TR">
+
+  <!-- Twitter (X) -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="${esc(ogTitle)}">
+  <meta name="twitter:description" content="${esc(ogDesc)}">
+  <meta name="twitter:image" content="${esc(ogImage)}">
+
+  <link rel="canonical" href="${esc(selfUrl)}">
+  <meta name="robots" content="index,follow">
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;line-height:1.4;margin:24px}
+    .card{max-width:820px;margin:auto}
+    .btn{display:inline-block;margin-top:12px;padding:10px 14px;border:1px solid #ccc;border-radius:8px;text-decoration:none}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>${esc(ogTitle)}</h1>
+    ${
+      form.active === false
+        ? `<p>Bu anket kapanmıştır.</p>`
+        : `<p>${esc(ogDesc)}</p>
+           <p><a class="btn" href="/form.html?slug=${encodeURIComponent(form.slug)}">Ankete git</a></p>`
+    }
+  </div>
+  <script>
+    // İnsan kullanıcılar için client-side render (botlar OG'yi aldı bile)
+    window.__FORM__ = ${JSON.stringify({ slug: form.slug, title: form.title, active: form.active, schema: form.schema })};
+  </script>
+  <script src="/form.js?v=short1" defer></script>
+</body>
+</html>`);
   } catch (e) {
     console.error(e);
-    return res.status(500).send("Sunucu hatası.");
+    res.status(500).send("Server error");
   }
 });
 
