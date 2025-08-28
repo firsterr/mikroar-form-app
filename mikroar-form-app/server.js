@@ -177,8 +177,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(morgan("combined"));
 
 /* ------------------------------------------------------------------ */
-/* SSR form: /form.html?slug=XYZ  —  description dahil                */
-/* ------------------------------------------------------------------ */
+// --- SSR form: /form.html?slug=XYZ -> form verisini göm ve direkt render et
 app.get("/form.html", async (req, res, next) => {
   const slug = (req.query.slug || "").toString().trim().toLowerCase();
   if (!slug) return next(); // slug yoksa normal statik dosyaya düş
@@ -193,110 +192,22 @@ app.get("/form.html", async (req, res, next) => {
     }
 
     const form = rows[0];
-    try {
-      if (typeof form.schema === "string") form.schema = JSON.parse(form.schema);
-    } catch (_) {}
-
-    const html = `<!doctype html>
-<html lang="tr">
-<head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>${esc(form.title || "Anket")}</title>
-<style>
-  body{font-family:system-ui,Arial,sans-serif;max-width:900px;margin:24px auto;padding:0 16px;background:#f1f3f5}
-  h1{margin:0 0 6px}
-  .form-desc{margin:0 0 16px;color:#4b5563;font-size:15px}
-  .q{margin:14px 0;padding:12px;border:1px solid #e5e7eb;border-radius:10px;background:#fff}
-  .q label{font-weight:600;display:block;margin-bottom:8px}
-  .opt{display:block;margin:6px 0}
-  button{padding:10px 14px;font-size:16px;border-radius:10px;border:1px solid #d1d5db;background:#111827;color:#fff}
-  button:disabled{opacity:.5}
-</style>
-</head>
-<body>
-  <h1 id="form-title">${esc(form.title || "Anket")}</h1>
-  <p id="form-desc" class="form-desc">${esc(form.description || "")}</p>
-
-  <form id="f"></form>
-
-  <script>window.__FORM__ = ${JSON.stringify(form)};</script>
-  <script src="/form.js?v=desc-ssr2"></script>
-</body>
-</html>`;
-    return res.status(200).send(html);
-  } catch (e) {
-    console.error(e);
-    return res.status(500).send("Sunucu hatası.");
-  }
-});
-
-/* ------------------------------------------------------------------ */
-/* /s/:code -> kısa linkten direkt anket SSR  —  description dahil     */
-/* ------------------------------------------------------------------ */
-app.get("/s/:code", async (req, res) => {
-  const code = (req.params.code || "").trim();
-  if (!code) return res.status(404).send("Not found");
-
-  try {
-    // kısa link bilgisi
-    const { rows } = await pool.query(
-      "SELECT slug, expires_at, max_visits, coalesce(visits,0) as visits FROM shortlinks WHERE code=$1",
-      [code]
-    );
-    if (!rows.length) return res.status(404).send("Link bulunamadı");
-
-    const sl = rows[0];
-    const now = new Date();
-    if (sl.expires_at && new Date(sl.expires_at) < now) {
-      return res.status(410).send("Bu linkin süresi dolmuş.");
-    }
-    if (sl.max_visits != null && sl.visits >= sl.max_visits) {
-      return res.status(410).send("Bu linkin ziyaret limiti dolmuş.");
-    }
-
-    // formu getir
-    const fr = await pool.query(
-      "SELECT slug, title, description, active, schema FROM forms WHERE slug=$1 LIMIT 1",
-      [sl.slug]
-    );
-    if (!fr.rows.length || fr.rows[0].active === false) {
-      return res.status(404).send("Form bulunamadı veya pasif.");
-    }
-
-    const form = fr.rows[0];
     try { if (typeof form.schema === "string") form.schema = JSON.parse(form.schema); } catch {}
 
-    // ziyaret sayısını arttır (arkaplanda)
-    pool.query("UPDATE shortlinks SET visits = coalesce(visits,0) + 1 WHERE code=$1", [code])
-        .catch(()=>{});
-
-    // SSR HTML
     const html = `<!doctype html>
 <html lang="tr">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>${esc(form.title || "Anket")}</title>
-<style>
-  body{font-family:system-ui,Arial,sans-serif;max-width:900px;margin:24px auto;padding:0 16px;background:#f1f3f5}
-  h1{margin:0 0 6px}
-  .form-desc{margin:0 0 16px;color:#4b5563;font-size:15px}
-  .q{margin:14px 0;padding:12px;border:1px solid #e5e7eb;border-radius:10px;background:#fff}
-  .q label{font-weight:600;display:block;margin-bottom:8px}
-  .opt{display:block;margin:6px 0}
-  button{padding:10px 14px;font-size:16px;border-radius:10px;border:1px solid #d1d5db;background:#111827;color:#fff}
-  button:disabled{opacity:.5}
-</style>
+<title>${(form.title || "Anket").replace(/</g,"&lt;")}</title>
+<link rel="stylesheet" href="/form.css?v=gforms">
 </head>
 <body>
-  <h1 id="form-title">${esc(form.title || "Anket")}</h1>
-  <p id="form-desc" class="form-desc">${esc(form.description || "")}</p>
-
+  <h1 id="title"></h1>
+  <p id="form-desc" class="form-desc" style="display:none"></p>
   <form id="f"></form>
-
   <script>window.__FORM__ = ${JSON.stringify(form)};</script>
-  <script src="/form.js?v=short-desc2"></script>
+  <script src="/form.js?v=gforms2"></script>
 </body>
 </html>`;
     return res.status(200).send(html);
