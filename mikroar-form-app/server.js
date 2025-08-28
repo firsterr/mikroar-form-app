@@ -410,26 +410,30 @@ app.get("/api/forms/:slug", async (req, res) => {
   }
 });
 
-// --- ADMIN: formu aktif/pasif bakmadan getir
-app.get("/admin/api/forms/:slug", adminOnly, async (req, res) => {
-  const { slug } = req.params;
+// ---- Admin: form oluştur/güncelle
+// Body: { slug, title, description, active(true/false), schema:{questions:[...] } }
+//  veya { slug, title, description, active, questions:[...] }  → questions'ı schema içine sararız
+app.post("/admin/api/forms", adminOnly, async (req, res) => {
   try {
-    const { rows } = await pool.query(
-      `SELECT slug, title, active, schema
-         FROM forms
-        WHERE slug = $1
-        LIMIT 1`,
-      [slug]
+    let { slug, title, description = null, active = true, schema, questions } = req.body || {};
+    if (!slug || !title) {
+      return res.status(400).json({ ok: false, error: "slug ve title gerekli" });
+    }
+    if (!schema && Array.isArray(questions)) schema = { questions };
+    if (!schema || !Array.isArray(schema.questions)) schema = { questions: [] };
+
+    await pool.query(
+      `INSERT INTO forms (slug, title, description, active, schema)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (slug) DO UPDATE
+       SET title = EXCLUDED.title,
+           description = EXCLUDED.description,
+           active = EXCLUDED.active,
+           schema = EXCLUDED.schema`,
+      [slug, title, description, active, schema]
     );
-    if (!rows.length) return res.status(404).json({ ok: false, error: "not_found" });
 
-    const form = rows[0];
-    // schema text ise parse et
-    try {
-      if (typeof form.schema === "string") form.schema = JSON.parse(form.schema);
-    } catch (_) {}
-
-    res.json({ ok: true, form });
+    res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
