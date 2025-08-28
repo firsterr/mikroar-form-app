@@ -1,4 +1,4 @@
-// server.js  —  MikroAR (ESM)
+// server.js — MikroAR (ESM, SSR fix)
 
 import express from "express";
 import helmet from "helmet";
@@ -9,19 +9,20 @@ const { Pool } = pkg;
 import path from "path";
 import { fileURLToPath } from "url";
 import net from "node:net";
+import crypto from "node:crypto";
 
-// ====== ENV
+// ===== ENV
 const {
   PORT = 3000,
   DATABASE_URL,
   CORS_ORIGIN = "*",
   ADMIN_USER = "admin",
   ADMIN_PASS = "admin",
-  FRAME_ANCESTORS = "",        // iFrame’e izin verilecek origin’ler (virgüllü)
-  DUPLICATE_POLICY = "BLOCK",  // BLOCK | UPDATE
+  FRAME_ANCESTORS = "",
+  DUPLICATE_POLICY = "BLOCK", // BLOCK | UPDATE
 } = process.env;
 
-// ====== DB
+// ===== DB
 const pool = new Pool({
   connectionString: DATABASE_URL,
   ssl: DATABASE_URL?.includes("sslmode=require")
@@ -29,20 +30,18 @@ const pool = new Pool({
     : undefined,
 });
 
-// ====== APP
+// ===== APP
 const app = express();
 app.set("trust proxy", true);
 
-// küçük yardımcılar
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
 function getHost(req){
-  return (req.headers["x-forwarded-host"] || req.hostname || req.headers.host || "")
-    .toLowerCase();
+  return (req.headers["x-forwarded-host"] || req.hostname || req.headers.host || "").toLowerCase();
 }
 function pickClientIp(req){
-  const c = [
+  const chain = [
     req.headers["cf-connecting-ip"],
     req.headers["x-client-ip"],
     req.headers["x-real-ip"],
@@ -50,7 +49,8 @@ function pickClientIp(req){
     req.ip,
     req.socket?.remoteAddress,
   ].filter(Boolean);
-  for (let raw of c){
+
+  for (let raw of chain){
     let ip = String(raw).split(",")[0].trim();
     ip = ip.replace(/^\[|\]$/g,"").replace(/:\d+$/,"");
     if (ip.startsWith("::ffff:")) ip = ip.slice(7);
@@ -59,10 +59,8 @@ function pickClientIp(req){
   return null;
 }
 
-// ====== SECURITY
-const faList = FRAME_ANCESTORS
-  ? FRAME_ANCESTORS.split(",").map(s=>s.trim()).filter(Boolean)
-  : [];
+// ===== SECURITY
+const faList = FRAME_ANCESTORS ? FRAME_ANCESTORS.split(",").map(s=>s.trim()).filter(Boolean) : [];
 app.use(helmet({
   contentSecurityPolicy: {
     useDefaults: true,
@@ -79,11 +77,10 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-// ====== HEALTH (önce)
-app.get("/health", (_req,res)=> res.status(200).send("ok"));
+// ===== HEALTH (en önde)
+app.get("/health", (_req, res)=> res.status(200).send("ok"));
 
-// ====== SUBDOMAIN GUARD (anket.* form sayfasını kapat, tamamı şifreli)
-// form.* kökü ve results şifreli; /form.html ve /s/* herkese açık
+// ===== SUBDOMAIN GUARD
 function adminOnly(req,res,next){
   const hdr = req.headers.authorization || "";
   if (!hdr.startsWith("Basic ")){
@@ -106,13 +103,13 @@ app.use((req,res,next)=>{
     return adminOnly(req,res,next);
   }
   if (host.startsWith("form.")){
-    const protectedPortal = req.method==="GET" && (req.path==="/" || req.path==="/index.html" || req.path==="/results.html");
-    if (protectedPortal) return adminOnly(req,res,next);
+    const protect = req.method==="GET" && (req.path === "/" || req.path === "/index.html" || req.path === "/results.html");
+    if (protect) return adminOnly(req,res,next);
   }
   next();
 });
 
-// ====== MIDDLEWARES
+// ===== MIDDLEWARES
 app.use(cors({
   origin: CORS_ORIGIN==="*" ? true : CORS_ORIGIN.split(",").map(s=>s.trim()),
   credentials: false,
@@ -121,8 +118,7 @@ app.use(express.json({ limit:"1mb" }));
 app.use(express.urlencoded({ extended:true }));
 app.use(morgan("combined"));
 
-// ========== API’ler
-// Liste: sadece aktif formlar
+// ===== API
 app.get("/api/forms-list", async (_req,res)=>{
   try{
     const { rows } = await pool.query(
@@ -132,7 +128,6 @@ app.get("/api/forms-list", async (_req,res)=>{
   }catch(e){ res.status(500).json({ ok:false, error:e.message }); }
 });
 
-// Tek form
 app.get("/api/forms/:slug", async (req,res)=>{
   const { slug } = req.params;
   try{
@@ -140,7 +135,7 @@ app.get("/api/forms/:slug", async (req,res)=>{
       `SELECT slug, title, description, active, schema FROM forms WHERE slug=$1 LIMIT 1`,
       [slug]
     );
-    if (!rows.length)  return res.status(404).json({ ok:false, error:"not_found" });
+    if (!rows.length) return res.status(404).json({ ok:false, error:"not_found" });
     if (rows[0].active === false) return res.status(403).json({ ok:false, error:"inactive" });
 
     const form = rows[0];
@@ -149,15 +144,15 @@ app.get("/api/forms/:slug", async (req,res)=>{
   }catch(e){ res.status(500).json({ ok:false, error:e.message }); }
 });
 
-// Submit
 app.post("/api/forms/:slug/submit", async (req,res)=>{
   const { slug } = req.params;
   const answersRaw = req.body?.answers ?? req.body;
   if (!answersRaw || typeof answersRaw!=="object"){
     return res.status(400).json({ ok:false, error:"invalid_payload" });
   }
-  const clientIp = pickClientIp(req) || null;
+  const ip = pickClientIp(req) || null;
   const answersJson = JSON.stringify(answersRaw);
+
   try{
     const f = await pool.query("SELECT slug, active FROM forms WHERE slug=$1",[slug]);
     if (!f.rows.length) return res.status(404).json({ ok:false, error:"Form bulunamadı" });
@@ -171,7 +166,7 @@ app.post("/api/forms/:slug/submit", async (req,res)=>{
         DO UPDATE SET answers=EXCLUDED.answers, created_at=NOW()
         RETURNING created_at
       `;
-      const { rows } = await pool.query(q,[slug, clientIp, answersJson]);
+      const { rows } = await pool.query(q,[slug, ip, answersJson]);
       return res.json({ ok:true, updated:true, at: rows[0]?.created_at });
     }
 
@@ -181,13 +176,13 @@ app.post("/api/forms/:slug/submit", async (req,res)=>{
         VALUES ($1,$2::inet,$3::jsonb,NOW())
         RETURNING created_at
       `;
-      const { rows } = await pool.query(ins,[slug, clientIp, answersJson]);
+      const { rows } = await pool.query(ins,[slug, ip, answersJson]);
       return res.json({ ok:true, created:true, at: rows[0]?.created_at });
     }catch(err){
-      if (err?.code==="23505"){
+      if (err?.code === "23505"){
         const old = await pool.query(
           "SELECT created_at FROM responses WHERE form_slug=$1 AND ip=$2::inet",
-          [slug, clientIp]
+          [slug, ip]
         );
         return res.json({ ok:true, alreadySubmitted:true, at: old.rows[0]?.created_at || null });
       }
@@ -196,7 +191,6 @@ app.post("/api/forms/:slug/submit", async (req,res)=>{
   }catch(e){ res.status(500).json({ ok:false, error:e.message }); }
 });
 
-// Yanıtları (results) getir — admin
 app.get("/api/admin/forms/:slug/responses", adminOnly, async (req,res)=>{
   const { slug } = req.params;
   try{
@@ -216,26 +210,38 @@ app.get("/api/admin/forms/:slug/responses", adminOnly, async (req,res)=>{
   }catch(e){ res.status(500).json({ ok:false, error:e.message }); }
 });
 
-// Kısa link oluştur — admin
+// kısa link üret
 app.get("/admin/api/shortlink/new", adminOnly, async (req,res)=>{
-  function makeCode(n=7){
-    const s = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    return Array.from(crypto.getRandomValues(new Uint8Array(n))).map(x=>s[x%s.length]).join("");
-  }
+  const makeCode = (n=7)=>{
+    const alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const buf = crypto.randomBytes(n);
+    let out = "";
+    for (let i=0;i<n;i++) out += alphabet[buf[i] % alphabet.length];
+    return out;
+  };
   try{
     const slug = (req.query.slug||"").toString().trim().toLowerCase();
     if (!slug) return res.status(400).json({ ok:false, error:"slug gerekli" });
     const chk = await pool.query("SELECT 1 FROM forms WHERE slug=$1",[slug]);
     if (!chk.rows.length) return res.status(404).json({ ok:false, error:"form yok" });
 
-    let code = (req.query.code||"").toString().trim() || makeCode(7);
-    const dup = await pool.query("SELECT 1 FROM shortlinks WHERE code=$1",[code]);
-    if (dup.rows.length) return res.status(409).json({ ok:false, error:"code kullanımda" });
+    let code = (req.query.code||"").toString().trim();
+    if (!code){
+      for (let i=0; i<5; i++){
+        const c = makeCode(7);
+        const d = await pool.query("SELECT 1 FROM shortlinks WHERE code=$1",[c]);
+        if (!d.rows.length){ code = c; break; }
+      }
+      if (!code) return res.status(500).json({ ok:false, error:"kod üretilemedi" });
+    }else{
+      const d = await pool.query("SELECT 1 FROM shortlinks WHERE code=$1",[code]);
+      if (d.rows.length) return res.status(409).json({ ok:false, error:"code kullanımda" });
+    }
 
     const days = req.query.days ? parseInt(req.query.days,10) : null;
     const max  = req.query.max  ? parseInt(req.query.max,10)  : null;
     let expires = null;
-    if (days && days>0){ const d=new Date(); d.setDate(d.getDate()+days); expires=d.toISOString(); }
+    if (days && days>0){ const d=new Date(); d.setDate(d.getDate()+days); expires = d.toISOString(); }
 
     await pool.query(
       "INSERT INTO shortlinks(code, slug, expires_at, max_visits) VALUES ($1,$2,$3,$4)",
@@ -246,13 +252,12 @@ app.get("/admin/api/shortlink/new", adminOnly, async (req,res)=>{
   }catch(e){ res.status(500).json({ ok:false, error:e.message }); }
 });
 
-// ====== SSR ROUTES (static’tan ÖNCE!)
+// ===== SSR ROUTES (mutlaka static’ten ÖNCE)
 
-// /form.html?slug=XYZ  — doğrudan formu render et
+// /form.html?slug=XYZ  — SSR
 app.get("/form.html", async (req,res,next)=>{
   const slug = (req.query.slug||"").toString().trim().toLowerCase();
-  if (!slug) return next(); // statik dosyaya düşsün
-
+  if (!slug) return next();
   try{
     const q = await pool.query(
       "SELECT slug, title, description, active, schema FROM forms WHERE slug=$1 LIMIT 1",
@@ -273,7 +278,7 @@ app.get("/form.html", async (req,res,next)=>{
 <link rel="stylesheet" href="/form.css?v=gforms"/>
 </head>
 <body>
-  <h1 id="title"></h1>
+  <h1 id="form-title"></h1>
   <p id="form-desc" class="form-desc" style="display:none"></p>
   <form id="f"></form>
   <script>window.__FORM__ = ${JSON.stringify(form)};</script>
@@ -287,8 +292,7 @@ app.get("/form.html", async (req,res,next)=>{
   }
 });
 
-// /s/:code  — kısa linkten form (SSR)
-import crypto from "node:crypto"; // kısa link generator için
+// /s/:code — kısa link SSR
 app.get("/s/:code", async (req,res)=>{
   const code = (req.params.code||"").trim();
   if (!code) return res.status(404).send("Not found");
@@ -325,7 +329,7 @@ app.get("/s/:code", async (req,res)=>{
 <link rel="stylesheet" href="/form.css?v=gforms"/>
 </head>
 <body>
-  <h1 id="title"></h1>
+  <h1 id="form-title"></h1>
   <p id="form-desc" class="form-desc" style="display:none"></p>
   <form id="f"></form>
   <script>window.__FORM__ = ${JSON.stringify(form)};</script>
@@ -339,19 +343,19 @@ app.get("/s/:code", async (req,res)=>{
   }
 });
 
-// ====== STATIC (SSR’den SONRA!)
+// ===== STATIC (SSR’den SONRA!)
 app.use(express.static(path.join(__dirname,"public"), { index:false }));
 
-// ====== ROOT: host’a göre hangi sayfa?
+// ===== ROOT
 app.get("/", (req,res)=>{
   const host = getHost(req);
   const file = host.startsWith("anket.")
     ? path.join(__dirname,"public","admin.html")
-    : path.join(__dirname,"public","index.html"); // form.mikroar.com
+    : path.join(__dirname,"public","index.html");
   res.sendFile(file);
 });
 
-// ====== START
+// ===== START
 app.listen(PORT, ()=> {
   console.log("MikroAR server on :"+PORT);
 });
