@@ -388,7 +388,7 @@ app.get("/api/forms/:slug", async (req, res) => {
   const { slug } = req.params;
   try {
     const { rows } = await pool.query(
-      `SELECT slug, title, active, schema
+      `SELECT slug, title, description, active, schema
          FROM forms
         WHERE slug = $1
         LIMIT 1`,
@@ -402,9 +402,7 @@ app.get("/api/forms/:slug", async (req, res) => {
     const form = rows[0];
     try {
       if (typeof form.schema === "string") form.schema = JSON.parse(form.schema);
-    } catch (_) {
-      /* yut, zaten obje ise devam */
-    }
+    } catch (_) { /* yut */ }
 
     res.json({ ok: true, form });
   } catch (e) {
