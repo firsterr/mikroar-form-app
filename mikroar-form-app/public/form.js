@@ -1,17 +1,12 @@
-// MikroAR – Form (temiz, açıklama + kapalı form kontrolü + sticky bar)
-(() => {
-  const $  = (s, root=document) => root.querySelector(s);
-  const $$ = (s, root=document) => [...root.querySelectorAll(s)];
+// MikroAR – Form (SSR destekli)  |  v=ipfix2 + closed-guard
+(function () {
+  const $ = (s) => document.querySelector(s);
 
-  const state = {
-    form: null,
-    slug: null,
-    hasHasSelector: CSS && CSS.supports && CSS.supports('selector(:has(*))')
-  };
+  const state = { form: null };
 
-  const el = (tag, attrs={}, html="") => {
+  function el(tag, attrs = {}, html = "") {
     const e = document.createElement(tag);
-    for (const [k,v] of Object.entries(attrs)) {
+    for (const [k, v] of Object.entries(attrs)) {
       if (k === "class") e.className = v;
       else if (k === "for") e.htmlFor = v;
       else if (k.startsWith("on") && typeof v === "function") e[k] = v;
@@ -19,127 +14,148 @@
     }
     if (html) e.innerHTML = html;
     return e;
-  };
+  }
 
-  const fmt = ts => { try { return new Date(ts).toLocaleString(); } catch { return ts || ""; } };
+  function fmt(ts) {
+    try { return new Date(ts).toLocaleString(); } catch { return ts || ""; }
+  }
+// ---- sticky bar ve alt bilgi için minimal stil
+(() => {
+  const style = document.createElement("style");
+  style.textContent = `
+    /* sticky bar görünürken form içeriği alta gizlenmesin */
+    #f { padding-bottom: 88px; }
 
-  const showMessage = (text, type="") => {
-    const f = $("#f");
-    f.innerHTML = "";
-    f.appendChild(el("div", { class:`message${type ? " "+type : ""}`}, text));
-  };
+    .sticky-submit{
+      position: sticky;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 12px 16px;
+      background: rgba(255,255,255,0.96);
+      backdrop-filter: saturate(180%) blur(8px);
+      border-top: 1px solid #e5e7eb;
+      display: flex;
+      flex-direction: column;       /* BUTON ÜSTTE, BİLGİ ALTA */
+      align-items: center;
+      gap: 12px;
+      z-index: 10;
+    }
 
+    .sticky-submit .info{
+      text-align: center;
+      line-height: 1.35;
+      color: #111;
+      font-size: 14px;
+    }
+    .sticky-submit .info a{
+      color: inherit;
+      text-decoration: underline;
+    }
+    .sticky-submit .info .brand{
+      margin-top: 2px;
+      font-size: 16px;     /* bir tık büyük */
+      font-weight: 700;    /* kalın */
+    }
+  `;
+  document.head.appendChild(style);
+})();
+  // --- Pasif / kapalı form ekranı
   function renderClosed(msg) {
-    $("#form-title").textContent = "Anket kapalı";
-    showMessage(msg || "Bu anketin süresi dolmuş ya da kapatılmış.", "error");
+    const title = $("#form-title");
+    const formEl = $("#f");
+    if (title) title.textContent = "Anket kapalı";
+    const text = msg || "Bu anket yayında değil veya süresi dolmuş olabilir.";
+
+    const html = `
+      <div style="
+        max-width:880px;margin:24px 0;padding:20px;
+        border:1px solid #30364a;border-radius:12px;background:#0f1221;color:#e7e7f1;
+      ">
+        <h3 style="margin:0 0 8px;font-size:22px">Anket kapalı</h3>
+        <p style="margin:0;line-height:1.6">${text}</p>
+      </div>
+    `;
+
+    if (formEl) {
+      formEl.innerHTML = html;
+    } else {
+      document.body.innerHTML = html;
+    }
     document.title = "Anket kapalı";
-  }
-
-  function attachCheckedFallback(root) {
-    if (state.hasHasSelector) return; // :has destekliyse gerek yok
-    root.addEventListener("change", (ev) => {
-      const input = ev.target;
-      if (!input || !input.closest) return;
-      const qwrap = input.closest(".q");
-      if (!qwrap) return;
-
-      if (input.type === "radio") {
-        $$(".opt", qwrap).forEach(li => li.classList.remove("is-checked"));
-        const li = input.closest(".opt");
-        if (li) li.classList.add("is-checked");
-      } else if (input.type === "checkbox") {
-        const li = input.closest(".opt");
-        if (!li) return;
-        if (input.checked) li.classList.add("is-checked");
-        else li.classList.remove("is-checked");
-      }
-    });
-
-    // İlk yüklemede işaretliler varsa sınıf ata
-    $$(".q .opt input:checked").forEach(inp => {
-      const li = inp.closest(".opt");
-      if (li) li.classList.add("is-checked");
-    });
-  }
-
-  function buildStickyBar(formEl){
-    const bar  = el("div", { class:"sticky-submit" });
-    const btn  = el("button", { type:"submit", id:"btnSend" }, "Gönder");
-    const note = el("div", { class:"note" }, `
-      Bu form <b>mikroar.com</b> alanında oluşturulmuştur.<br/>
-      İletişim: <a href="mailto:iletisim@mikroar.com">iletisim@mikroar.com</a><br/>
-      <b>MikroAR Araştırma</b>
-    `);
-    // İSTENEN DİZİLİM: buton ÜSTTE, 3 satır bilgi ALTA
-    bar.append(btn, note);
-    formEl.appendChild(bar);
   }
 
   function renderForm(data) {
     state.form = data;
-
-    // Başlık & açıklama
-    $("#form-title").textContent = data.title || "Anket";
-    const desc = $("#form-desc");
-    const descText = data.description || data.schema?.description || "";
-    if (descText) { desc.textContent = descText; desc.hidden = false; }
-    else { desc.hidden = true; }
-
+    const title = $("#form-title");
     const formEl = $("#f");
+
+    title && (title.textContent = data.title || "Anket");
+    if (!formEl) return;
+
     formEl.innerHTML = "";
 
-    const qs = (data.schema && Array.isArray(data.schema.questions)) ? data.schema.questions : [];
+    const qs = (data.schema && Array.isArray(data.schema.questions))
+      ? data.schema.questions
+      : [];
 
     qs.forEach((q, idx) => {
       const wrap = el("div", { class: "q" });
-      const qId  = "q_" + idx;
+      const qId = "q_" + idx;
 
-      wrap.appendChild(el("label", { for: qId }, q.label || ("Soru " + (idx + 1))));
+      const lbl = el("label", { for: qId }, (q.label || ("Soru " + (idx + 1))));
+      wrap.appendChild(lbl);
+
       const required = !!q.required;
 
       if (q.type === "text") {
-        const inp = el("input", { id:qId, name:qId, type:"text" });
+        const inp = el("input", { id: qId, name: qId, type: "text" });
         if (required) inp.required = true;
         wrap.appendChild(inp);
-
       } else if (q.type === "textarea") {
-        const inp = el("textarea", { id:qId, name:qId, rows:"3" });
+        const inp = el("textarea", { id: qId, name: qId, rows: "3" });
         if (required) inp.required = true;
         wrap.appendChild(inp);
-
       } else if (q.type === "checkbox") {
         (q.options || []).forEach((opt, i) => {
-          const id  = `${qId}_${i}`;
-          const row = el("label", { class:"opt", for:id });
-          const box = el("input", { id, type:"checkbox", name:qId, value:opt });
-          // checkbox required → en az birini zorunlu kılmak için ilkine koyarız
+          const id = qId + "_" + i;
+          const line = el("label", { class: "opt", for: id });
+          const box = el("input", { id, type: "checkbox", name: qId, value: opt });
+          // checkbox required: en az birini zorunlu kılmak için ilkine koyarız
           if (required && i === 0) box.required = true;
-          row.append(box, document.createTextNode(" " + opt));
-          wrap.appendChild(row);
+          line.appendChild(box);
+          line.appendChild(document.createTextNode(" " + opt));
+          wrap.appendChild(line);
         });
-
-      } else {
-        // default: radio
+      } else { // radio (default)
         (q.options || []).forEach((opt, i) => {
-          const id  = `${qId}_${i}`;
-          const row = el("label", { class:"opt", for:id });
-          const rb  = el("input", { id, type:"radio", name:qId, value:opt });
+          const id = qId + "_" + i;
+          const line = el("label", { class: "opt", for: id });
+          const rb = el("input", { id, type: "radio", name: qId, value: opt });
           if (required) rb.required = true;
-          row.append(rb, document.createTextNode(" " + opt));
-          wrap.appendChild(row);
+          line.appendChild(rb);
+          line.appendChild(document.createTextNode(" " + opt));
+          wrap.appendChild(line);
         });
       }
 
       formEl.appendChild(wrap);
     });
 
-    // Sticky Gönder barı
-    buildStickyBar(formEl);
+   // Gönder alanı: yapışkan bar (buton üstte) + 3 satır alt bilgi
+const bar  = el("div", { class: "sticky-submit" });
+const btn  = el("button", { type: "submit", id: "btnSend" }, "Gönder");
 
-    // :has() fallback için sınıf yönetimi
-    attachCheckedFallback(formEl);
+// 3 satır, ortalı, son satır daha büyük
+const info = el("div", { class: "info" }, `
+  <div>Bu form <strong>mikroar.com</strong> alanında oluşturulmuştur.</div>
+  <div>İletişim: <a href="mailto:iletisim@mikroar.com">iletisim@mikroar.com</a></div>
+  <div class="brand">MikroAR Araştırma</div>
+`);
 
-    // Submit
+bar.append(btn, info);
+formEl.appendChild(bar);
+
     formEl.onsubmit = async (e) => {
       e.preventDefault();
       const btn = $("#btnSend");
@@ -148,9 +164,13 @@
       try {
         const fd = new FormData(formEl);
         const answers = {};
-        (state.form.schema?.questions || []).forEach((q, idx) => {
+        (state.form.schema.questions || []).forEach((q, idx) => {
           const key = "q_" + idx;
-          answers[key] = q.type === "checkbox" ? fd.getAll(key) : fd.get(key);
+          if (q.type === "checkbox") {
+            answers[key] = fd.getAll(key);
+          } else {
+            answers[key] = fd.get(key);
+          }
         });
 
         const resp = await fetch(`/api/forms/${encodeURIComponent(state.form.slug)}/submit`, {
@@ -159,6 +179,9 @@
           body: JSON.stringify({ answers }),
         });
 
+        // Sunucu iki şekilde duplicate dönebilir:
+        //  - HTTP 409
+        //  - 200/ok:true + alreadySubmitted:true
         let j = {};
         try { j = await resp.json(); } catch { j = {}; }
 
@@ -175,6 +198,7 @@
           return;
         }
 
+        // Başarılı (created veya updated)
         location.href = "/thanks.html";
       } catch (err) {
         console.error(err);
@@ -185,37 +209,131 @@
   }
 
   async function boot() {
-    // SSR ile geldiyse
+    // SSR'dan gelen veri varsa (ve aktifse) anında çiz
     if (window.__FORM__ && window.__FORM__.slug) {
-      if (window.__FORM__.active === false) { renderClosed(); return; }
+      if (window.__FORM__.active === false) {
+        renderClosed();
+        return;
+      }
       renderForm(window.__FORM__);
       return;
     }
 
-    // ?slug=...
+    // Fallback (fetch)
     const params = new URLSearchParams(location.search);
-    state.slug = params.get("slug");
-    if (!state.slug) { showMessage("Form bulunamadı (slug yok).", "error"); return; }
-
+    const slug = params.get("slug");
+    if (!slug) {
+      document.body.innerHTML = "<h2>Form bulunamadı (slug yok)</h2>";
+      return;
+    }
     try {
-      $("#f").innerHTML = `<div class="message">Yükleniyor…</div>`;
-      const r = await fetch(`/api/forms/${encodeURIComponent(state.slug)}`);
+      const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`);
 
-      if (r.status === 403) { renderClosed(); return; }
-
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok || !j.ok) {
-        if (j?.error === "inactive") renderClosed();
-        else showMessage("Form yüklenemedi.", "error");
+      if (r.status === 403) {
+        // Pasif form
+        renderClosed();
+        return;
+      }
+      if (!r.ok) {
+        document.body.innerHTML = "<h2>Form yüklenemedi.</h2>";
         return;
       }
 
+      const j = await r.json();
+      if (!j.ok || !j.form) {
+        renderClosed();
+        return;
+      }
       renderForm(j.form);
     } catch (e) {
       console.error(e);
-      showMessage("Form yüklenemedi: " + e.message, "error");
+      document.body.innerHTML = "<h2>Form yüklenemedi.</h2>";
     }
   }
+// ---- Google Form benzeri CSS
+const style = document.createElement("style");
+style.textContent = `
+  body {
+    background: #f1f3f4;
+    font-family: Arial, sans-serif;
+  }
 
+  #f {
+    max-width: 720px;
+    margin: 20px auto;
+    padding: 20px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  }
+
+  .q {
+    margin-bottom: 24px;
+    padding: 16px;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+
+  .q label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 12px;
+  }
+
+  .opt {
+    display: flex;
+    align-items: center;
+    margin: 6px 0;
+    cursor: pointer;
+  }
+
+  .opt input[type="radio"],
+  .opt input[type="checkbox"] {
+    accent-color: #673ab7; /* Google Forms mor tonu */
+    margin-right: 8px;
+    transform: scale(1.2);
+  }
+
+  /* Hover ve aktif efekt */
+  .opt:hover {
+    background: #f6f6f6;
+    border-radius: 4px;
+    padding: 2px;
+  }
+
+  /* Gönder butonu */
+  #btnSend {
+    background: #1a73e8;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 22px;
+    font-size: 15px;
+    cursor: pointer;
+  }
+  #btnSend:hover {
+    background: #1669c1;
+  }
+
+  /* Alt bar */
+  .sticky-submit {
+    margin-top: 30px;
+    padding-top: 12px;
+    border-top: 1px solid #ddd;
+    text-align: center;
+  }
+  .note {
+    font-size: 13px;
+    color: #444;
+    margin-bottom: 6px;
+  }
+  .note strong {
+    display: block;
+    font-size: 15px;
+    margin-top: 4px;
+  }
+`;
+document.head.appendChild(style);
   document.addEventListener("DOMContentLoaded", boot);
 })();
