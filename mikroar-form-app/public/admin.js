@@ -25,21 +25,21 @@ const els = {
 };
 
 const blankQ = () => ({
-  type:'radio',              // 'radio' | 'checkbox' | 'text' | 'textarea'
-  label:'',                  // soru metni
+  type:'radio',
+  label:'',
   required:true,
-  options:['Evet','Hayır']   // sadece radio/checkbox’ta kullanılır
+  options:['Evet','Hayır']
 });
 
-let questions = [];   // state
+let questions = [];
 
+// ---------- helpers
 function chip(k,v){
   const s = document.createElement('span');
   s.className='chip';
   s.textContent = `${k}: ${v}`;
   return s;
 }
-
 function renderMeta(){
   els.meta.innerHTML='';
   els.meta.append(
@@ -47,7 +47,6 @@ function renderMeta(){
     chip('Zorunlu', questions.filter(q=>q.required).length)
   );
 }
-
 function qRow(q,i){
   const div = document.createElement('div');
   div.className='q'; div.dataset.idx = i;
@@ -92,7 +91,6 @@ function qRow(q,i){
   };
   showOpts();
 
-  // events
   tSel.onchange = ()=>{ q.type = tSel.value; showOpts(); renderMeta(); };
   lInp.oninput  = ()=>{ q.label = lInp.value; };
   rChk.onchange = ()=>{ q.required = rChk.checked; renderMeta(); };
@@ -105,13 +103,11 @@ function qRow(q,i){
 
   return div;
 }
-
 function render(){
   qsWrap.innerHTML='';
   questions.forEach((q,i)=> qsWrap.appendChild(qRow(q,i)));
   renderMeta();
 }
-
 function setForm(form){
   els.title.value  = form.title || '';
   els.description.value = form.description || '';
@@ -121,38 +117,6 @@ function setForm(form){
     : [];
   render();
 }
-
-/* ——— Yardımcı: yayımlama/önizleme URL’i (kullanmak istersen)
-      “The string did not match the expected pattern” hatasına neden olmaması için
-      protokollü origin üretiyoruz. */
-function getFormOrigin(){
-  // anket.* → form.* dönüşümü
-  const o = new URL(location.href);
-  o.hostname = o.hostname.replace(/^anket\./, 'form.');
-  o.pathname = '/';
-  o.search = '';
-  o.hash = '';
-  return o.origin; // https://form.mikroar.com
-}
-function publicUrl(slug){
-  return `${getFormOrigin()}/form.html?slug=${encodeURIComponent(slug)}`;
-}
-
-async function load(){
-  const slug = els.slug.value.trim();
-  if (!slug) return toast('Slug gerekli','err');
-  try{
-    const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`);
-    const j = await r.json();
-    if (!j.ok) throw new Error(j.error || 'Bulunamadı');
-    setForm(j.form);
-    toast('Yüklendi');
-  }catch(e){
-    toast('Yüklenemedi: '+ (e?.message || e), 'err');
-  }
-}
-
-/* Soruları kayıt öncesi hafif temizle */
 function sanitizeQuestions(arr){
   return (arr || []).map(q=>{
     const t = (q.type || 'radio').trim();
@@ -170,6 +134,38 @@ function sanitizeQuestions(arr){
   });
 }
 
+// ---------- auth guard
+async function ensureLogin() {
+  try{
+    const r = await fetch('/api/admin/ping', { headers:{'Accept':'application/json'} });
+    if (r.status === 401) {
+      // Basic Auth penceresini açtır
+      location.href = `/admin/gate?next=${encodeURIComponent(location.pathname)}`;
+      return false;
+    }
+    return true;
+  }catch{ return true; }
+}
+
+// ---------- data ops
+async function load(){
+  const slug = els.slug.value.trim();
+  if (!slug) return toast('Slug gerekli','err');
+  try{
+    if (!(await ensureLogin())) return;
+
+    const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`, {
+      headers:{'Accept':'application/json'}
+    });
+    const j = await r.json();
+    if (!r.ok || j.ok === false) throw new Error(j.error || 'Bulunamadı');
+    setForm(j.form);
+    toast('Yüklendi');
+  }catch(e){
+    toast('Yüklenemedi: '+ (e?.message || e), 'err');
+  }
+}
+
 async function save(){
   const slug = els.slug.value.trim().toLowerCase();
   if (!slug) return toast('Slug gerekli','err');
@@ -183,27 +179,38 @@ async function save(){
   };
 
   try{
+    if (!(await ensureLogin())) return;
+
     const r = await fetch('/admin/api/forms', {
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{
+        'Content-Type':'application/json',
+        'Accept':'application/json'
+      },
       body: JSON.stringify(body)
     });
-    const j = await r.json().catch(()=>({ ok:false, error:'Beklenmeyen yanıt' }));
+
+    // JSON değilse (örn. 401 Basic Auth HTML) metni göster
+    const ct = r.headers.get('content-type') || '';
+    let j;
+    if (ct.includes('application/json')) {
+      j = await r.json();
+    } else {
+      const txt = (await r.text()).slice(0,180);
+      throw new Error(`HTTP ${r.status} – ${txt}`);
+    }
+
     if (!r.ok || !j.ok){
-      // Sunucu ayrıntısı varsa göster
       const msg = j.error || j.detail || `HTTP ${r.status}`;
       throw new Error(msg);
     }
     toast('Kaydedildi ✓','ok');
-
-    // İstersen panoya yayımlama linki kopyala (görünürde kullanmıyorsan sil gitsin)
-    // navigator.clipboard?.writeText(publicUrl(slug)).catch(()=>{});
   }catch(e){
     toast('Hata: '+ (e?.message || e), 'err');
   }
 }
 
-// UI
+// ---------- UI
 els.btnAdd.onclick = ()=>{ questions.push(blankQ()); render(); };
 els.btnNew.onclick = ()=>{
   els.title.value='';
