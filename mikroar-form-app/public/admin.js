@@ -1,18 +1,21 @@
 /* MikroAR – Admin Form Builder (hafif, responsive) */
 const $ = s => document.querySelector(s);
 const qsWrap = $('#qs');
+
 const toast = (m, type='')=>{
   const t = $('#toast');
   t.textContent = m;
   t.style.display='block';
-  t.style.borderColor = type==='err' ? '#ef4444' : type==='ok' ? '#22c55e' : 'var(--line)';
-  setTimeout(()=> t.style.display='none', 2000);
+  t.style.borderColor =
+    type==='err' ? '#ef4444' :
+    type==='ok'  ? '#22c55e' : 'var(--line)';
+  setTimeout(()=> t.style.display='none', 2200);
 };
 
 const els = {
   slug:   $('#slug'),
   title:  $('#title'),
-  description: $('#description'),  // <-- eklendi
+  description: $('#description'),
   active: $('#active'),
   meta:   $('#meta'),
   btnLoad:$('#btnLoad'),
@@ -22,10 +25,10 @@ const els = {
 };
 
 const blankQ = () => ({
-  type:'radio',        // 'radio' | 'checkbox' | 'text' | 'textarea'
-  label:'',            // soru metni
+  type:'radio',              // 'radio' | 'checkbox' | 'text' | 'textarea'
+  label:'',                  // soru metni
   required:true,
-  options:['Evet','Hayır']
+  options:['Evet','Hayır']   // sadece radio/checkbox’ta kullanılır
 });
 
 let questions = [];   // state
@@ -59,16 +62,16 @@ function qRow(q,i){
       </select>
       <input class="qlabel" type="text" placeholder="Soru metni"/>
       <label class="req"><input class="qreq" type="checkbox"/> Zorunlu</label>
-      <button class="up btn" title="Yukarı">↑</button>
-      <button class="down btn" title="Aşağı">↓</button>
+      <button class="up btn" type="button" title="Yukarı">↑</button>
+      <button class="down btn" type="button" title="Aşağı">↓</button>
     </div>
     <div class="opts">
       <label>Seçenekler (her satır bir seçenek):</label>
       <textarea class="qopts" placeholder="Evet&#10;Hayır"></textarea>
       <div class="hint">Metin sorularında seçenek gerekmez.</div>
       <div style="display:flex;gap:8px;margin-top:6px">
-        <button class="dup btn">Kopyala</button>
-        <button class="del btn" style="color:#ef4444;border-color:#ef4444">Sil</button>
+        <button class="dup btn" type="button">Kopyala</button>
+        <button class="del btn" type="button" style="color:#ef4444;border-color:#ef4444">Sil</button>
       </div>
     </div>
   `;
@@ -83,13 +86,14 @@ function qRow(q,i){
   rChk.checked = !!q.required;
   if (Array.isArray(q.options)) oTxt.value = q.options.join('\n');
 
-  const updateVisible = ()=>{
-    div.querySelector('.opts').style.display = (tSel.value==='radio'||tSel.value==='checkbox') ? 'block' : 'none';
+  const showOpts = ()=>{
+    div.querySelector('.opts').style.display =
+      (tSel.value==='radio'||tSel.value==='checkbox') ? 'block' : 'none';
   };
-  updateVisible();
+  showOpts();
 
   // events
-  tSel.onchange = ()=>{ q.type = tSel.value; updateVisible(); renderMeta(); };
+  tSel.onchange = ()=>{ q.type = tSel.value; showOpts(); renderMeta(); };
   lInp.oninput  = ()=>{ q.label = lInp.value; };
   rChk.onchange = ()=>{ q.required = rChk.checked; renderMeta(); };
   oTxt.oninput  = ()=>{ q.options = oTxt.value.split('\n').map(s=>s.trim()).filter(Boolean); };
@@ -110,10 +114,28 @@ function render(){
 
 function setForm(form){
   els.title.value  = form.title || '';
-  els.description.value = form.description || '';   // <-- eklendi
+  els.description.value = form.description || '';
   els.active.value = (form.active === false ? 'false' : 'true');
-  questions = Array.isArray(form.schema?.questions) ? JSON.parse(JSON.stringify(form.schema.questions)) : [];
+  questions = Array.isArray(form.schema?.questions)
+    ? JSON.parse(JSON.stringify(form.schema.questions))
+    : [];
   render();
+}
+
+/* ——— Yardımcı: yayımlama/önizleme URL’i (kullanmak istersen)
+      “The string did not match the expected pattern” hatasına neden olmaması için
+      protokollü origin üretiyoruz. */
+function getFormOrigin(){
+  // anket.* → form.* dönüşümü
+  const o = new URL(location.href);
+  o.hostname = o.hostname.replace(/^anket\./, 'form.');
+  o.pathname = '/';
+  o.search = '';
+  o.hash = '';
+  return o.origin; // https://form.mikroar.com
+}
+function publicUrl(slug){
+  return `${getFormOrigin()}/form.html?slug=${encodeURIComponent(slug)}`;
 }
 
 async function load(){
@@ -125,30 +147,71 @@ async function load(){
     if (!j.ok) throw new Error(j.error || 'Bulunamadı');
     setForm(j.form);
     toast('Yüklendi');
-  }catch(e){ toast('Yüklenemedi: '+e.message,'err'); }
+  }catch(e){
+    toast('Yüklenemedi: '+ (e?.message || e), 'err');
+  }
+}
+
+/* Soruları kayıt öncesi hafif temizle */
+function sanitizeQuestions(arr){
+  return (arr || []).map(q=>{
+    const t = (q.type || 'radio').trim();
+    const out = {
+      type: ['radio','checkbox','text','textarea'].includes(t) ? t : 'radio',
+      label: (q.label||'').trim(),
+      required: !!q.required
+    };
+    if (out.type==='radio' || out.type==='checkbox'){
+      out.options = (Array.isArray(q.options) ? q.options : [])
+        .map(s=>String(s||'').trim())
+        .filter(Boolean);
+    }
+    return out;
+  });
 }
 
 async function save(){
-  const slug = els.slug.value.trim();
+  const slug = els.slug.value.trim().toLowerCase();
   if (!slug) return toast('Slug gerekli','err');
+
   const body = {
     slug,
-    title: els.title.value.trim(),
-    description: els.description.value.trim() || null, // <-- eklendi
+    title: (els.title.value || '').trim(),
+    description: (els.description.value || '').trim() || null,
     active: els.active.value === 'true',
-    schema: { questions }
+    schema: { questions: sanitizeQuestions(questions) }
   };
+
   try{
-    const r = await fetch('/admin/api/forms',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
-    const j = await r.json();
-    if (!j.ok) throw new Error(j.error||'Kaydedilemedi');
+    const r = await fetch('/admin/api/forms', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    const j = await r.json().catch(()=>({ ok:false, error:'Beklenmeyen yanıt' }));
+    if (!r.ok || !j.ok){
+      // Sunucu ayrıntısı varsa göster
+      const msg = j.error || j.detail || `HTTP ${r.status}`;
+      throw new Error(msg);
+    }
     toast('Kaydedildi ✓','ok');
-  }catch(e){ toast('Hata: '+e.message,'err'); }
+
+    // İstersen panoya yayımlama linki kopyala (görünürde kullanmıyorsan sil gitsin)
+    // navigator.clipboard?.writeText(publicUrl(slug)).catch(()=>{});
+  }catch(e){
+    toast('Hata: '+ (e?.message || e), 'err');
+  }
 }
 
 // UI
 els.btnAdd.onclick = ()=>{ questions.push(blankQ()); render(); };
-els.btnNew.onclick = ()=>{ els.title.value=''; els.description.value=''; els.active.value='true'; questions=[]; render(); };
+els.btnNew.onclick = ()=>{
+  els.title.value='';
+  els.description.value='';
+  els.active.value='true';
+  questions=[];
+  render();
+};
 els.btnLoad.onclick= load;
 els.btnSave.onclick= save;
 
