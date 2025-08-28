@@ -18,6 +18,8 @@ const els = {
   btnNew: $('#btnNew'),
   btnAdd: $('#btnAdd'),
   btnSave:$('#btnSave'),
+  desc:   document.querySelector('#desc'),
+kvkk:   document.querySelector('#kvkk'),
 };
 
 const blankQ = () => ({
@@ -91,7 +93,7 @@ function qRow(q,i){
   // events
   tSel.onchange = ()=>{ q.type = tSel.value; updateVisible(); renderMeta(); };
   lInp.oninput  = ()=>{ q.label = lInp.value; };
-  rChk.onchange = ()=>{ q.required = rChk.checked; renderMeta(); };
+  rChk.onchange = ()=>{ q.required = rChk.checked; render(); };
   oTxt.oninput  = ()=>{ q.options = oTxt.value.split('\n').map(s=>s.trim()).filter(Boolean); };
 
   div.querySelector('.up').onclick   = ()=>{ if (i>0){ [questions[i-1],questions[i]]=[questions[i],questions[i-1]]; render(); } };
@@ -105,12 +107,16 @@ function qRow(q,i){
 function render(){
   qsWrap.innerHTML='';
   questions.forEach((q,i)=> qsWrap.appendChild(qRow(q,i)));
-  renderMeta();
+  render();
 }
 
 function setForm(form){
   els.title.value  = form.title || '';
   els.active.value = (form.active === false ? 'false' : 'true');
+  // mevcut setForm(...) içinde:
+const meta = form.schema?.meta || {};
+els.desc.value = meta.desc || '';
+els.kvkk.value  = meta.kvkk || '';
   questions = Array.isArray(form.schema?.questions)
     ? JSON.parse(JSON.stringify(form.schema.questions))
     : [];
@@ -140,7 +146,17 @@ async function save(){
     slug,
     title: els.title.value.trim(),
     active: els.active.value === 'true',
-    schema: { questions },                 // ← OBJE gönderiyoruz (string değil)
+  const meta = {
+  desc: (els.desc.value || '').trim() || undefined,
+  kvkk: (els.kvkk.value || '').trim() || undefined,
+};
+
+const body = {
+  slug,
+  title: els.title.value.trim(),
+  active: els.active.value === 'true',
+  schema: { questions, meta }   // <— meta eklendi
+};
     prevSlug: loadedSlug && loadedSlug !== slug ? loadedSlug : null
   };
 
