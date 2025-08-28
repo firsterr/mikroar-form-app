@@ -1,4 +1,4 @@
-// public/form.js — auto-advance + smooth focus
+// public/form.js — auto-advance + required validation + smooth focus
 (function () {
   const $ = (s) => document.querySelector(s);
   let FORM = null;
@@ -26,7 +26,7 @@
       const wrap = document.createElement("div");
       wrap.className = "q";
       wrap.dataset.idx = i;
-      wrap.tabIndex = -1; // scrollIntoView sonrası focus alabilsin
+      wrap.tabIndex = -1;
 
       const label = document.createElement("label");
       label.className = "q-label";
@@ -61,7 +61,6 @@
           );
         });
       }
-
       wrap.appendChild(body);
       formEl.appendChild(wrap);
     });
@@ -83,7 +82,45 @@
     formEl.onsubmit = makeSubmitHandler(schema, form.slug);
   }
 
-  // --- Auto advance helpers
+  // ---- ortak yardımcılar
+  function clearError(block) {
+    block.classList.remove("error");
+    const em = block.querySelector(".err-msg");
+    if (em) em.remove();
+  }
+  function markError(block, msg) {
+    block.classList.remove("answered");
+    block.classList.add("error", "active");
+    let em = block.querySelector(".err-msg");
+    if (!em) {
+      em = document.createElement("div");
+      em.className = "err-msg";
+      block.appendChild(em);
+    }
+    em.textContent = msg || "Lütfen bu soruyu yanıtlayın.";
+  }
+  function scrollToBlock(idx) {
+    const target = document.querySelector(`.q[data-idx="${idx}"]`);
+    if (!target) return;
+    target.classList.add("active");
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    const first = target.querySelector("input,textarea,select");
+    if (first) setTimeout(() => first.focus(), 150);
+  }
+  function isAnswered(q, idx) {
+    const key = "q_" + idx;
+    if (q.type === "checkbox") {
+      return document.querySelectorAll(`[name="${key}"]:checked`).length > 0;
+    }
+    if (q.type === "radio") {
+      return !!document.querySelector(`[name="${key}"]:checked`);
+    }
+    const el = document.querySelector(`[name="${key}"]`);
+    const v = (el && el.value) ? el.value.trim() : "";
+    return v.length > 0;
+  }
+
+  // --- Auto advance + hata temizleme
   function attachAutoAdvance(schema) {
     const formEl = $("#f");
     const blocks = Array.from(formEl.querySelectorAll(".q"));
@@ -92,7 +129,6 @@
       blocks.forEach((b) => b.classList.remove("active"));
       const target = blocks[idx];
       if (!target) {
-        // Son soru → Gönder’e getir
         const btn = $("#btnSend");
         btn?.scrollIntoView({ behavior: "smooth", block: "center" });
         btn?.classList.add("pulse");
@@ -102,12 +138,16 @@
       target.classList.add("active");
       target.scrollIntoView({ behavior: "smooth", block: "start" });
       const first = target.querySelector("input,textarea,select");
-      if (first) setTimeout(() => first.focus(), 180);
+      if (first) setTimeout(() => first.focus(), 150);
     }
 
     (schema.questions || []).forEach((q, i) => {
       const block = formEl.querySelector(`.q[data-idx="${i}"]`);
       if (!block) return;
+
+      // Her etkileşimde hata temizle
+      block.addEventListener("input", () => clearError(block), { passive: true });
+      block.addEventListener("change", () => clearError(block), { passive: true });
 
       if (q.type === "radio") {
         block.querySelectorAll('input[type="radio"]').forEach((el) => {
@@ -146,35 +186,55 @@
           el.addEventListener("change", () => {
             const any = block.querySelectorAll('input[type="checkbox"]:checked').length > 0;
             block.classList.toggle("answered", any);
-            // checkbox’ta auto-advance yapmıyoruz
           });
         });
       }
     });
   }
 
-  // --- Submit
+  // --- Submit + zorunlu doğrulama
   function makeSubmitHandler(schema, slug) {
     return async function (e) {
       e.preventDefault();
       const btn = $("#btnSend");
       btn.disabled = true;
 
+      // 1) Zorunlu soruları kontrol et, ilk eksikte odaklan ve engelle
+      const qs = schema.questions || [];
+      let firstMissing = -1;
+      for (let i = 0; i < qs.length; i++) {
+        const q = qs[i];
+        if (q.required && !isAnswered(q, i)) {
+          firstMissing = i;
+          break;
+        }
+      }
+      if (firstMissing !== -1) {
+        const block = document.querySelector(`.q[data-idx="${firstMissing}"]`);
+        if (block) {
+          markError(block, "Lütfen bu zorunlu soruyu yanıtlayın.");
+          scrollToBlock(firstMissing);
+        }
+        btn.disabled = false;
+        return;
+      }
+
       try {
+        // 2) Cevapları topla
         const answers = {};
-        (schema.questions || []).forEach((q, idx) => {
+        qs.forEach((q, idx) => {
           const key = "q_" + idx;
           if (q.type === "checkbox") {
             answers[key] = Array.from(
               document.querySelectorAll(`[name="${key}"]:checked`)
             ).map((el) => el.value);
           } else {
-            const el = document.querySelector(`[name="${key}"]`);
             const val = new FormData($("#f")).get(key);
             answers[key] = val;
           }
         });
 
+        // 3) Gönder
         const resp = await fetch(`/api/forms/${encodeURIComponent(slug)}/submit`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -190,13 +250,11 @@
           btn.disabled = false;
           return;
         }
-
         if (!resp.ok || !j.ok) {
           alert(j.error || "Gönderilemedi");
           btn.disabled = false;
           return;
         }
-
         location.href = "/thanks.html";
       } catch (err) {
         alert("Hata: " + err.message);
