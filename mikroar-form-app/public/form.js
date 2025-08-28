@@ -64,7 +64,29 @@
       wrap.appendChild(body);
       formEl.appendChild(wrap);
     });
+function showThanks() {
+  // alttaki bar varsa kaldır
+  const bar = document.getElementById("submitBar");
+  if (bar) bar.remove();
 
+  // form kartını “başarı” kartına çevir
+  const card = document.querySelector(".card");
+  if (card) {
+    card.classList.add("success");
+    card.innerHTML = `
+      <h2 class="thanks-title">Yanıtınız kaydedildi</h2>
+      <p class="thanks-sub">Teşekkürler!</p>
+      <div class="thanks-note">
+        <div>Bu form <strong>mikroar.com</strong> alanında oluşturulmuştur.</div>
+        <div>İletişim: <a href="mailto:iletisim@mikroar.com">iletisim@mikroar.com</a></div>
+        <strong>MikroAR Araştırma</strong>
+      </div>
+    `;
+  }
+
+  // başa kaydır
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
     // Gönder barı
     const bar = document.createElement("div");
     bar.className = "sticky-submit";
