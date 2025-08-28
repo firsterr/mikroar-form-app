@@ -1,152 +1,212 @@
 <!doctype html>
 <html lang="tr">
 <head>
+  <!-- form.html <head> içine ya da mevcut CSS dosyana ekle -->
+<style>
+  /* Alttaki yapışkan gönder çubuğu */
+  .sticky-submit {
+    position: sticky;
+    bottom: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    justify-content: space-between;
+    padding: 12px 14px;
+    margin-top: 24px;
+    background: rgba(17, 24, 39, .88);      /* koyu yarı saydam */
+    backdrop-filter: saturate(180%) blur(6px);
+    border-top: 1px solid #2a2f3a;
+    border-radius: 12px 12px 0 0;
+  }
+
+  .sticky-submit .note {
+    font-size: 12px;
+    line-height: 1.3;
+    color: #9ca3af;
+  }
+  .sticky-submit .note a {
+    color: #60a5fa;
+    text-decoration: underline;
+  }
+
+  /* Buton (senin mevcut stilin varsa buna gerek olmayabilir) */
+  #btnSend {
+    padding: 10px 18px;
+    font-weight: 600;
+    border: 0;
+    border-radius: 10px;
+    background: #3b82f6;
+    color: #fff;
+  }
+  #btnSend:disabled { opacity: .6; }
+</style>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Anket</title>
-
-  <!-- Google Forms benzeri, sade ve güvenli stiller (İNLINE) -->
   <style>
-    :root{
-      --bg:#f1f3f4;
-      --card:#fff;
-      --text:#111827;
-      --muted:#6b7280;
-      --line:#e5e7eb;
-      --brand:#1a73e8;
-      --brand-600:#1664c7;
-    }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{
-      margin:0;
-      font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
-      color:var(--text);
-      background:var(--bg);
-    }
-    .wrap{
-      max-width:860px;
-      margin:28px auto 64px;
-      padding:0 16px;
-    }
-    h1{
-      margin:0 0 8px;
-      font-size:clamp(22px,4.5vw,36px);
-      line-height:1.15;
-      letter-spacing:-.02em;
-    }
-    #form-desc{
-      margin:0 0 18px;
-      color:var(--muted);
-    }
-
-    /* Soru kutuları */
-    .qBox{
-      background:var(--card);
-      border:1px solid var(--line);
-      border-radius:14px;
-      padding:18px 16px;
-      margin:18px 0;
-      box-shadow:0 1px 0 rgba(0,0,0,.02);
-    }
-    .qBox label.qtitle{
-      display:block;
-      font-weight:600;
-      margin-bottom:10px;
-    }
-
-    /* Seçenek satırı */
-    .opt{
-      display:flex; align-items:center; gap:10px;
-      padding:10px 12px;
-      border:1px solid transparent;
-      border-radius:10px;
-      transition:background .15s ease, border-color .15s ease, box-shadow .15s ease;
-      cursor:pointer;
-      user-select:none;
-    }
-    .opt + .opt{ margin-top:6px; }
-    .opt input{ flex:0 0 auto; width:18px; height:18px; }
-    /* Seçilince ufak vurgu */
-    .opt.checked{
-      background:#eef3fe;
-      border-color:#dbe8ff;
-      box-shadow:inset 0 0 0 1px rgba(26,115,232,.15);
-    }
-
-    /* Kısa/uzun metin */
-    .qBox input[type="text"], .qBox textarea{
-      width:100%; border:1px solid var(--line);
-      border-radius:10px; padding:10px 12px; outline:none;
-      background:#fff;
-      transition: box-shadow .15s ease, border-color .15s ease;
-    }
-    .qBox textarea{min-height:96px; resize:vertical}
-    .qBox input:focus, .qBox textarea:focus{
-      border-color:#cfe0ff; box-shadow:0 0 0 3px rgba(26,115,232,.15);
-    }
-
-    /* Yapışkan gönder alanı */
-    .sticky-area{
-      position:sticky; bottom:0; z-index:50;
-      margin-top:22px;
-      padding:12px 10px 16px;
-      background:rgba(255,255,255,.92);
-      backdrop-filter:saturate(180%) blur(6px);
-      border-top:1px solid var(--line);
-      border-radius:12px 12px 0 0;
-      text-align:center;
-    }
-    #btnSend{
-      display:inline-block;
-      min-width:140px;
-      padding:10px 16px;
-      border:0; border-radius:10px;
-      background:var(--brand); color:#fff; font-weight:700;
-      box-shadow:0 2px 0 rgba(0,0,0,.08);
-      cursor:pointer;
-      transition: transform .05s ease, background .15s ease;
-    }
-    #btnSend:hover{ background:var(--brand-600); }
-    #btnSend:active{ transform:translateY(1px); }
-    #btnSend:disabled{ opacity:.6; cursor:default }
-
-    .note{
-      margin-top:10px; font-size:13px; line-height:1.35; color:#374151;
-    }
-    .note a{ color:var(--brand); text-decoration:underline }
-
-    /* “anket kapalı” kutusu */
-    .callout{
-      margin:18px 0; padding:16px 14px;
-      background:#fff4f4; color:#991b1b;
-      border:1px solid #fecaca; border-radius:12px;
-    }
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;background:#0b1220;color:#e6e6e6;margin:0}
+    .wrap{max-width:960px;margin:40px auto;padding:0 16px}
+    h1{font-size:40px;margin:0 0 24px}
+    .card{background:#111a2b;border-radius:16px;padding:20px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+    .q{margin:16px 0;padding:16px;border:1px solid #21304c;border-radius:12px}
+    label{display:block;margin:8px 0}
+    input[type=text]{width:100%;background:#0d1424;color:#fff;border:1px solid #21304c;border-radius:10px;padding:12px 14px;font-size:16px}
+    button{background:#2f6feb;color:#fff;border:0;border-radius:10px;padding:12px 18px;font-size:16px;cursor:pointer}
+    .muted{opacity:.75}
+    .toast{margin:10px 0;padding:12px;border-radius:10px}
+    .ok{background:#12361d;color:#b9f6c0}
+    .warn{background:#3c2a16;color:#ffd7a1}
+    .err{background:#3c171c;color:#ffc0c9}
   </style>
 </head>
-
 <body>
   <div class="wrap">
-    <h1 id="form-title">Anket</h1>
-    <p id="form-desc" hidden></p>
-
-    <!-- Uyarı alanı (kapalı / hata vb.) -->
-    <div id="callout" class="callout" hidden></div>
-
-    <!-- Sorular buraya render edilecek -->
-    <form id="f" novalidate></form>
-
-    <!-- Yapışkan gönder+bilgi alanı -->
-    <div class="sticky-area" id="sticky" hidden>
-      <button type="submit" id="btnSend" form="f">Gönder</button>
-      <div class="note">
-        Bu form <strong>mikroar.com</strong> alanında oluşturulmuştur. –
-        <a href="mailto:iletisim@mikroar.com">iletisim@mikroar.com</a><br/>
-        <strong>MikroAR Araştırma</strong>
-      </div>
+    <h1 id="title">Yükleniyor…</h1>
+    <div class="card">
+      <p class="muted">Bu anket kapsamında herhangi bir kişisel veriniz alınmamakta ve üçüncü kişilerle paylaşılmamaktadır. Yanıtlarınız tamamen anonim olarak değerlendirilecektir.</p>
+      <div id="toast"></div>
+      <form id="frm">
+        <div id="questions"></div>
+        <div style="margin-top:16px">
+          <button id="btnSend" type="submit">Gönder</button>
+        </div>
+      </form>
     </div>
   </div>
 
-  <script src="/form.js" defer></script>
+  <script>
+  const qs = (s)=>document.querySelector(s);
+  const $title = qs('#title');
+  const $questions = qs('#questions');
+  const $toast = qs('#toast');
+  const $frm = qs('#frm');
+  const $btn = qs('#btnSend');
+
+  function toast(msg, cls='ok'){
+    $toast.innerHTML = msg ? `<div class="toast ${cls}">${msg}</div>` : '';
+  }
+  function disableForm(){
+    $btn.disabled = true;
+    $btn.textContent = 'Gönderildi';
+    [...$frm.querySelectorAll('input,textarea,button')].forEach(el=>el.disabled=true);
+  }
+
+  function getSlug(){
+    const u = new URL(location.href);
+    return u.searchParams.get('slug');
+  }
+
+  function parseSchema(raw){
+    let s = raw;
+    if (typeof s === 'string'){
+      try{ s = JSON.parse(s); }catch(e){ s = {}; }
+    }
+    if (s && s.schema && !s.questions) s = s.schema;
+    return s && Array.isArray(s.questions) ? s : { questions: [] };
+  }
+
+  function renderQuestions(schema){
+    const items = schema.questions || [];
+    if(!items.length){
+      $questions.innerHTML = '<p class="muted">Bu formda soru bulunamadı.</p>';
+      return;
+    }
+    $questions.innerHTML = '';
+    items.forEach((q, idx)=>{
+      const wrap = document.createElement('div');
+      wrap.className = 'q';
+      const label = document.createElement('div');
+      label.style.fontWeight = '600';
+      label.style.marginBottom = '8px';
+      label.innerHTML = `${idx+1}. ${q.label || q.text || 'Soru'} ${q.required ? '<span class="muted">*</span>':''}`;
+      wrap.appendChild(label);
+
+      const name = `q_${idx}`;
+
+      if(q.type === 'radio'){
+        (q.options || []).forEach(opt=>{
+          wrap.insertAdjacentHTML('beforeend',
+            `<label><input type="radio" name="${name}" value="${opt}"> ${opt}</label>`);
+        });
+      }else if(q.type === 'checkbox'){
+        (q.options || []).forEach(opt=>{
+          wrap.insertAdjacentHTML('beforeend',
+            `<label><input type="checkbox" name="${name}" value="${opt}"> ${opt}</label>`);
+        });
+      }else{
+        wrap.insertAdjacentHTML('beforeend',
+          `<input type="text" name="${name}" placeholder="Yanıtınız">`);
+      }
+      $questions.appendChild(wrap);
+    });
+  }
+
+  async function loadForm(){
+    const slug = getSlug();
+    if(!slug){ toast('Geçersiz bağlantı (slug yok).', 'err'); return; }
+    try{
+      const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`);
+      const data = await r.json();
+      if(!r.ok || data.ok === false) throw new Error(data.error || 'Form alınamadı');
+
+      $title.textContent = data.form.title || slug;
+
+      const schema = parseSchema(data.form.schema);
+      renderQuestions(schema);
+
+      $frm.onsubmit = async (ev)=>{
+        ev.preventDefault();
+        const fd = new FormData($frm);
+        const answers = {};
+        for(const [k,v] of fd.entries()){
+          if(k in answers){
+            if(Array.isArray(answers[k])) answers[k].push(v);
+            else answers[k] = [answers[k], v];
+          }else{
+            const el = $frm.querySelectorAll(`[name="${k}"][type="checkbox"]`);
+            if(el.length>1){
+              const arr = [...el].filter(x=>x.checked).map(x=>x.value);
+              answers[k] = arr;
+            }else{
+              answers[k] = v;
+            }
+          }
+        }
+
+        const requiredMiss = (schema.questions||[]).some((q,idx)=>{
+          if(!q.required) return false;
+          const key = `q_${idx}`;
+          const val = answers[key];
+          return val==null || (Array.isArray(val) && val.length===0) || (typeof val==='string' && !val.trim());
+        });
+        if(requiredMiss){ toast('Lütfen zorunlu soruları doldurun.', 'warn'); return; }
+
+        try{
+          const rr = await fetch(`/api/forms/${encodeURIComponent(slug)}/submit`, {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ answers })
+          });
+          const res = await rr.json();
+          if(!rr.ok || res.ok===false) throw new Error(res.error || 'Gönderim hatası');
+
+          if(res.alreadySubmitted){
+            toast('Bu ankete daha önce yanıt verdiniz. Mevcut yanıtınız korunuyor.', 'warn');
+            disableForm(); return;
+          }
+          toast('Yanıtınız kaydedildi. Teşekkürler!', 'ok');
+          disableForm();
+        }catch(e){
+          toast('İnternet/servis hatası: ' + e.message, 'err');
+        }
+      };
+    }catch(e){
+      toast('Hata: ' + e.message, 'err');
+    }
+  }
+
+  loadForm();
+  </script>
 </body>
 </html>
