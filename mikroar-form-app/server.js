@@ -19,6 +19,17 @@ function makeCode(len = 7) {
   for (let i = 0; i < len; i++) out += alphabet[buf[i] % alphabet.length];
   return out;
 }
+
+// Basit HTML kaçışlayıcı (SSR'de description/title güvenli gömülsün)
+const esc = (s = "") =>
+  String(s).replace(/[&<>"']/g, (m) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[m]));
+
 // ---- Env
 const {
   PORT = 3000,
@@ -107,11 +118,9 @@ app.use(
       useDefaults: true,
       directives: {
         "default-src": ["'self'"],
-        // form sayfasını başka domain içine gömmek istiyorsanız env'den verin (örn: https://site.com)
         "frame-ancestors": faList.length ? faList : ["'self'"],
-        // inline script ve aynı origin XHR/fetch için:
         "script-src": ["'self'", "'unsafe-inline'"],
-        "connect-src": ["'self'"], // API çağrıları aynı origin
+        "connect-src": ["'self'"],
         "img-src": ["'self'", "data:"],
         "style-src": ["'self'", "'unsafe-inline'"],
       },
@@ -122,7 +131,6 @@ app.use(
 );
 
 // ---- Sağlık
-// Basit health (Render için) — sadece 200 döner
 app.get("/health", (_req, res) => {
   res.status(200).send("ok");
 });
@@ -130,6 +138,7 @@ app.get("/health", (_req, res) => {
 // __dirname eşdeğeri
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
 // ---- Subdomain bazlı Basic Auth + guard
 app.use((req, res, next) => {
   const host = getHost(req);
@@ -150,14 +159,12 @@ app.use((req, res, next) => {
     const isPortalPage =
       req.method === "GET" &&
       (req.path === "/" || req.path === "/index.html" || req.path === "/results.html");
-
-    if (isPortalPage) {
-      return adminOnly(req, res, next); // ADMIN_USER / ADMIN_PASS ile koru
-    }
+    if (isPortalPage) return adminOnly(req, res, next);
   }
 
   next();
 });
+
 // ---- Middlewares
 app.use(
   cors({
@@ -168,14 +175,17 @@ app.use(
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan("combined"));
-// --- SSR form: /form.html?slug=XYZ -> form verisini göm ve direkt render et
+
+/* ------------------------------------------------------------------ */
+/* SSR form: /form.html?slug=XYZ  —  description dahil                */
+/* ------------------------------------------------------------------ */
 app.get("/form.html", async (req, res, next) => {
   const slug = (req.query.slug || "").toString().trim().toLowerCase();
   if (!slug) return next(); // slug yoksa normal statik dosyaya düş
 
   try {
     const { rows } = await pool.query(
-      "SELECT slug, title, active, schema FROM forms WHERE slug = $1 LIMIT 1",
+      "SELECT slug, title, description, active, schema FROM forms WHERE slug = $1 LIMIT 1",
       [slug]
     );
     if (!rows.length || rows[0].active === false) {
@@ -192,11 +202,12 @@ app.get("/form.html", async (req, res, next) => {
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>${(form.title || "Anket").replace(/</g,"&lt;")}</title>
+<title>${esc(form.title || "Anket")}</title>
 <style>
-  body{font-family:system-ui,Arial,sans-serif;max-width:900px;margin:24px auto;padding:0 16px}
-  h1{margin:0 0 16px}
-  .q{margin:14px 0;padding:12px;border:1px solid #e5e7eb;border-radius:10px}
+  body{font-family:system-ui,Arial,sans-serif;max-width:900px;margin:24px auto;padding:0 16px;background:#f1f3f5}
+  h1{margin:0 0 6px}
+  .form-desc{margin:0 0 16px;color:#4b5563;font-size:15px}
+  .q{margin:14px 0;padding:12px;border:1px solid #e5e7eb;border-radius:10px;background:#fff}
   .q label{font-weight:600;display:block;margin-bottom:8px}
   .opt{display:block;margin:6px 0}
   button{padding:10px 14px;font-size:16px;border-radius:10px;border:1px solid #d1d5db;background:#111827;color:#fff}
@@ -204,13 +215,13 @@ app.get("/form.html", async (req, res, next) => {
 </style>
 </head>
 <body>
-  <h1 id="form-title"></h1>
+  <h1 id="form-title">${esc(form.title || "Anket")}</h1>
+  <p id="form-desc" class="form-desc">${esc(form.description || "")}</p>
+
   <form id="f"></form>
-  <script>
-    // Sunucudan gömülen veri:
-    window.__FORM__ = ${JSON.stringify(form)};
-  </script>
-  <script src="/form.js?v=ssr1"></script>
+
+  <script>window.__FORM__ = ${JSON.stringify(form)};</script>
+  <script src="/form.js?v=desc-ssr2"></script>
 </body>
 </html>`;
     return res.status(200).send(html);
@@ -219,7 +230,10 @@ app.get("/form.html", async (req, res, next) => {
     return res.status(500).send("Sunucu hatası.");
   }
 });
-// --- /s/:code -> kısa linkten direkt anket SSR
+
+/* ------------------------------------------------------------------ */
+/* /s/:code -> kısa linkten direkt anket SSR  —  description dahil     */
+/* ------------------------------------------------------------------ */
 app.get("/s/:code", async (req, res) => {
   const code = (req.params.code || "").trim();
   if (!code) return res.status(404).send("Not found");
@@ -243,7 +257,7 @@ app.get("/s/:code", async (req, res) => {
 
     // formu getir
     const fr = await pool.query(
-      "SELECT slug, title, active, schema FROM forms WHERE slug=$1 LIMIT 1",
+      "SELECT slug, title, description, active, schema FROM forms WHERE slug=$1 LIMIT 1",
       [sl.slug]
     );
     if (!fr.rows.length || fr.rows[0].active === false) {
@@ -257,17 +271,18 @@ app.get("/s/:code", async (req, res) => {
     pool.query("UPDATE shortlinks SET visits = coalesce(visits,0) + 1 WHERE code=$1", [code])
         .catch(()=>{});
 
-    // SSR HTML (form.js SSR ile aynı çalışma)
+    // SSR HTML
     const html = `<!doctype html>
 <html lang="tr">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>${(form.title || "Anket").replace(/</g,"&lt;")}</title>
+<title>${esc(form.title || "Anket")}</title>
 <style>
-  body{font-family:system-ui,Arial,sans-serif;max-width:900px;margin:24px auto;padding:0 16px}
-  h1{margin:0 0 16px}
-  .q{margin:14px 0;padding:12px;border:1px solid #e5e7eb;border-radius:10px}
+  body{font-family:system-ui,Arial,sans-serif;max-width:900px;margin:24px auto;padding:0 16px;background:#f1f3f5}
+  h1{margin:0 0 6px}
+  .form-desc{margin:0 0 16px;color:#4b5563;font-size:15px}
+  .q{margin:14px 0;padding:12px;border:1px solid #e5e7eb;border-radius:10px;background:#fff}
   .q label{font-weight:600;display:block;margin-bottom:8px}
   .opt{display:block;margin:6px 0}
   button{padding:10px 14px;font-size:16px;border-radius:10px;border:1px solid #d1d5db;background:#111827;color:#fff}
@@ -275,10 +290,13 @@ app.get("/s/:code", async (req, res) => {
 </style>
 </head>
 <body>
-  <h1 id="form-title"></h1>
+  <h1 id="form-title">${esc(form.title || "Anket")}</h1>
+  <p id="form-desc" class="form-desc">${esc(form.description || "")}</p>
+
   <form id="f"></form>
+
   <script>window.__FORM__ = ${JSON.stringify(form)};</script>
-  <script src="/form.js?v=short1"></script>
+  <script src="/form.js?v=short-desc2"></script>
 </body>
 </html>`;
     return res.status(200).send(html);
@@ -287,6 +305,7 @@ app.get("/s/:code", async (req, res) => {
     return res.status(500).send("Sunucu hatası.");
   }
 });
+
 // ---- Statik
 app.use(
   express.static(path.join(__dirname, "public"), {
@@ -308,6 +327,7 @@ function adminOnly(req, res, next) {
   }
   next();
 }
+
 // Basit ping – admin giriş kontrolü (XHR ile yoklama)
 app.get("/api/admin/ping", adminOnly, (_req, res) => {
   res.json({ ok: true });
@@ -368,6 +388,7 @@ app.get("/admin/gate", adminOnly, (req, res) => {
   res.send(`<!doctype html><meta charset="utf-8">
 <script>location.replace(${JSON.stringify(next)});</script>`);
 });
+
 // ---- LIST: aktif formlar
 app.get("/api/forms-list", async (_req, res) => {
   try {
@@ -383,7 +404,7 @@ app.get("/api/forms-list", async (_req, res) => {
   }
 });
 
-// ---- GET: tek form
+// ---- GET: tek form (JSON API)
 app.get("/api/forms/:slug", async (req, res) => {
   const { slug } = req.params;
   try {
@@ -402,7 +423,7 @@ app.get("/api/forms/:slug", async (req, res) => {
     const form = rows[0];
     try {
       if (typeof form.schema === "string") form.schema = JSON.parse(form.schema);
-    } catch (_) { /* yut */ }
+    } catch (_) {}
 
     res.json({ ok: true, form });
   } catch (e) {
@@ -410,9 +431,7 @@ app.get("/api/forms/:slug", async (req, res) => {
   }
 });
 
-// ---- Admin: form oluştur/güncelle
-// Body: { slug, title, description, active(true/false), schema:{questions:[...] } }
-//  veya { slug, title, description, active, questions:[...] }  → questions'ı schema içine sararız
+// ---- Admin: form oluştur/güncelle (eski endpointi koruyoruz)
 app.post("/admin/api/forms", adminOnly, async (req, res) => {
   try {
     let { slug, title, description = null, active = true, schema, questions } = req.body || {};
@@ -438,6 +457,7 @@ app.post("/admin/api/forms", adminOnly, async (req, res) => {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
+
 // ---- IP debug (opsiyonel)
 app.get("/api/__ip", (req, res) => {
   res.json({
@@ -520,11 +540,11 @@ app.get("/api/admin/forms/:slug/responses", adminOnly, async (req, res) => {
       return res.status(404).json({ ok: false, error: "Form bulunamadı" });
     }
 
-    // <-- şema her durumda obje olsun
+    // şema her durumda obje olsun
     const meta = formRows[0];
     try {
       if (typeof meta.schema === "string") meta.schema = JSON.parse(meta.schema);
-    } catch (_) { /* yutuyoruz */ }
+    } catch (_) {}
 
     const { rows } = await pool.query(
       `SELECT created_at, ip::text AS ip, answers
@@ -539,22 +559,20 @@ app.get("/api/admin/forms/:slug/responses", adminOnly, async (req, res) => {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
-// ---- ADMIN: form CREATE/UPDATE
+
+// ---- ADMIN: form CREATE/UPDATE (yeni endpoint)
 app.post("/api/admin/forms/save", adminOnly, async (req, res) => {
   try {
     // body: { slug, title, schema, active, prevSlug? }
     let { slug, title, schema, active, prevSlug } = req.body || {};
 
-    // slug
     if (typeof slug !== "string" || !slug.trim()) {
       return res.status(400).json({ ok: false, error: "invalid_slug" });
     }
     slug = slug.trim().toLowerCase();
 
-    // title
     if (typeof title !== "string") title = "";
 
-    // schema: string geldiyse parse et; obje ise olduğu gibi kullan
     if (typeof schema === "string") {
       try { schema = JSON.parse(schema); }
       catch { return res.status(400).json({ ok: false, error: "bad_schema_json" }); }
@@ -564,11 +582,9 @@ app.post("/api/admin/forms/save", adminOnly, async (req, res) => {
     }
     const schemaJson = JSON.stringify(schema); // ::jsonb için
 
-    // active -> boolean
     const truthy = new Set([true, "true", "on", "1", 1, "aktif", "Aktif"]);
     active = truthy.has(active);
 
-    // slug değişiyorsa
     if (prevSlug && prevSlug !== slug) {
       const q = `UPDATE forms
                    SET slug = $2, title = $3, schema = $4::jsonb, active = $5
@@ -577,7 +593,6 @@ app.post("/api/admin/forms/save", adminOnly, async (req, res) => {
       return res.json({ ok: true, updated: true, slug });
     }
 
-    // upsert
     const upsert = `
       INSERT INTO forms (slug, title, schema, active, created_at)
       VALUES ($1, $2, $3::jsonb, $4, NOW())
@@ -592,7 +607,6 @@ app.post("/api/admin/forms/save", adminOnly, async (req, res) => {
 
   } catch (e) {
     console.error("admin/save error:", e);
-    // Postgres hata detaylarını da dönelim ki ekranda gerçek sebep görünsün
     return res.status(500).json({
       ok: false,
       error: e.message,
@@ -602,6 +616,7 @@ app.post("/api/admin/forms/save", adminOnly, async (req, res) => {
     });
   }
 });
+
 // ---- Kök ("/"): host'a göre ana sayfa
 app.get("/", (req, res) => {
   const host = getHost(req);
