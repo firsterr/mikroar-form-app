@@ -187,3 +187,37 @@ h1{ margin: 0 0 6px; font-weight: 800; letter-spacing: -.02em; }
 @keyframes pulse{
   0%{transform:scale(1)} 50%{transform:scale(1.06)} 100%{transform:scale(1)}
 }
+/* Başarı kartı */
+.card.success{
+  text-align: center;
+  padding: 28px 24px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+.thanks-title{
+  margin: 0 0 6px;
+  font-size: 24px;
+  font-weight: 800;
+}
+.thanks-sub{
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 16px;
+}
+
+/* Başarı alt notu (Google Forms benzeri) */
+.thanks-note{
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.thanks-note a{ color:#2563eb; text-decoration: underline; }
+.thanks-note strong{
+  display:block;
+  margin-top:4px;
+  font-size:16px;
+  color:var(--text);
+}
