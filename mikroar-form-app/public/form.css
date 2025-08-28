@@ -161,3 +161,29 @@ h1{ margin: 0 0 6px; font-weight: 800; letter-spacing: -.02em; }
 @keyframes pulse{
   0%{transform:scale(1)} 50%{transform:scale(1.06)} 100%{transform:scale(1)}
 }
+/* --- Validasyon ve odak stilleri --- */
+.q{ scroll-margin-top: 16px; }
+.q.active{
+  outline: 2px solid #c7d2fe;
+  box-shadow: 0 0 0 4px rgba(99,102,241,.12) inset;
+  transition: outline .12s ease, box-shadow .12s ease;
+}
+.q.answered{
+  border-color: #d1fae5;
+  background: #f0fdf4;
+}
+.q.error{
+  border-color: #fecaca;
+  background: #fff1f2;
+  outline: 2px solid #fecaca;
+  box-shadow: 0 0 0 4px rgba(239,68,68,.12) inset;
+}
+.q .err-msg{
+  margin-top: 8px;
+  color: #b91c1c;
+  font-size: 13px;
+}
+#btnSend.pulse{ animation: pulse 1s ease 1; }
+@keyframes pulse{
+  0%{transform:scale(1)} 50%{transform:scale(1.06)} 100%{transform:scale(1)}
+}
