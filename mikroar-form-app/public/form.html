@@ -1,49 +1,22 @@
 <!doctype html>
 <html lang="tr">
 <head>
-  <!-- form.html <head> içine ya da mevcut CSS dosyana ekle -->
-<style>
-  /* Alttaki yapışkan gönder çubuğu */
-  .sticky-submit {
-    position: sticky;
-    bottom: 0;
-    z-index: 50;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    justify-content: space-between;
-    padding: 12px 14px;
-    margin-top: 24px;
-    background: rgba(17, 24, 39, .88);      /* koyu yarı saydam */
-    backdrop-filter: saturate(180%) blur(6px);
-    border-top: 1px solid #2a2f3a;
-    border-radius: 12px 12px 0 0;
-  }
-
-  .sticky-submit .note {
-    font-size: 12px;
-    line-height: 1.3;
-    color: #9ca3af;
-  }
-  .sticky-submit .note a {
-    color: #60a5fa;
-    text-decoration: underline;
-  }
-
-  /* Buton (senin mevcut stilin varsa buna gerek olmayabilir) */
-  #btnSend {
-    padding: 10px 18px;
-    font-weight: 600;
-    border: 0;
-    border-radius: 10px;
-    background: #3b82f6;
-    color: #fff;
-  }
-  #btnSend:disabled { opacity: .6; }
-</style>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+
+  <!-- Fallback Open Graph (SSR yoksa genel önizleme) -->
+  <meta property="og:title" content="MikroAR Anketi">
+  <meta property="og:description" content="Görüşlerin bizim için önemli! Hemen ankete katıl.">
+  <meta property="og:image" content="https://form.mikroar.com/assets/anket-kapak.jpg">
+  <meta property="og:url" content="https://form.mikroar.com/form.html">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="description" content="MikroAR kısa anket. Katkınız değerlidir.">
+  <link rel="canonical" href="https://form.mikroar.com/form.html">
+
   <title>Anket</title>
+
+  <!-- Stil -->
   <style>
     body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;background:#0b1220;color:#e6e6e6;margin:0}
     .wrap{max-width:960px;margin:40px auto;padding:0 16px}
@@ -58,17 +31,36 @@
     .ok{background:#12361d;color:#b9f6c0}
     .warn{background:#3c2a16;color:#ffd7a1}
     .err{background:#3c171c;color:#ffc0c9}
+
+    /* Yapışkan gönder çubuğu */
+    .sticky-submit {
+      position: sticky; bottom: 0; z-index: 50;
+      display: flex; align-items: center; gap: 12px; justify-content: space-between;
+      padding: 12px 14px; margin-top: 24px;
+      background: rgba(17,24,39,.88); backdrop-filter: saturate(180%) blur(6px);
+      border-top: 1px solid #2a2f3a; border-radius: 12px 12px 0 0;
+    }
+    .sticky-submit .note{font-size:12px;line-height:1.3;color:#9ca3af}
+    .sticky-submit .note a{color:#60a5fa;text-decoration:underline}
+    #btnSend{padding:10px 18px;font-weight:600;border:0;border-radius:10px;background:#3b82f6;color:#fff}
+    #btnSend:disabled{opacity:.6}
   </style>
 </head>
 <body>
   <div class="wrap">
     <h1 id="title">Yükleniyor…</h1>
     <div class="card">
-      <p class="muted">Bu anket kapsamında herhangi bir kişisel veriniz alınmamakta ve üçüncü kişilerle paylaşılmamaktadır. Yanıtlarınız tamamen anonim olarak değerlendirilecektir.</p>
+      <p class="muted">
+        Bu anket kapsamında herhangi bir kişisel veriniz alınmamakta ve üçüncü kişilerle paylaşılmamaktadır.
+        Yanıtlarınız tamamen anonim olarak değerlendirilecektir.
+      </p>
       <div id="toast"></div>
+
       <form id="frm">
         <div id="questions"></div>
-        <div style="margin-top:16px">
+
+        <div class="sticky-submit">
+          <div class="note">Gönder butonuna bastığınızda yanıtınız kayıt altına alınır. <a href="#">Aydınlatma</a></div>
           <button id="btnSend" type="submit">Gönder</button>
         </div>
       </form>
@@ -83,56 +75,43 @@
   const $frm = qs('#frm');
   const $btn = qs('#btnSend');
 
-  function toast(msg, cls='ok'){
-    $toast.innerHTML = msg ? `<div class="toast ${cls}">${msg}</div>` : '';
-  }
+  function toast(msg, cls='ok'){ $toast.innerHTML = msg ? `<div class="toast ${cls}">${escapeHtml(msg)}</div>` : ''; }
   function disableForm(){
-    $btn.disabled = true;
-    $btn.textContent = 'Gönderildi';
+    $btn.disabled = true; $btn.textContent = 'Gönderildi';
     [...$frm.querySelectorAll('input,textarea,button')].forEach(el=>el.disabled=true);
   }
-
-  function getSlug(){
-    const u = new URL(location.href);
-    return u.searchParams.get('slug');
-  }
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
+  function getSlug(){ try{ return new URL(location.href).searchParams.get('slug'); }catch{ return null; } }
 
   function parseSchema(raw){
     let s = raw;
-    if (typeof s === 'string'){
-      try{ s = JSON.parse(s); }catch(e){ s = {}; }
-    }
+    if (typeof s === 'string'){ try{ s = JSON.parse(s); }catch{ s = {}; } }
     if (s && s.schema && !s.questions) s = s.schema;
     return s && Array.isArray(s.questions) ? s : { questions: [] };
   }
 
   function renderQuestions(schema){
     const items = schema.questions || [];
-    if(!items.length){
-      $questions.innerHTML = '<p class="muted">Bu formda soru bulunamadı.</p>';
-      return;
-    }
+    if(!items.length){ $questions.innerHTML = '<p class="muted">Bu formda soru bulunamadı.</p>'; return; }
     $questions.innerHTML = '';
     items.forEach((q, idx)=>{
-      const wrap = document.createElement('div');
-      wrap.className = 'q';
+      const wrap = document.createElement('div'); wrap.className = 'q';
+
       const label = document.createElement('div');
-      label.style.fontWeight = '600';
-      label.style.marginBottom = '8px';
-      label.innerHTML = `${idx+1}. ${q.label || q.text || 'Soru'} ${q.required ? '<span class="muted">*</span>':''}`;
+      label.style.fontWeight = '600'; label.style.marginBottom = '8px';
+      label.innerHTML = `${idx+1}. ${escapeHtml(q.label || q.text || 'Soru')} ${q.required ? '<span class="muted">*</span>':''}`;
       wrap.appendChild(label);
 
       const name = `q_${idx}`;
-
       if(q.type === 'radio'){
         (q.options || []).forEach(opt=>{
           wrap.insertAdjacentHTML('beforeend',
-            `<label><input type="radio" name="${name}" value="${opt}"> ${opt}</label>`);
+            `<label><input type="radio" name="${name}" value="${escapeHtml(opt)}"> ${escapeHtml(opt)}</label>`);
         });
       }else if(q.type === 'checkbox'){
         (q.options || []).forEach(opt=>{
           wrap.insertAdjacentHTML('beforeend',
-            `<label><input type="checkbox" name="${name}" value="${opt}"> ${opt}</label>`);
+            `<label><input type="checkbox" name="${name}" value="${escapeHtml(opt)}"> ${escapeHtml(opt)}</label>`);
         });
       }else{
         wrap.insertAdjacentHTML('beforeend',
@@ -142,71 +121,111 @@
     });
   }
 
-  async function loadForm(){
+  function applyHeadMeta(form, schema){
+    try{
+      const meta = (schema && schema.meta) ? schema.meta : {};
+      const t = form.title || 'Anket';
+      document.title = t;
+
+      // Yalnızca tarayıcı için görsel; botlar SSR ile görecek.
+      const ogTitle = document.querySelector('meta[property="og:title"]');
+      const ogDesc  = document.querySelector('meta[property="og:description"]');
+      const ogImg   = document.querySelector('meta[property="og:image"]');
+      const ogUrl   = document.querySelector('meta[property="og:url"]');
+      const desc    = document.querySelector('meta[name="description"]');
+
+      if (ogTitle) ogTitle.setAttribute('content', t);
+      if (desc)    desc.setAttribute('content', meta?.description || desc.getAttribute('content') || '');
+      if (ogDesc)  ogDesc.setAttribute('content', meta?.description || ogDesc.getAttribute('content') || '');
+      if (ogImg && meta?.og_image && /^https?:\/\//.test(meta.og_image)) ogImg.setAttribute('content', meta.og_image);
+      if (ogUrl){
+        const url = new URL(location.href);
+        ogUrl.setAttribute('content', url.origin + url.pathname + '?slug=' + encodeURIComponent(form.slug || ''));
+      }
+    }catch(_){}
+  }
+
+  async function bootstrap(){
     const slug = getSlug();
     if(!slug){ toast('Geçersiz bağlantı (slug yok).', 'err'); return; }
+
     try{
+      // SSR ile gelmişse window.__FORM__ mevcut olur
+      const serverForm = window.__FORM__ || null;
+      if (serverForm){
+        const schema = parseSchema(serverForm.schema);
+        $title.textContent = serverForm.title || slug;
+        applyHeadMeta(serverForm, schema);
+        renderQuestions(schema);
+        wireSubmit(slug, schema);
+        return;
+      }
+
+      // SSR yoksa API'den çek
       const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`);
       const data = await r.json();
       if(!r.ok || data.ok === false) throw new Error(data.error || 'Form alınamadı');
 
-      $title.textContent = data.form.title || slug;
-
       const schema = parseSchema(data.form.schema);
+      $title.textContent = data.form.title || slug;
+      applyHeadMeta(data.form, schema);
       renderQuestions(schema);
-
-      $frm.onsubmit = async (ev)=>{
-        ev.preventDefault();
-        const fd = new FormData($frm);
-        const answers = {};
-        for(const [k,v] of fd.entries()){
-          if(k in answers){
-            if(Array.isArray(answers[k])) answers[k].push(v);
-            else answers[k] = [answers[k], v];
-          }else{
-            const el = $frm.querySelectorAll(`[name="${k}"][type="checkbox"]`);
-            if(el.length>1){
-              const arr = [...el].filter(x=>x.checked).map(x=>x.value);
-              answers[k] = arr;
-            }else{
-              answers[k] = v;
-            }
-          }
-        }
-
-        const requiredMiss = (schema.questions||[]).some((q,idx)=>{
-          if(!q.required) return false;
-          const key = `q_${idx}`;
-          const val = answers[key];
-          return val==null || (Array.isArray(val) && val.length===0) || (typeof val==='string' && !val.trim());
-        });
-        if(requiredMiss){ toast('Lütfen zorunlu soruları doldurun.', 'warn'); return; }
-
-        try{
-          const rr = await fetch(`/api/forms/${encodeURIComponent(slug)}/submit`, {
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ answers })
-          });
-          const res = await rr.json();
-          if(!rr.ok || res.ok===false) throw new Error(res.error || 'Gönderim hatası');
-
-          if(res.alreadySubmitted){
-            toast('Bu ankete daha önce yanıt verdiniz. Mevcut yanıtınız korunuyor.', 'warn');
-            disableForm(); return;
-          }
-          toast('Yanıtınız kaydedildi. Teşekkürler!', 'ok');
-          disableForm();
-        }catch(e){
-          toast('İnternet/servis hatası: ' + e.message, 'err');
-        }
-      };
+      wireSubmit(slug, schema);
     }catch(e){
       toast('Hata: ' + e.message, 'err');
     }
   }
 
-  loadForm();
+  function wireSubmit(slug, schema){
+    $frm.onsubmit = async (ev)=>{
+      ev.preventDefault();
+      const fd = new FormData($frm);
+      const answers = {};
+      for(const [k,v] of fd.entries()){
+        if(k in answers){
+          if(Array.isArray(answers[k])) answers[k].push(v);
+          else answers[k] = [answers[k], v];
+        }else{
+          const el = $frm.querySelectorAll(`[name="${k}"][type="checkbox"]`);
+          if(el.length>1){
+            const arr = [...el].filter(x=>x.checked).map(x=>x.value);
+            answers[k] = arr;
+          }else{
+            answers[k] = v;
+          }
+        }
+      }
+
+      const requiredMiss = (schema.questions||[]).some((q,idx)=>{
+        if(!q.required) return false;
+        const key = `q_${idx}`;
+        const val = answers[key];
+        return val==null || (Array.isArray(val) && val.length===0) || (typeof val==='string' && !val.trim());
+      });
+      if(requiredMiss){ toast('Lütfen zorunlu soruları doldurun.', 'warn'); return; }
+
+      try{
+        const rr = await fetch(`/api/forms/${encodeURIComponent(slug)}/submit`, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ answers })
+        });
+        const res = await rr.json();
+        if(!rr.ok || res.ok===false) throw new Error(res.error || 'Gönderim hatası');
+
+        if(res.alreadySubmitted){
+          toast('Bu ankete daha önce yanıt verdiniz. Mevcut yanıtınız korunuyor.', 'warn');
+          disableForm(); return;
+        }
+        toast('Yanıtınız kaydedildi. Teşekkürler!', 'ok');
+        disableForm();
+      }catch(e){
+        toast('İnternet/servis hatası: ' + e.message, 'err');
+      }
+    };
+  }
+
+  bootstrap();
   </script>
 </body>
 </html>
