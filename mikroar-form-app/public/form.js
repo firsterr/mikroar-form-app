@@ -1,263 +1,145 @@
-// MikroAR – Form (SSR destekli)  |  v=ipfix2 + closed-guard
-(function () {
-  const $ = (s) => document.querySelector(s);
-
-  const state = { form: null };
-
-  function el(tag, attrs = {}, html = "") {
-    const e = document.createElement(tag);
-    for (const [k, v] of Object.entries(attrs)) {
-      if (k === "class") e.className = v;
-      else if (k === "for") e.htmlFor = v;
-      else if (k.startsWith("on") && typeof v === "function") e[k] = v;
-      else e.setAttribute(k, v);
-    }
-    if (html) e.innerHTML = html;
-    return e;
-  }
-
-  function fmt(ts) {
-    try { return new Date(ts).toLocaleString(); } catch { return ts || ""; }
-  }
-// ---- sticky bar ve alt bilgi için minimal stil
 (() => {
-  const style = document.createElement("style");
-  style.textContent = `
-    /* sticky bar görünürken form içeriği alta gizlenmesin */
-    #f { padding-bottom: 88px; }
+  const $ = s => document.querySelector(s);
 
-    .sticky-submit{
-      position: sticky;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      padding: 12px 16px;
-      background: rgba(255,255,255,0.96);
-      backdrop-filter: saturate(180%) blur(8px);
-      border-top: 1px solid #e5e7eb;
-      display: flex;
-      flex-direction: column;       /* BUTON ÜSTTE, BİLGİ ALTA */
-      align-items: center;
-      gap: 12px;
-      z-index: 10;
-    }
-
-    .sticky-submit .info{
-      text-align: center;
-      line-height: 1.35;
-      color: #111;
-      font-size: 14px;
-    }
-    .sticky-submit .info a{
-      color: inherit;
-      text-decoration: underline;
-    }
-    .sticky-submit .info .brand{
-      margin-top: 2px;
-      font-size: 16px;     /* bir tık büyük */
-      font-weight: 700;    /* kalın */
-    }
-  `;
-  document.head.appendChild(style);
-})();
-  // --- Pasif / kapalı form ekranı
-  function renderClosed(msg) {
-    const title = $("#form-title");
-    const formEl = $("#f");
-    if (title) title.textContent = "Anket kapalı";
-    const text = msg || "Bu anket yayında değil veya süresi dolmuş olabilir.";
-
-    const html = `
-      <div style="
-        max-width:880px;margin:24px 0;padding:20px;
-        border:1px solid #30364a;border-radius:12px;background:#0f1221;color:#e7e7f1;
-      ">
-        <h3 style="margin:0 0 8px;font-size:22px">Anket kapalı</h3>
-        <p style="margin:0;line-height:1.6">${text}</p>
-      </div>
-    `;
-
-    if (formEl) {
-      formEl.innerHTML = html;
-    } else {
-      document.body.innerHTML = html;
-    }
-    document.title = "Anket kapalı";
+  function normalizeSchema(s) {
+    try { if (typeof s === "string") s = JSON.parse(s); } catch {}
+    // {schema:{questions:[]}} ya da {questions:[]} ya da direkt []
+    if (s && s.schema && !s.questions) s = s.schema;
+    if (Array.isArray(s)) return { questions: s };
+    if (s && Array.isArray(s.questions)) return s;
+    return { questions: [] };
   }
 
-  function renderForm(data) {
-    state.form = data;
-    const title = $("#form-title");
-    const formEl = $("#f");
-    const descEl = $("#form-desc");
+  function render(form) {
+    $('#form-title').textContent = form.title || 'Anket';
 
-   title.textContent = data.title || "Anket";
-if (descEl) {
-  const txt = (data.description || "").trim();
-  if (txt) {
-    descEl.textContent = txt;
-    descEl.style.display = "";
-  } else {
-    descEl.style.display = "none";
-  }
-}
-    if (!formEl) return;
+    const desc = (form.description || '').toString().trim();
+    const $desc = $('#form-desc');
+    if (desc) { $desc.textContent = desc; $desc.style.display = ''; }
+    else { $desc.style.display = 'none'; }
 
-    formEl.innerHTML = "";
+    const schema = normalizeSchema(form.schema);
+    const $f = $('#f');
+    $f.innerHTML = '';
 
-    const qs = (data.schema && Array.isArray(data.schema.questions))
-      ? data.schema.questions
-      : [];
+    schema.questions.forEach((q, idx) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'q';
 
-    qs.forEach((q, idx) => {
-      const wrap = el("div", { class: "q" });
-      const qId = "q_" + idx;
+      const label = document.createElement('label');
+      label.className = 'qlabel';
+      label.innerHTML = `${idx + 1}. ${q.label || q.text || 'Soru'} ${q.required ? '<span class="req">*</span>' : ''}`;
+      wrap.appendChild(label);
 
-      const lbl = el("label", { for: qId }, (q.label || ("Soru " + (idx + 1))));
-      wrap.appendChild(lbl);
+      const name = `q_${idx}`;
 
-      const required = !!q.required;
-
-      if (q.type === "text") {
-        const inp = el("input", { id: qId, name: qId, type: "text" });
-        if (required) inp.required = true;
+      if (q.type === 'text') {
+        const inp = document.createElement('input');
+        inp.type = 'text'; inp.name = name;
+        if (q.required) inp.required = true;
         wrap.appendChild(inp);
-      } else if (q.type === "textarea") {
-        const inp = el("textarea", { id: qId, name: qId, rows: "3" });
-        if (required) inp.required = true;
-        wrap.appendChild(inp);
-      } else if (q.type === "checkbox") {
+      } else if (q.type === 'textarea') {
+        const ta = document.createElement('textarea');
+        ta.name = name; ta.rows = 3;
+        if (q.required) ta.required = true;
+        wrap.appendChild(ta);
+      } else if (q.type === 'checkbox') {
         (q.options || []).forEach((opt, i) => {
-          const id = qId + "_" + i;
-          const line = el("label", { class: "opt", for: id });
-          const box = el("input", { id, type: "checkbox", name: qId, value: opt });
-          // checkbox required: en az birini zorunlu kılmak için ilkine koyarız
-          if (required && i === 0) box.required = true;
-          line.appendChild(box);
-          line.appendChild(document.createTextNode(" " + opt));
-          wrap.appendChild(line);
+          const id = `${name}_${i}`;
+          const row = document.createElement('label');
+          row.className = 'opt';
+          row.htmlFor = id;
+          row.innerHTML = `<input id="${id}" type="checkbox" name="${name}" value="${opt}"> ${opt}`;
+          wrap.appendChild(row);
         });
-      } else { // radio (default)
+        // en az bir checkbox’ı zorunlu kılmak için ilkini required yap
+        if (q.required) {
+          const first = wrap.querySelector('input[type="checkbox"]');
+          if (first) first.required = true;
+        }
+      } else {
+        // default: radio
         (q.options || []).forEach((opt, i) => {
-          const id = qId + "_" + i;
-          const line = el("label", { class: "opt", for: id });
-          const rb = el("input", { id, type: "radio", name: qId, value: opt });
-          if (required) rb.required = true;
-          line.appendChild(rb);
-          line.appendChild(document.createTextNode(" " + opt));
-          wrap.appendChild(line);
+          const id = `${name}_${i}`;
+          const row = document.createElement('label');
+          row.className = 'opt';
+          row.htmlFor = id;
+          row.innerHTML = `<input id="${id}" type="radio" name="${name}" value="${opt}" ${q.required ? 'required' : ''}> ${opt}`;
+          wrap.appendChild(row);
         });
       }
 
-      formEl.appendChild(wrap);
+      $f.appendChild(wrap);
     });
 
-   // Gönder alanı: yapışkan bar (buton üstte) + 3 satır alt bilgi
-const bar  = el("div", { class: "sticky-submit" });
-const btn  = el("button", { type: "submit", id: "btnSend" }, "Gönder");
+    // Yapışkan gönder barı
+    const bar = document.createElement('div');
+    bar.className = 'sticky-submit';
+    bar.innerHTML = `
+      <div class="note">
+        Bu form <strong>mikroar.com</strong> alanında oluşturulmuştur.<br/>
+        İletişim: <a href="mailto:iletisim@mikroar.com">iletisim@mikroar.com</a><br/>
+        <strong>MikroAR Araştırma</strong>
+      </div>
+      <button id="btnSend" type="submit">Gönder</button>
+    `;
+    $f.appendChild(bar);
 
-// 3 satır, ortalı, son satır daha büyük
-const info = el("div", { class: "info" }, `
-  <div>Bu form <strong>mikroar.com</strong> alanında oluşturulmuştur.</div>
-  <div>İletişim: <a href="mailto:iletisim@mikroar.com">iletisim@mikroar.com</a></div>
-  <div class="brand">MikroAR Araştırma</div>
-`);
-
-bar.append(btn, info);
-formEl.appendChild(bar);
-
-    formEl.onsubmit = async (e) => {
-      e.preventDefault();
-      const btn = $("#btnSend");
+    // Gönder
+    $f.onsubmit = async (ev) => {
+      ev.preventDefault();
+      const btn = $('#btnSend');
       btn.disabled = true;
 
+      const fd = new FormData($f);
+      const answers = {};
+      schema.questions.forEach((q, idx) => {
+        const key = `q_${idx}`;
+        answers[key] = q.type === 'checkbox' ? fd.getAll(key) : fd.get(key);
+      });
+
       try {
-        const fd = new FormData(formEl);
-        const answers = {};
-        (state.form.schema.questions || []).forEach((q, idx) => {
-          const key = "q_" + idx;
-          if (q.type === "checkbox") {
-            answers[key] = fd.getAll(key);
-          } else {
-            answers[key] = fd.get(key);
-          }
+        const slug = form.slug; // SSR’de olabilir, yoksa fetch’ten geldi
+        const r = await fetch(`/api/forms/${encodeURIComponent(slug)}/submit`, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ answers })
         });
-
-        const resp = await fetch(`/api/forms/${encodeURIComponent(state.form.slug)}/submit`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ answers }),
-        });
-
-        // Sunucu iki şekilde duplicate dönebilir:
-        //  - HTTP 409
-        //  - 200/ok:true + alreadySubmitted:true
-        let j = {};
-        try { j = await resp.json(); } catch { j = {}; }
-
-        if (resp.status === 409 || j.alreadySubmitted) {
-          const when = j.at ? ` (${fmt(j.at)})` : "";
-          alert("Bu IP’den zaten yanıt gönderilmiş." + when);
-          btn.disabled = false;
-          return;
+        const j = await r.json().catch(() => ({}));
+        if (r.status === 409 || j.alreadySubmitted) {
+          alert(`Bu IP’den zaten yanıt gönderilmiş${j.at ? ' (' + new Date(j.at).toLocaleString() + ')' : ''}.`);
+          btn.disabled = false; return;
         }
-
-        if (!resp.ok || !j.ok) {
-          alert(j.error || "Gönderilemedi");
-          btn.disabled = false;
-          return;
-        }
-
-        // Başarılı (created veya updated)
-        location.href = "/thanks.html";
-      } catch (err) {
-        console.error(err);
-        alert("Hata: " + err.message);
+        if (!r.ok || !j.ok) throw new Error(j.error || 'Gönderilemedi');
+        location.href = '/thanks.html';
+      } catch (e) {
+        alert('Hata: ' + e.message);
         btn.disabled = false;
       }
     };
   }
 
   async function boot() {
-    // SSR'dan gelen veri varsa (ve aktifse) anında çiz
+    // SSR varsa
     if (window.__FORM__ && window.__FORM__.slug) {
-      if (window.__FORM__.active === false) {
-        renderClosed();
-        return;
-      }
-      renderForm(window.__FORM__);
+      render(window.__FORM__);
       return;
     }
+    // /form.html?slug=...
+    const slug = new URLSearchParams(location.search).get('slug');
+    if (!slug) { document.body.innerHTML = '<h2>Form bulunamadı (slug yok)</h2>'; return; }
 
-    // Fallback (fetch)
-    const params = new URLSearchParams(location.search);
-    const slug = params.get("slug");
-    if (!slug) {
-      document.body.innerHTML = "<h2>Form bulunamadı (slug yok)</h2>";
-      return;
-    }
     try {
       const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`);
-
-      if (r.status === 403) {
-        // Pasif form
-        renderClosed();
-        return;
-      }
-      if (!r.ok) {
-        document.body.innerHTML = "<h2>Form yüklenemedi.</h2>";
-        return;
-      }
-
       const j = await r.json();
-      if (!j.ok || !j.form) {
-        renderClosed();
-        return;
-      }
-      renderForm(j.form);
+      if (!j.ok) throw new Error(j.error || 'Form alınamadı');
+      j.form.slug = j.form.slug || slug;  // submit için garantiye al
+      render(j.form);
     } catch (e) {
       console.error(e);
-      document.body.innerHTML = "<h2>Form yüklenemedi.</h2>";
+      document.body.innerHTML = '<h2>Form yüklenemedi.</h2>';
     }
   }
 
+  document.addEventListener('DOMContentLoaded', boot);
+})();
