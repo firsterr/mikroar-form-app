@@ -49,6 +49,54 @@ function getHost(req) {
   ).toLowerCase();
 }
 
+// ---- metin normalize/sanitize helpers
+function normalizeSmartChars(s) {
+  return String(s)
+    // akıllı tırnaklar ve uzun/kısa tireler
+    .replace(/[\u2018\u2019\u2032]/g, "'")
+    .replace(/[\u201C\u201D\u2033]/g, '"')
+    .replace(/[\u2013\u2014]/g, "-")
+    // sıfırlanamaz boşluk vs.
+    .replace(/\u00A0/g, " ");
+}
+function sanitizeText(s, { max = 500 } = {}) {
+  if (s == null) return "";
+  let out = normalizeSmartChars(String(s));
+  // HTML tag temizliği (plain text bırakalım)
+  out = out.replace(/<[^>]*>/g, "");
+  out = out.replace(/\s+/g, " ").trim();
+  if (out.length > max) out = out.slice(0, max);
+  return out;
+}
+// schema içindeki label/options/description gibi alanları dolaşarak sanitize et
+function sanitizeSchema(schema) {
+  if (!schema || typeof schema !== "object") return schema;
+  const copy = JSON.parse(JSON.stringify(schema));
+
+  // meta alanları (opsiyonel)
+  if (!copy.meta) copy.meta = {};
+  if (copy.meta.description != null) {
+    copy.meta.description = sanitizeText(copy.meta.description, { max: 600 });
+  }
+  if (copy.meta.og_image != null) {
+    // URL için sadece trim; validasyon WhatsApp botuna kalsın
+    copy.meta.og_image = String(copy.meta.og_image).trim();
+  }
+
+  // sorular
+  if (Array.isArray(copy.questions)) {
+    copy.questions = copy.questions.map(q => {
+      const qq = { ...q };
+      if (qq.label != null) qq.label = sanitizeText(qq.label, { max: 300 });
+      if (Array.isArray(qq.options)) {
+        qq.options = qq.options.map(opt => sanitizeText(opt, { max: 200 })).filter(Boolean);
+      }
+      if (qq.placeholder != null) qq.placeholder = sanitizeText(qq.placeholder, { max: 200 });
+      return qq;
+    });
+  }
+  return copy;
+}
 // IPv4 ve IPv6 regex'leri
 const IPv4_RE = /^(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}$/;
 const IPv6_RE = /^(([0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|(::1)|(([0-9A-Fa-f]{1,4}:){1,7}:)|(:{2}([0-9A-Fa-f]{1,4}:){1,6}[0-9A-Fa-f]{1,4}))$/;
@@ -548,11 +596,15 @@ app.post("/api/admin/forms/save", adminOnly, async (req, res) => {
       return res.status(400).json({ ok: false, error: "invalid_slug" });
     }
     slug = slug.trim().toLowerCase();
+    if (!/^[a-z0-9-]{3,64}$/.test(slug)) {
+      return res.status(400).json({ ok: false, error: "bad_slug_pattern" });
+    }
 
     // title
     if (typeof title !== "string") title = "";
+    title = sanitizeText(title, { max: 200 });
 
-    // schema: string geldiyse parse et; obje ise olduğu gibi kullan
+    // schema: string geldiyse parse et; obje ise sanitize et
     if (typeof schema === "string") {
       try { schema = JSON.parse(schema); }
       catch { return res.status(400).json({ ok: false, error: "bad_schema_json" }); }
@@ -560,6 +612,7 @@ app.post("/api/admin/forms/save", adminOnly, async (req, res) => {
     if (!schema || typeof schema !== "object") {
       return res.status(400).json({ ok: false, error: "invalid_schema" });
     }
+    schema = sanitizeSchema(schema);
     const schemaJson = JSON.stringify(schema); // ::jsonb için
 
     // active -> boolean
@@ -571,7 +624,7 @@ app.post("/api/admin/forms/save", adminOnly, async (req, res) => {
       const q = `UPDATE forms
                    SET slug = $2, title = $3, schema = $4::jsonb, active = $5
                  WHERE slug = $1`;
-      await pool.query(q, [prevSlug, slug, title, schemaJson, active]);
+      await pool.query(q, [prevSlug, title, schemaJson, active, slug]);
       return res.json({ ok: true, updated: true, slug });
     }
 
@@ -590,7 +643,6 @@ app.post("/api/admin/forms/save", adminOnly, async (req, res) => {
 
   } catch (e) {
     console.error("admin/save error:", e);
-    // Postgres hata detaylarını da dönelim ki ekranda gerçek sebep görünsün
     return res.status(500).json({
       ok: false,
       error: e.message,
