@@ -91,6 +91,26 @@
     const formEl = $("#f");
 
     title && (title.textContent = data.title || "Anket");
+
+
+// --- AÇIKLAMA + KVKK BLOĞU
+const meta = (data.schema && data.schema.meta) || {};
+const formEl = document.querySelector("#f");
+
+if (formEl) {
+  if (meta.desc) {
+    const p = document.createElement("p");
+    p.className = "form-desc";
+    p.textContent = meta.desc;
+    formEl.appendChild(p);
+  }
+  if (meta.kvkk) {
+    const p = document.createElement("p");
+    p.className = "form-kvkk";
+    p.textContent = meta.kvkk;
+    formEl.appendChild(p);
+  }
+}
     if (!formEl) return;
 
     formEl.innerHTML = "";
@@ -252,6 +272,23 @@ formEl.appendChild(bar);
   }
 // ---- Google Form benzeri CSS
 const style = document.createElement("style");
+  /* Başlık altı metinler */
+.form-desc{
+  margin: 6px 0 14px;
+  color:#202124;
+  font-size:14px;
+  line-height:1.5;
+}
+.form-kvkk{
+  margin: -6px 0 18px;
+  color:#5f6368;
+  font-size:13px;
+  line-height:1.45;
+  background:#f8f9fa;
+  border:1px solid #e6e8eb;
+  border-radius:8px;
+  padding:10px 12px;
+}
 style.textContent = `
   body {
     background: #f1f3f4;
