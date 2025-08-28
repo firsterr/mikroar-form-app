@@ -216,7 +216,68 @@ app.get("/form.html", async (req, res, next) => {
     return res.status(500).send("Sunucu hatası.");
   }
 });
+// --- /s/:code -> kısa linkten direkt anket (SSR)
+app.get("/s/:code", async (req, res) => {
+  const code = (req.params.code || "").trim();
+  if (!code) return res.status(404).send("Not found");
 
+  try {
+    // kısa link bilgisi
+    const slr = await pool.query(
+      "SELECT slug, expires_at, max_visits, COALESCE(visits,0) AS visits FROM shortlinks WHERE code=$1",
+      [code]
+    );
+    if (!slr.rows.length) return res.status(404).send("Link bulunamadı");
+
+    const sl = slr.rows[0];
+    const now = new Date();
+
+    // süre/limit kontrolleri
+    if (sl.expires_at && new Date(sl.expires_at) < now) {
+      return res.status(410).send("Bu linkin süresi dolmuş.");
+    }
+    if (sl.max_visits != null && sl.visits >= sl.max_visits) {
+      return res.status(410).send("Bu linkin ziyaret limiti dolmuş.");
+    }
+
+    // formu getir (description dahil!)
+    const fr = await pool.query(
+      "SELECT slug, title, description, active, schema FROM forms WHERE slug=$1 LIMIT 1",
+      [sl.slug]
+    );
+    if (!fr.rows.length || fr.rows[0].active === false) {
+      return res.status(404).send("Form bulunamadı veya pasif.");
+    }
+
+    const form = fr.rows[0];
+    try { if (typeof form.schema === "string") form.schema = JSON.parse(form.schema); } catch {}
+
+    // sayacı arkaplanda arttır
+    pool.query("UPDATE shortlinks SET visits = COALESCE(visits,0) + 1 WHERE code=$1", [code]).catch(() => {});
+
+    // SSR HTML – form.css ve form.js ile render
+    const html = `<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>${(form.title || "Anket").replace(/</g,"&lt;")}</title>
+<link rel="stylesheet" href="/form.css?v=gforms">
+</head>
+<body>
+  <h1 id="title"></h1>
+  <p id="form-desc" class="form-desc" style="display:none"></p>
+  <form id="f"></form>
+  <script>window.__FORM__ = ${JSON.stringify(form)};</script>
+  <script src="/form.js?v=gforms2"></script>
+</body>
+</html>`;
+    return res.status(200).send(html);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).send("Sunucu hatası.");
+  }
+});
 // ---- Statik
 app.use(
   express.static(path.join(__dirname, "public"), {
