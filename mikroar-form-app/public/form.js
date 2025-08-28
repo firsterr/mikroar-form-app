@@ -1,96 +1,104 @@
-// public/form.js — auto-advance + required validation + smooth focus
+// MikroAR – Form (Google Forms benzeri)  —  FULL FILE
 (function () {
-  const $ = (s) => document.querySelector(s);
-  let FORM = null;
+  // ---------- helpers ----------
+  const $  = (s) => document.querySelector(s);
+  const el = (t, a = {}, html = "") => {
+    const e = document.createElement(t);
+    for (const [k, v] of Object.entries(a)) {
+      if (k === "class") e.className = v;
+      else if (k === "for") e.htmlFor = v;
+      else if (k.startsWith("on") && typeof v === "function") e[k] = v;
+      else e.setAttribute(k, v);
+    }
+    if (html) e.innerHTML = html;
+    return e;
+  };
 
-  function renderForm(form) {
-    FORM = form;
-    const titleEl = $("#form-title");
+  // küçük başarı ekranı stili (form.css yoksa minimum görünüm için)
+  const style = document.createElement("style");
+  style.textContent = `
+    .card.success{ background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.06); border-radius:12px; padding:24px; }
+    .thanks-title{ font-size:28px; font-weight:800; margin:0 0 6px; }
+    .thanks-sub{ margin:0 0 14px; color:#374151; }
+    .thanks-note{ font-size:14px; color:#4b5563; line-height:1.45; }
+    .thanks-note a{ color:#2563eb; text-decoration:underline; }
+    .sticky-submit{ margin-top:28px; padding:14px; border-top:1px solid #e5e7eb; background:#fff; border-radius:12px 12px 0 0; box-shadow:0 -2px 6px rgba(0,0,0,.04); display:flex; flex-direction:column; align-items:center; gap:10px; }
+    .sticky-submit .note{ text-align:center; font-size:13px; color:#4b5563; }
+    .sticky-submit .note strong{ display:block; margin-top:4px; font-size:15px; color:#111827; }
+    #btnSend{ background:#1a73e8; color:#fff; border:none; border-radius:10px; padding:10px 18px; font-size:16px; font-weight:600; cursor:pointer; }
+    #btnSend:disabled{ opacity:.6; cursor:default; }
+  `;
+  document.head.appendChild(style);
+
+  // ---------- state ----------
+  const state = { form: null };
+
+  // ---------- render ----------
+  function renderForm(data) {
+    state.form = data;
+
+    // başlık + açıklama
+    const titleEl = $("#title");
     const descEl  = $("#form-desc");
-    const formEl  = $("#f");
-
-    titleEl.textContent = form.title || "Anket";
-    if (form.description && String(form.description).trim()) {
-      descEl.textContent = form.description;
-      descEl.style.display = "block";
-    } else {
-      descEl.style.display = "none";
+    if (titleEl) titleEl.textContent = data.title || "Anket";
+    if (descEl) {
+      const d = data.description || "";
+      if (d && String(d).trim()) {
+        descEl.textContent = d;
+        descEl.style.display = "block";
+      } else {
+        descEl.style.display = "none";
+      }
     }
 
+    const formEl = $("#f");
     formEl.innerHTML = "";
-    const schema = form.schema && Array.isArray(form.schema.questions)
-      ? form.schema
-      : { questions: [] };
 
-    schema.questions.forEach((q, i) => {
-      const wrap = document.createElement("div");
-      wrap.className = "q";
-      wrap.dataset.idx = i;
-      wrap.tabIndex = -1;
+    const qs = (data.schema && Array.isArray(data.schema.questions))
+      ? data.schema.questions
+      : [];
 
-      const label = document.createElement("label");
-      label.className = "q-label";
-      label.innerHTML = `${i + 1}. ${q.label || "Soru"} ${
-        q.required ? '<span class="req">*</span>' : ""
-      }`;
-      wrap.appendChild(label);
+    // soruları çiz
+    qs.forEach((q, idx) => {
+      const wrap = el("div", { class: "q" });
+      const qId  = "q_" + idx;
 
-      const body = document.createElement("div");
-      body.className = "q-body";
-      const name = "q_" + i;
+      wrap.appendChild(el("label", { for: qId }, `${idx + 1}. ${q.label || "Soru"} ${q.required ? '<span style="color:#dc2626">*</span>' : ''}`));
 
       if (q.type === "text") {
-        body.innerHTML = `<input type="text" name="${name}" placeholder="Yanıtınız">`;
+        const inp = el("input", { id: qId, name: qId, type: "text" });
+        wrap.appendChild(inp);
       } else if (q.type === "textarea") {
-        body.innerHTML = `<textarea name="${name}" placeholder="Yanıtınız"></textarea>`;
+        const ta = el("textarea", { id: qId, name: qId, rows: "3" });
+        wrap.appendChild(ta);
       } else if (q.type === "checkbox") {
-        (q.options || []).forEach((opt, j) => {
-          const id = `${name}_${j}`;
-          body.insertAdjacentHTML(
-            "beforeend",
-            `<label class="opt"><input id="${id}" type="checkbox" name="${name}" value="${opt}"><span>${opt}</span></label>`
-          );
+        (q.options || []).forEach((opt, i) => {
+          const id = `${qId}_${i}`;
+          const line = el("label", { class: "opt", for: id });
+          const box  = el("input", { id, type: "checkbox", name: qId, value: opt });
+          // en az birini isteyeceksek JS tarafı kontrol edecek
+          line.appendChild(box);
+          line.appendChild(document.createTextNode(" " + opt));
+          wrap.appendChild(line);
         });
       } else {
         // radio (default)
-        (q.options || []).forEach((opt, j) => {
-          const id = `${name}_${j}`;
-          body.insertAdjacentHTML(
-            "beforeend",
-            `<label class="opt"><input id="${id}" type="radio" name="${name}" value="${opt}"><span>${opt}</span></label>`
-          );
+        (q.options || []).forEach((opt, i) => {
+          const id = `${qId}_${i}`;
+          const line = el("label", { class: "opt", for: id });
+          const rb   = el("input", { id, type: "radio", name: qId, value: opt });
+          // native required vermiyoruz; JS ile ilk boş olana odaklanacağız
+          line.appendChild(rb);
+          line.appendChild(document.createTextNode(" " + opt));
+          wrap.appendChild(line);
         });
       }
-      wrap.appendChild(body);
+
       formEl.appendChild(wrap);
     });
-function showThanks() {
-  // alttaki bar varsa kaldır
-  const bar = document.getElementById("submitBar");
-  if (bar) bar.remove();
 
-  // form kartını “başarı” kartına çevir
-  const card = document.querySelector(".card");
-  if (card) {
-    card.classList.add("success");
-    card.innerHTML = `
-      <h2 class="thanks-title">Yanıtınız kaydedildi</h2>
-      <p class="thanks-sub">Teşekkürler!</p>
-      <div class="thanks-note">
-        <div>Bu form <strong>mikroar.com</strong> alanında oluşturulmuştur.</div>
-        <div>İletişim: <a href="mailto:iletisim@mikroar.com">iletisim@mikroar.com</a></div>
-        <strong>MikroAR Araştırma</strong>
-      </div>
-    `;
-  }
-
-  // başa kaydır
-  window.scrollTo({ top: 0, behavior: "smooth" });
-}
-    // Gönder barı
-    const bar = document.createElement("div");
-    bar.className = "sticky-submit";
-    bar.id = "submitBar";
+    // gönder barı (BUTON ÜSTTE!)
+    const bar = el("div", { class: "sticky-submit", id: "submitBar" });
     bar.innerHTML = `
       <button type="submit" id="btnSend">Gönder</button>
       <div class="note">
@@ -100,212 +108,140 @@ function showThanks() {
       </div>`;
     formEl.appendChild(bar);
 
-    attachAutoAdvance(schema);
-    formEl.onsubmit = makeSubmitHandler(schema, form.slug);
+    // submit handler
+    formEl.onsubmit = submitHandler;
   }
 
-  // ---- ortak yardımcılar
-  function clearError(block) {
-    block.classList.remove("error");
-    const em = block.querySelector(".err-msg");
-    if (em) em.remove();
-  }
-  function markError(block, msg) {
-    block.classList.remove("answered");
-    block.classList.add("error", "active");
-    let em = block.querySelector(".err-msg");
-    if (!em) {
-      em = document.createElement("div");
-      em.className = "err-msg";
-      block.appendChild(em);
+  // ---------- success ----------
+  function showThanks() {
+    // alttaki barı kaldır
+    const bar = document.getElementById("submitBar");
+    if (bar) bar.remove();
+
+    // kartı “teşekkürler”e çevir
+    const card = document.querySelector(".card");
+    if (card) {
+      card.classList.add("success");
+      card.innerHTML = `
+        <h2 class="thanks-title">Yanıtınız kaydedildi</h2>
+        <p class="thanks-sub">Teşekkürler!</p>
+        <div class="thanks-note">
+          <div>Bu form <strong>mikroar.com</strong> alanında oluşturulmuştur.</div>
+          <div>İletişim: <a href="mailto:iletisim@mikroar.com">iletisim@mikroar.com</a></div>
+          <strong>MikroAR Araştırma</strong>
+        </div>
+      `;
     }
-    em.textContent = msg || "Lütfen bu soruyu yanıtlayın.";
-  }
-  function scrollToBlock(idx) {
-    const target = document.querySelector(`.q[data-idx="${idx}"]`);
-    if (!target) return;
-    target.classList.add("active");
-    target.scrollIntoView({ behavior: "smooth", block: "start" });
-    const first = target.querySelector("input,textarea,select");
-    if (first) setTimeout(() => first.focus(), 150);
-  }
-  function isAnswered(q, idx) {
-    const key = "q_" + idx;
-    if (q.type === "checkbox") {
-      return document.querySelectorAll(`[name="${key}"]:checked`).length > 0;
-    }
-    if (q.type === "radio") {
-      return !!document.querySelector(`[name="${key}"]:checked`);
-    }
-    const el = document.querySelector(`[name="${key}"]`);
-    const v = (el && el.value) ? el.value.trim() : "";
-    return v.length > 0;
+
+    // başa kaydır
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  // --- Auto advance + hata temizleme
-  function attachAutoAdvance(schema) {
+  // ---------- submit ----------
+  async function submitHandler(ev) {
+    ev.preventDefault();
     const formEl = $("#f");
-    const blocks = Array.from(formEl.querySelectorAll(".q"));
+    const btn    = $("#btnSend");
+    if (btn) btn.disabled = true;
 
-    function goTo(idx) {
-      blocks.forEach((b) => b.classList.remove("active"));
-      const target = blocks[idx];
-      if (!target) {
-        const btn = $("#btnSend");
-        btn?.scrollIntoView({ behavior: "smooth", block: "center" });
-        btn?.classList.add("pulse");
-        setTimeout(() => btn?.classList.remove("pulse"), 1200);
-        return;
+    // cevapları topla
+    const fd = new FormData(formEl);
+    const answers = {};
+    for (const [k, v] of fd.entries()) {
+      if (k in answers) {
+        if (Array.isArray(answers[k])) answers[k].push(v);
+        else answers[k] = [answers[k], v];
+      } else {
+        const all = formEl.querySelectorAll(`[name="${k}"][type="checkbox"]`);
+        if (all.length > 1) {
+          answers[k] = [...all].filter(x => x.checked).map(x => x.value);
+        } else {
+          answers[k] = v;
+        }
       }
-      target.classList.add("active");
-      target.scrollIntoView({ behavior: "smooth", block: "start" });
-      const first = target.querySelector("input,textarea,select");
-      if (first) setTimeout(() => first.focus(), 150);
     }
 
-    (schema.questions || []).forEach((q, i) => {
-      const block = formEl.querySelector(`.q[data-idx="${i}"]`);
-      if (!block) return;
+    // zorunlu kontrol + ilk boş olana odaklan
+    const qs = (state.form?.schema?.questions) || [];
+    for (let i = 0; i < qs.length; i++) {
+      const q = qs[i];
+      if (!q?.required) continue;
 
-      // Her etkileşimde hata temizle
-      block.addEventListener("input", () => clearError(block), { passive: true });
-      block.addEventListener("change", () => clearError(block), { passive: true });
+      const key = "q_" + i;
+      const val = answers[key];
+      const empty =
+        val == null ||
+        (Array.isArray(val) && val.length === 0) ||
+        (typeof val === "string" && !val.trim());
 
-      if (q.type === "radio") {
-        block.querySelectorAll('input[type="radio"]').forEach((el) => {
-          el.addEventListener("change", () => {
-            block.classList.add("answered");
-            goTo(i + 1);
-          });
-        });
-      } else if (q.type === "text") {
-        const inp = block.querySelector('input[type="text"]');
-        if (inp) {
-          inp.addEventListener("keydown", (e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              block.classList.add("answered");
-              goTo(i + 1);
-            }
-          });
-          inp.addEventListener("blur", () => {
-            if (inp.value.trim()) block.classList.add("answered");
-          });
+      if (empty) {
+        const target = formEl.querySelector(`[name="${key}"]`) ||
+                       formEl.querySelector(`[name="${key}[]"]`) ||
+                       formEl.querySelector(`#${key}`);
+        if (target) {
+          target.scrollIntoView({ behavior: "smooth", block: "center" });
+          target.focus?.();
         }
-      } else if (q.type === "textarea") {
-        const ta = block.querySelector("textarea");
-        if (ta) {
-          ta.addEventListener("keydown", (e) => {
-            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-              e.preventDefault();
-              block.classList.add("answered");
-              goTo(i + 1);
-            }
-          });
-        }
-      } else if (q.type === "checkbox") {
-        block.querySelectorAll('input[type="checkbox"]').forEach((el) => {
-          el.addEventListener("change", () => {
-            const any = block.querySelectorAll('input[type="checkbox"]:checked').length > 0;
-            block.classList.toggle("answered", any);
-          });
-        });
+        if (btn) btn.disabled = false;
+        return; // gönderme yok
       }
-    });
-  }
+    }
 
-  // --- Submit + zorunlu doğrulama
-  function makeSubmitHandler(schema, slug) {
-    return async function (e) {
-      e.preventDefault();
-      const btn = $("#btnSend");
-      btn.disabled = true;
+    // gönder
+    try {
+      const slug = state.form?.slug;
+      const resp = await fetch(`/api/forms/${encodeURIComponent(slug)}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers })
+      });
 
-      // 1) Zorunlu soruları kontrol et, ilk eksikte odaklan ve engelle
-      const qs = schema.questions || [];
-      let firstMissing = -1;
-      for (let i = 0; i < qs.length; i++) {
-        const q = qs[i];
-        if (q.required && !isAnswered(q, i)) {
-          firstMissing = i;
-          break;
-        }
-      }
-      if (firstMissing !== -1) {
-        const block = document.querySelector(`.q[data-idx="${firstMissing}"]`);
-        if (block) {
-          markError(block, "Lütfen bu zorunlu soruyu yanıtlayın.");
-          scrollToBlock(firstMissing);
-        }
-        btn.disabled = false;
+      let j = {};
+      try { j = await resp.json(); } catch {}
+
+      // aynı IP’den daha önce gönderilmişse de teşekkür ekranı
+      if (resp.status === 409 || j.alreadySubmitted) {
+        showThanks();
         return;
       }
 
-      try {
-        // 2) Cevapları topla
-        const answers = {};
-        qs.forEach((q, idx) => {
-          const key = "q_" + idx;
-          if (q.type === "checkbox") {
-            answers[key] = Array.from(
-              document.querySelectorAll(`[name="${key}"]:checked`)
-            ).map((el) => el.value);
-          } else {
-            const val = new FormData($("#f")).get(key);
-            answers[key] = val;
-          }
-        });
-
-        // 3) Gönder
-        const resp = await fetch(`/api/forms/${encodeURIComponent(slug)}/submit`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ answers }),
-        });
-
-        let j = {};
-        try { j = await resp.json(); } catch {}
-
-        if (resp.status === 409 || j.alreadySubmitted) {
-          const when = j.at ? ` (${new Date(j.at).toLocaleString()})` : "";
-          alert("Bu IP’den zaten yanıt gönderilmiş." + when);
-          btn.disabled = false;
-          return;
-        }
-        if (!resp.ok || !j.ok) {
-          alert(j.error || "Gönderilemedi");
-          btn.disabled = false;
-          return;
-        }
-        location.href = "/thanks.html";
-      } catch (err) {
-        alert("Hata: " + err.message);
-        btn.disabled = false;
+      if (!resp.ok || j.ok === false) {
+        alert(j.error || "Gönderim hatası");
+        if (btn) btn.disabled = false;
+        return;
       }
-    };
+
+      // başarılı
+      showThanks();
+    } catch (e) {
+      alert("Hata: " + e.message);
+      if (btn) btn.disabled = false;
+    }
   }
 
-  // --- Boot
-  function boot() {
+  // ---------- boot ----------
+  async function boot() {
+    // SSR ile geldiyse
     if (window.__FORM__ && window.__FORM__.slug) {
       renderForm(window.__FORM__);
       return;
     }
-    const slug = new URLSearchParams(location.search).get("slug");
+
+    // slug ile fetch
+    const params = new URLSearchParams(location.search);
+    const slug = params.get("slug");
     if (!slug) {
       document.body.innerHTML = "<h2>Form bulunamadı (slug yok)</h2>";
       return;
     }
-    fetch(`/api/forms/${encodeURIComponent(slug)}`)
-      .then((r) => r.json())
-      .then((j) => {
-        if (!j.ok) throw new Error(j.error || "Form alınamadı");
-        renderForm(j.form);
-      })
-      .catch((e) => {
-        document.body.innerHTML = "<h2>Form yüklenemedi.</h2>";
-        console.error(e);
-      });
+    try {
+      const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`);
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || "Form alınamadı");
+      renderForm(j.form);
+    } catch (e) {
+      document.body.innerHTML = "<h2>Form yüklenemedi.</h2>";
+    }
   }
 
   document.addEventListener("DOMContentLoaded", boot);
