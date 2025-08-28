@@ -1,16 +1,6 @@
-/* MikroAR – Admin Form Builder (hafif, responsive) */
+/* MikroAR – Admin Form Builder */
 const $ = s => document.querySelector(s);
 const qsWrap = $('#qs');
-
-const toast = (m, type='')=>{
-  const t = $('#toast');
-  t.textContent = m;
-  t.style.display='block';
-  t.style.borderColor =
-    type==='err' ? '#ef4444' :
-    type==='ok'  ? '#22c55e' : 'var(--line)';
-  setTimeout(()=> t.style.display='none', 2200);
-};
 
 const els = {
   slug:   $('#slug'),
@@ -24,22 +14,35 @@ const els = {
   btnSave:$('#btnSave'),
 };
 
+const toast = (m, type='')=>{
+  const t = $('#toast');
+  t.textContent = m;
+  t.style.display='block';
+  t.style.borderColor =
+    type==='err' ? '#ef4444' :
+    type==='ok'  ? '#22c55e' : 'var(--line)';
+
+  // Mesajı görünür alana getir
+  setTimeout(()=> t.scrollIntoView({behavior:'smooth', block:'end'}), 0);
+  setTimeout(()=> t.style.display='none', 2200);
+};
+
 const blankQ = () => ({
-  type:'radio',
-  label:'',
+  type:'radio',        // 'radio' | 'checkbox' | 'text' | 'textarea'
+  label:'',            // soru metni
   required:true,
   options:['Evet','Hayır']
 });
 
-let questions = [];
+let questions = [];   // state
 
-// ---------- helpers
 function chip(k,v){
   const s = document.createElement('span');
   s.className='chip';
   s.textContent = `${k}: ${v}`;
   return s;
 }
+
 function renderMeta(){
   els.meta.innerHTML='';
   els.meta.append(
@@ -47,6 +50,7 @@ function renderMeta(){
     chip('Zorunlu', questions.filter(q=>q.required).length)
   );
 }
+
 function qRow(q,i){
   const div = document.createElement('div');
   div.className='q'; div.dataset.idx = i;
@@ -61,16 +65,16 @@ function qRow(q,i){
       </select>
       <input class="qlabel" type="text" placeholder="Soru metni"/>
       <label class="req"><input class="qreq" type="checkbox"/> Zorunlu</label>
-      <button class="up btn" type="button" title="Yukarı">↑</button>
-      <button class="down btn" type="button" title="Aşağı">↓</button>
+      <button class="up btn" title="Yukarı">↑</button>
+      <button class="down btn" title="Aşağı">↓</button>
     </div>
     <div class="opts">
       <label>Seçenekler (her satır bir seçenek):</label>
       <textarea class="qopts" placeholder="Evet&#10;Hayır"></textarea>
       <div class="hint">Metin sorularında seçenek gerekmez.</div>
       <div style="display:flex;gap:8px;margin-top:6px">
-        <button class="dup btn" type="button">Kopyala</button>
-        <button class="del btn" type="button" style="color:#ef4444;border-color:#ef4444">Sil</button>
+        <button class="dup btn">Kopyala</button>
+        <button class="del btn" style="color:#ef4444;border-color:#ef4444">Sil</button>
       </div>
     </div>
   `;
@@ -85,13 +89,14 @@ function qRow(q,i){
   rChk.checked = !!q.required;
   if (Array.isArray(q.options)) oTxt.value = q.options.join('\n');
 
-  const showOpts = ()=>{
+  const updateVisible = ()=>{
     div.querySelector('.opts').style.display =
       (tSel.value==='radio'||tSel.value==='checkbox') ? 'block' : 'none';
   };
-  showOpts();
+  updateVisible();
 
-  tSel.onchange = ()=>{ q.type = tSel.value; showOpts(); renderMeta(); };
+  // events
+  tSel.onchange = ()=>{ q.type = tSel.value; updateVisible(); renderMeta(); };
   lInp.oninput  = ()=>{ q.label = lInp.value; };
   rChk.onchange = ()=>{ q.required = rChk.checked; renderMeta(); };
   oTxt.oninput  = ()=>{ q.options = oTxt.value.split('\n').map(s=>s.trim()).filter(Boolean); };
@@ -103,11 +108,13 @@ function qRow(q,i){
 
   return div;
 }
+
 function render(){
   qsWrap.innerHTML='';
   questions.forEach((q,i)=> qsWrap.appendChild(qRow(q,i)));
   renderMeta();
 }
+
 function setForm(form){
   els.title.value  = form.title || '';
   els.description.value = form.description || '';
@@ -117,108 +124,53 @@ function setForm(form){
     : [];
   render();
 }
-function sanitizeQuestions(arr){
-  return (arr || []).map(q=>{
-    const t = (q.type || 'radio').trim();
-    const out = {
-      type: ['radio','checkbox','text','textarea'].includes(t) ? t : 'radio',
-      label: (q.label||'').trim(),
-      required: !!q.required
-    };
-    if (out.type==='radio' || out.type==='checkbox'){
-      out.options = (Array.isArray(q.options) ? q.options : [])
-        .map(s=>String(s||'').trim())
-        .filter(Boolean);
-    }
-    return out;
-  });
-}
 
-// ---------- auth guard
-async function ensureLogin() {
-  try{
-    const r = await fetch('/api/admin/ping', { headers:{'Accept':'application/json'} });
-    if (r.status === 401) {
-      // Basic Auth penceresini açtır
-      location.href = `/admin/gate?next=${encodeURIComponent(location.pathname)}`;
-      return false;
-    }
-    return true;
-  }catch{ return true; }
-}
-
-// ---------- data ops
 async function load(){
   const slug = els.slug.value.trim();
   if (!slug) return toast('Slug gerekli','err');
   try{
-    if (!(await ensureLogin())) return;
-
-    const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`, {
-      headers:{'Accept':'application/json'}
-    });
+    const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`);
     const j = await r.json();
-    if (!r.ok || j.ok === false) throw new Error(j.error || 'Bulunamadı');
+    if (!r.ok || j.ok === false) throw new Error(j.error || `HTTP ${r.status}`);
     setForm(j.form);
     toast('Yüklendi');
-  }catch(e){
-    toast('Yüklenemedi: '+ (e?.message || e), 'err');
-  }
+  }catch(e){ toast('Yüklenemedi: '+e.message,'err'); }
 }
 
 async function save(){
-  const slug = els.slug.value.trim().toLowerCase();
+  const slug = els.slug.value.trim();
   if (!slug) return toast('Slug gerekli','err');
 
   const body = {
     slug,
-    title: (els.title.value || '').trim(),
-    description: (els.description.value || '').trim() || null,
+    title: els.title.value.trim(),
+    description: els.description.value.trim() || null,
     active: els.active.value === 'true',
-    schema: { questions: sanitizeQuestions(questions) }
+    schema: { questions }
   };
 
   try{
-    if (!(await ensureLogin())) return;
-
     const r = await fetch('/admin/api/forms', {
       method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'Accept':'application/json'
-      },
+      headers:{'Content-Type':'application/json'},
       body: JSON.stringify(body)
     });
 
-    // JSON değilse (örn. 401 Basic Auth HTML) metni göster
+    // HTML 404 vs durumlarında sağlam kontrol
     const ct = r.headers.get('content-type') || '';
-    let j;
-    if (ct.includes('application/json')) {
-      j = await r.json();
-    } else {
-      const txt = (await r.text()).slice(0,180);
-      throw new Error(`HTTP ${r.status} – ${txt}`);
-    }
+    let j = null;
+    if (ct.includes('application/json')) j = await r.json();
+    if (!r.ok || !j?.ok) throw new Error(j?.error || `HTTP ${r.status}`);
 
-    if (!r.ok || !j.ok){
-      const msg = j.error || j.detail || `HTTP ${r.status}`;
-      throw new Error(msg);
-    }
     toast('Kaydedildi ✓','ok');
   }catch(e){
-    toast('Hata: '+ (e?.message || e), 'err');
+    toast('Hata: '+e.message,'err');
   }
 }
 
-// ---------- UI
+// UI
 els.btnAdd.onclick = ()=>{ questions.push(blankQ()); render(); };
-els.btnNew.onclick = ()=>{
-  els.title.value='';
-  els.description.value='';
-  els.active.value='true';
-  questions=[];
-  render();
-};
+els.btnNew.onclick = ()=>{ els.title.value=''; els.description.value=''; els.active.value='true'; questions=[]; render(); };
 els.btnLoad.onclick= load;
 els.btnSave.onclick= save;
 
