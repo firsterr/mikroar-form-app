@@ -89,8 +89,18 @@
     state.form = data;
     const title = $("#form-title");
     const formEl = $("#f");
+    const descEl = $("#form-desc");
 
-    title && (title.textContent = data.title || "Anket");
+   title.textContent = data.title || "Anket";
+if (descEl) {
+  const txt = (data.description || "").trim();
+  if (txt) {
+    descEl.textContent = txt;
+    descEl.style.display = "";
+  } else {
+    descEl.style.display = "none";
+  }
+}
     if (!formEl) return;
 
     formEl.innerHTML = "";
