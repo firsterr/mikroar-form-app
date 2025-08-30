@@ -46,15 +46,18 @@ const app = express();
 app.set("trust proxy", true);
 app.disable("x-powered-by");
 
-// ===== ULTRA-ERKEN HEALTH: zinciri en başta kes =====
-app.use((req, res, next) => {
-  const p = req.path;
-  if (p === "/health" || p === "/api/health") {
-    return res.status(200).type("text").send("ok");
-  }
-  next();
+// ---- KESİN SAĞLIK UCU (en üstte, her şeyden önce) ----
+const BUILD_ID = (process.env.RENDER_GIT_COMMIT || Date.now().toString(36)).slice(-7);
+
+// Tüm HTTP metodları ve iki path için tek noktadan yanıt
+app.all(['/health', '/api/health'], (req, res) => {
+  res.set('x-build', BUILD_ID).type('text').status(200).send('ok-' + BUILD_ID);
 });
-// ====================================================
+/* Açıklama:
+   - app.all: GET/HEAD/OPTIONS dahil tüm metodları yakalar.
+   - Listedeki iki path tam eşleşir.
+   - Bu blok en ÜSTTE olduğu için zinciri kısa devre eder; 404'e düşemez. */
+// -------------------------------------------------------
 
 // ---- Security
 const faList = FRAME_ANCESTORS
