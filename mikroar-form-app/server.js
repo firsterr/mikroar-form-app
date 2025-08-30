@@ -46,20 +46,21 @@ const pool = new Pool({
 const app = express();
 app.set("trust proxy", true);
 
-// --- ULTRA-ERKEN HEALTH (her şeyden önce) ---
+// --- DIAG: ultra-erken health + route list ---
 app.use((req, res, next) => {
-  const p = req.path;
-  if (p === '/health' || p === '/api/health') {
+  if (req.path === '/health' || req.path === '/api/health') {
     return res.status(200).type('text').send('ok');
+  }
+  if (req.path === '/__routes') {
+    const routes = [];
+    (app._router?.stack || []).forEach((m) => {
+      if (m.route) routes.push(`${Object.keys(m.route.methods).join(',').toUpperCase()} ${m.route.path}`);
+    });
+    return res.json({ routes });
   }
   next();
 });
-// ---------------------------------------------
-// ---- HEALTH (EN ÜSTE) ----
-const health = (_req, res) => res.status(200).type("text").send("ok");
-app.get("/health", health);      // https://<host>/health
-app.get("/api/health", health);  // https://<host>/api/health
-// ---------------------------
+// ----------------------------------------------
 
 // ---- Security
 const faList = FRAME_ANCESTORS
