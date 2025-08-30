@@ -46,6 +46,15 @@ const pool = new Pool({
 const app = express();
 app.set("trust proxy", true);
 
+// --- ULTRA-ERKEN HEALTH (her şeyden önce) ---
+app.use((req, res, next) => {
+  const p = req.path;
+  if (p === '/health' || p === '/api/health') {
+    return res.status(200).type('text').send('ok');
+  }
+  next();
+});
+// ---------------------------------------------
 // ---- HEALTH (EN ÜSTE) ----
 const health = (_req, res) => res.status(200).type("text").send("ok");
 app.get("/health", health);      // https://<host>/health
