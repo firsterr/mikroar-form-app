@@ -124,6 +124,11 @@ app.use((req,res,next)=>{
   if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
 });
+// ---- HEALTH (iki path birden) ----
+const health = (_req, res) => res.status(200).type('text').send('ok');
+app.get('/health', health);
+app.get('/api/health', health); // eğer tüm API'yi /api altında topluyorsan bu da çalışır
+// ----------------------------------
 
 // Sağlık ucu (Netlify /api/health testi ve ön ısıtma için)
 app.get('/health', (_req,res)=>res.status(200).send('ok'));
