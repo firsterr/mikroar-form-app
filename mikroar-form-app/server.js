@@ -46,10 +46,10 @@ const pool = new Pool({
 const app = express();
 app.set("trust proxy", true);
 
-// --- DIAG: ultra-erken health + route list ---
+// --- ULTRA-ERKEN HEALTH & ROUTE DİYAG ---
 app.use((req, res, next) => {
   if (req.path === '/health' || req.path === '/api/health') {
-    return res.status(200).type('text').send('ok');
+    return res.status(200).type('text').send('ok'); // zinciri en başta kes
   }
   if (req.path === '/__routes') {
     const routes = [];
