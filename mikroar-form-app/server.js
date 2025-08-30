@@ -109,8 +109,24 @@ app.use(
   })
 );
 
-// ---- Health (Render kontrolü için çok hızlı!)
-app.get("/health", (_req, res) => res.status(200).send("ok"));
+// CORS (Netlify alt alanın + prod domain)
+const ALLOWED = new Set([
+  'https://anketformu.netlify.app',
+  'https://anket.mikroar.com',
+  'https://form.mikroar.com'
+]);
+app.use((req,res,next)=>{
+  const o = req.headers.origin || '';
+  if (ALLOWED.has(o)) res.header('Access-Control-Allow-Origin', o);
+  res.header('Vary','Origin');
+  res.header('Access-Control-Allow-Headers','Content-Type');
+  res.header('Access-Control-Allow-Methods','POST,GET,OPTIONS');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
+
+// Sağlık ucu (Netlify /api/health testi ve ön ısıtma için)
+app.get('/health', (_req,res)=>res.status(200).send('ok'));
 
 // ---- Subdomain guard
 app.use((req, res, next) => {
