@@ -1,5 +1,6 @@
 // server.js — ESM
 
+// ---- Imports
 import express from "express";
 import helmet from "helmet";
 import cors from "cors";
@@ -30,7 +31,7 @@ const {
   ADMIN_USER = "admin",
   ADMIN_PASS = "admin",
   FRAME_ANCESTORS = "",
-  DUPLICATE_POLICY = "BLOCK",
+  DUPLICATE_POLICY = "BLOCK", // BLOCK | UPDATE
 } = process.env;
 
 // ---- DB
@@ -44,60 +45,6 @@ const pool = new Pool({
 // ---- App
 const app = express();
 app.set("trust proxy", true);
-app.disable("x-powered-by");
-
-// ---- SAĞLIK UCU KISA DEVRE (her şeyin EN ÜSTÜNDE) ----
-const BUILD_ID = (process.env.RENDER_GIT_COMMIT || Date.now().toString(36)).slice(-7);
-
-// Express router'a girmeden önce, URL'i ham hâliyle kesiyoruz
-app.use((req, res, next) => {
-  const u = (req.originalUrl || req.url || "").split("?")[0]; // /health?x=1 gibi durumlar için
-  if (u === "/health" || u === "/api/health" || u === "/health/" || u === "/api/health/") {
-    res.set("x-build", BUILD_ID).type("text").status(200).send("ok-" + BUILD_ID);
-    return; // zinciri burada KES
-  }
-  next();
-});
-// -------------------------------------------------------
-
-// ---- Security
-const faList = FRAME_ANCESTORS
-  ? FRAME_ANCESTORS.split(",").map((s) => s.trim()).filter(Boolean)
-  : [];
-
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      useDefaults: true,
-      directives: {
-        "default-src": ["'self'"],
-        "frame-ancestors": faList.length ? faList : ["'self'"],
-        "script-src": ["'self'", "'unsafe-inline'"],
-        "connect-src": ["'self'"],
-        "img-src": ["'self'", "data:"],
-        "style-src": ["'self'", "'unsafe-inline'"],
-      },
-    },
-    frameguard: false,
-    crossOriginEmbedderPolicy: false,
-  })
-);
-
-// ---- CORS
-const ALLOWED = new Set([
-  "https://anketformu.netlify.app",
-  "https://anket.mikroar.com",
-  "https://form.mikroar.com",
-]);
-app.use((req, res, next) => {
-  const o = req.headers.origin || "";
-  if (ALLOWED.has(o)) res.header("Access-Control-Allow-Origin", o);
-  res.header("Vary", "Origin");
-  res.header("Access-Control-Allow-Headers", "Content-Type");
-  res.header("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
-  if (req.method === "OPTIONS") return res.sendStatus(200);
-  next();
-});
 
 // ---- Helpers
 function getHost(req) {
@@ -114,6 +61,7 @@ function pickClientIp(req) {
     req.ip,
     req.socket?.remoteAddress,
   ].filter(Boolean);
+
   for (let raw of chain) {
     let first = String(raw).split(",")[0].trim();
     first = first.replace(/^\[|\]$/g, "").replace(/:\d+$/, "");
@@ -138,11 +86,36 @@ function adminOnly(req, res, next) {
   next();
 }
 
+// ---- Security
+const faList = FRAME_ANCESTORS
+  ? FRAME_ANCESTORS.split(",").map((s) => s.trim()).filter(Boolean)
+  : [];
+
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        "default-src": ["'self'"],
+        "frame-ancestors": faList.length ? faList : ["'self'"],
+        "script-src": ["'self'", "'unsafe-inline'"],
+        "connect-src": ["'self'"],
+        "img-src": ["'self'", "data:"],
+        "style-src": ["'self'", "'unsafe-inline'"], // harici + inline css
+      },
+    },
+    frameguard: false,
+    crossOriginEmbedderPolicy: false,
+  })
+);
+
+// ---- Health (Render kontrolü için çok hızlı!)
+app.get("/health", (_req, res) => res.status(200).send("ok"));
+
 // ---- Subdomain guard
 app.use((req, res, next) => {
   const host = getHost(req);
-
-  // health uçları zaten ultra-erken blokta döndü; buraya gelmezler.
+  if (req.path === "/health") return next();
 
   // anket.* → tüm sayfalar şifreli, ayrıca /form.html engelli
   if (host.startsWith("anket.")) {
@@ -173,10 +146,14 @@ app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan("combined"));
 
-// ------------------------------ API ------------------------------
+// ----------------------------------------------------------------------------
+//                                  API’LER
+// ----------------------------------------------------------------------------
 
+// Admin ping
 app.get("/api/admin/ping", adminOnly, (_req, res) => res.json({ ok: true }));
 
+// Form listesi (aktif)
 app.get("/api/forms-list", async (_req, res) => {
   try {
     const { rows } = await pool.query(
@@ -188,6 +165,7 @@ app.get("/api/forms-list", async (_req, res) => {
   }
 });
 
+// Tek form
 app.get("/api/forms/:slug", async (req, res) => {
   try {
     const { slug } = req.params;
@@ -203,21 +181,28 @@ app.get("/api/forms/:slug", async (req, res) => {
       return res.status(403).json({ ok: false, error: "inactive" });
 
     const form = rows[0];
-    try { if (typeof form.schema === "string") form.schema = JSON.parse(form.schema); } catch {}
+    try {
+      if (typeof form.schema === "string") form.schema = JSON.parse(form.schema);
+    } catch {}
     res.json({ ok: true, form });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
 
+// Admin: form create/update (TEK rota)
 app.post("/admin/api/forms", adminOnly, async (req, res) => {
   try {
     let { slug, title, description = null, active = true, schema, questions } =
       req.body || {};
-    if (!slug || !title) return res.status(400).json({ ok: false, error: "slug ve title gerekli" });
+
+    if (!slug || !title) {
+      return res.status(400).json({ ok: false, error: "slug ve title gerekli" });
+    }
     if (!schema && Array.isArray(questions)) schema = { questions };
     if (!schema || !Array.isArray(schema.questions)) schema = { questions: [] };
 
+    // upsert
     await pool.query(
       `INSERT INTO forms (slug, title, description, active, schema, created_at)
        VALUES ($1, $2, $3, $4, $5, NOW())
@@ -228,12 +213,14 @@ app.post("/admin/api/forms", adminOnly, async (req, res) => {
              schema = EXCLUDED.schema`,
       [slug.trim().toLowerCase(), title, description, !!active, schema]
     );
+
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
 
+// Cevap gönderimi
 app.post("/api/forms/:slug/submit", async (req, res) => {
   const { slug } = req.params;
   const answersRaw = req.body?.answers ?? req.body;
@@ -241,22 +228,7 @@ app.post("/api/forms/:slug/submit", async (req, res) => {
     return res.status(400).json({ ok: false, error: "invalid_payload" });
   }
   const answersJson = JSON.stringify(answersRaw);
-  const clientIp = (()=>{
-    const chain = [
-      req.headers["cf-connecting-ip"],
-      req.headers["x-client-ip"],
-      req.headers["x-real-ip"],
-      req.headers["x-forwarded-for"],
-      req.ip,
-      req.socket?.remoteAddress,
-    ].filter(Boolean);
-    for (let raw of chain) {
-      let first = String(raw).split(",")[0].trim().replace(/^\[|\]$/g,"").replace(/:\d+$/,"");
-      if (first.startsWith("::ffff:")) first = first.slice(7);
-      if (net.isIP(first)) return first;
-    }
-    return null;
-  })();
+  const clientIp = pickClientIp(req) || null;
 
   try {
     const f = await pool.query("SELECT slug, active FROM forms WHERE slug = $1", [slug]);
@@ -287,7 +259,11 @@ app.post("/api/forms/:slug/submit", async (req, res) => {
           "SELECT created_at FROM responses WHERE form_slug = $1 AND ip = $2::inet",
           [slug, clientIp]
         );
-        return res.json({ ok: true, alreadySubmitted: true, at: old.rows[0]?.created_at || null });
+        return res.json({
+          ok: true,
+          alreadySubmitted: true,
+          at: old.rows[0]?.created_at || null,
+        });
       }
       throw err;
     }
@@ -296,24 +272,61 @@ app.post("/api/forms/:slug/submit", async (req, res) => {
   }
 });
 
-// ------------------------------ SSR ------------------------------
+// Sonuçlar
+app.get("/api/admin/forms/:slug/responses", adminOnly, async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const { rows: formRows } = await pool.query(
+      "SELECT title, schema, active FROM forms WHERE slug = $1",
+      [slug]
+    );
+    if (!formRows.length)
+      return res.status(404).json({ ok: false, error: "Form bulunamadı" });
+
+    const meta = formRows[0];
+    try {
+      if (typeof meta.schema === "string") meta.schema = JSON.parse(meta.schema);
+    } catch {}
+
+    const { rows } = await pool.query(
+      `SELECT created_at, ip::text AS ip, answers
+         FROM responses
+        WHERE form_slug = $1
+        ORDER BY created_at DESC`,
+      [slug]
+    );
+    res.json({ ok: true, meta, rows });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ----------------------------------------------------------------------------
+//                                  SSR
+// ----------------------------------------------------------------------------
 
 function ssrHtml(form) {
   const safeTitle = (form.title || "Anket").replace(/</g, "&lt;");
   const cssLink = `<link rel="stylesheet" href="/form.css?v=2">`;
   return `<!doctype html>
-<html lang="tr"><head>
-<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>${safeTitle}</title>${cssLink}
-</head><body>
+<html lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>${safeTitle}</title>
+${cssLink}
+</head>
+<body>
   <h1 id="form-title"></h1>
   <p id="form-desc" class="form-desc" style="display:none"></p>
   <form id="f"></form>
   <script>window.__FORM__ = ${JSON.stringify(form)};</script>
   <script src="/form.js?v=ssr2"></script>
-</body></html>`;
+</body>
+</html>`;
 }
 
+// /form.html?slug=...
 app.get("/form.html", async (req, res, next) => {
   const slug = (req.query.slug || "").toString().trim().toLowerCase();
   if (!slug) return next();
@@ -326,13 +339,16 @@ app.get("/form.html", async (req, res, next) => {
       return res.status(404).send("Form bulunamadı veya pasif.");
     }
     const form = rows[0];
-    try { if (typeof form.schema === "string") form.schema = JSON.parse(form.schema); } catch {}
+    try {
+      if (typeof form.schema === "string") form.schema = JSON.parse(form.schema);
+    } catch {}
     return res.status(200).send(ssrHtml(form));
-  } catch {
+  } catch (e) {
     return res.status(500).send("Sunucu hatası.");
   }
 });
 
+// /s/:code kısa link
 app.get("/s/:code", async (req, res) => {
   const code = (req.params.code || "").trim();
   if (!code) return res.status(404).send("Not found");
@@ -358,17 +374,25 @@ app.get("/s/:code", async (req, res) => {
       return res.status(404).send("Form bulunamadı veya pasif.");
 
     const form = fr.rows[0];
-    try { if (typeof form.schema === "string") form.schema = JSON.parse(form.schema); } catch {}
-    pool.query("UPDATE shortlinks SET visits = coalesce(visits,0)+1 WHERE code=$1", [code]).catch(()=>{});
+    try {
+      if (typeof form.schema === "string") form.schema = JSON.parse(form.schema);
+    } catch {}
+
+    // ziyaret sayısını artır (arkaplan)
+    pool.query("UPDATE shortlinks SET visits = coalesce(visits,0)+1 WHERE code=$1", [code]).catch(() => {});
+
     return res.status(200).send(ssrHtml(form));
-  } catch {
+  } catch (e) {
     return res.status(500).send("Sunucu hatası.");
   }
 });
 
-// ---- Static (en sonda)
+// ----------------------------------------------------------------------------
+//                     STATİK SERVİS — EN SONA KOYDUK
+// ----------------------------------------------------------------------------
 app.use(express.static(path.join(__dirname, "public"), { index: false }));
 
+// Kök: host'a göre admin/index
 app.get("/", (req, res) => {
   const host = getHost(req);
   const file = host.startsWith("anket.")
