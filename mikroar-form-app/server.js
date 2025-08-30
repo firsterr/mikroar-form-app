@@ -46,45 +46,11 @@ const pool = new Pool({
 const app = express();
 app.set("trust proxy", true);
 
-// ---- Helpers
-function getHost(req) {
-  return (
-    req.headers["x-forwarded-host"] || req.hostname || req.headers.host || ""
-  ).toLowerCase();
-}
-function pickClientIp(req) {
-  const chain = [
-    req.headers["cf-connecting-ip"],
-    req.headers["x-client-ip"],
-    req.headers["x-real-ip"],
-    req.headers["x-forwarded-for"],
-    req.ip,
-    req.socket?.remoteAddress,
-  ].filter(Boolean);
-
-  for (let raw of chain) {
-    let first = String(raw).split(",")[0].trim();
-    first = first.replace(/^\[|\]$/g, "").replace(/:\d+$/, "");
-    if (first.startsWith("::ffff:")) first = first.slice(7);
-    if (net.isIP(first)) return first;
-  }
-  return null;
-}
-
-// ---- Admin basic auth
-function adminOnly(req, res, next) {
-  const hdr = req.headers.authorization || "";
-  if (!hdr.startsWith("Basic ")) {
-    res.set("WWW-Authenticate", 'Basic realm="MikroAR Admin"');
-    return res.status(401).send("Yetkisiz");
-  }
-  const [u, p] = Buffer.from(hdr.split(" ")[1], "base64").toString().split(":");
-  if (u !== ADMIN_USER || p !== ADMIN_PASS) {
-    res.set("WWW-Authenticate", 'Basic realm="MikroAR Admin"');
-    return res.status(401).send("Yetkisiz");
-  }
-  next();
-}
+// ---- HEALTH (EN ÜSTE) ----
+const health = (_req, res) => res.status(200).type("text").send("ok");
+app.get("/health", health);      // https://<host>/health
+app.get("/api/health", health);  // https://<host>/api/health
+// ---------------------------
 
 // ---- Security
 const faList = FRAME_ANCESTORS
@@ -99,7 +65,7 @@ app.use(
         "default-src": ["'self'"],
         "frame-ancestors": faList.length ? faList : ["'self'"],
         "script-src": ["'self'", "'unsafe-inline'"],
-        "connect-src": ["'self'"],
+        "connect-src": ["'self'"],       // API aynı origin
         "img-src": ["'self'", "data:"],
         "style-src": ["'self'", "'unsafe-inline'"], // harici + inline css
       },
@@ -111,32 +77,26 @@ app.use(
 
 // CORS (Netlify alt alanın + prod domain)
 const ALLOWED = new Set([
-  'https://anketformu.netlify.app',
-  'https://anket.mikroar.com',
-  'https://form.mikroar.com'
+  "https://anketformu.netlify.app",
+  "https://anket.mikroar.com",
+  "https://form.mikroar.com",
 ]);
-app.use((req,res,next)=>{
-  const o = req.headers.origin || '';
-  if (ALLOWED.has(o)) res.header('Access-Control-Allow-Origin', o);
-  res.header('Vary','Origin');
-  res.header('Access-Control-Allow-Headers','Content-Type');
-  res.header('Access-Control-Allow-Methods','POST,GET,OPTIONS');
-  if (req.method === 'OPTIONS') return res.sendStatus(200);
+app.use((req, res, next) => {
+  const o = req.headers.origin || "";
+  if (ALLOWED.has(o)) res.header("Access-Control-Allow-Origin", o);
+  res.header("Vary", "Origin");
+  res.header("Access-Control-Allow-Headers", "Content-Type");
+  res.header("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
+  if (req.method === "OPTIONS") return res.sendStatus(200);
   next();
 });
-// ---- HEALTH (iki path birden) ----
-const health = (_req, res) => res.status(200).type('text').send('ok');
-app.get('/health', health);
-app.get('/api/health', health); // eğer tüm API'yi /api altında topluyorsan bu da çalışır
-// ----------------------------------
-
-// Sağlık ucu (Netlify /api/health testi ve ön ısıtma için)
-app.get('/health', (_req,res)=>res.status(200).send('ok'));
 
 // ---- Subdomain guard
 app.use((req, res, next) => {
-  const host = getHost(req);
-  if (req.path === "/health") return next();
+  const host = (req.headers["x-forwarded-host"] || req.hostname || req.headers.host || "").toLowerCase();
+
+  // Health uçları her zaman serbest
+  if (req.path === "/health" || req.path === "/api/health") return next();
 
   // anket.* → tüm sayfalar şifreli, ayrıca /form.html engelli
   if (host.startsWith("anket.")) {
@@ -170,6 +130,21 @@ app.use(morgan("combined"));
 // ----------------------------------------------------------------------------
 //                                  API’LER
 // ----------------------------------------------------------------------------
+
+// Admin basic auth
+function adminOnly(req, res, next) {
+  const hdr = req.headers.authorization || "";
+  if (!hdr.startsWith("Basic ")) {
+    res.set("WWW-Authenticate", 'Basic realm="MikroAR Admin"');
+    return res.status(401).send("Yetkisiz");
+  }
+  const [u, p] = Buffer.from(hdr.split(" ")[1], "base64").toString().split(":");
+  if (u !== ADMIN_USER || p !== ADMIN_PASS) {
+    res.set("WWW-Authenticate", 'Basic realm="MikroAR Admin"');
+    return res.status(401).send("Yetkisiz");
+  }
+  next();
+}
 
 // Admin ping
 app.get("/api/admin/ping", adminOnly, (_req, res) => res.json({ ok: true }));
@@ -415,7 +390,8 @@ app.use(express.static(path.join(__dirname, "public"), { index: false }));
 
 // Kök: host'a göre admin/index
 app.get("/", (req, res) => {
-  const host = getHost(req);
+  const host =
+    (req.headers["x-forwarded-host"] || req.hostname || req.headers.host || "").toLowerCase();
   const file = host.startsWith("anket.")
     ? path.join(__dirname, "public", "admin.html")
     : path.join(__dirname, "public", "index.html");
