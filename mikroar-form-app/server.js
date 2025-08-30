@@ -46,17 +46,18 @@ const app = express();
 app.set("trust proxy", true);
 app.disable("x-powered-by");
 
-// ---- KESİN SAĞLIK UCU (en üstte, her şeyden önce) ----
+// ---- SAĞLIK UCU KISA DEVRE (her şeyin EN ÜSTÜNDE) ----
 const BUILD_ID = (process.env.RENDER_GIT_COMMIT || Date.now().toString(36)).slice(-7);
 
-// Tüm HTTP metodları ve iki path için tek noktadan yanıt
-app.all(['/health', '/api/health'], (req, res) => {
-  res.set('x-build', BUILD_ID).type('text').status(200).send('ok-' + BUILD_ID);
+// Express router'a girmeden önce, URL'i ham hâliyle kesiyoruz
+app.use((req, res, next) => {
+  const u = (req.originalUrl || req.url || "").split("?")[0]; // /health?x=1 gibi durumlar için
+  if (u === "/health" || u === "/api/health" || u === "/health/" || u === "/api/health/") {
+    res.set("x-build", BUILD_ID).type("text").status(200).send("ok-" + BUILD_ID);
+    return; // zinciri burada KES
+  }
+  next();
 });
-/* Açıklama:
-   - app.all: GET/HEAD/OPTIONS dahil tüm metodları yakalar.
-   - Listedeki iki path tam eşleşir.
-   - Bu blok en ÜSTTE olduğu için zinciri kısa devre eder; 404'e düşemez. */
 // -------------------------------------------------------
 
 // ---- Security
