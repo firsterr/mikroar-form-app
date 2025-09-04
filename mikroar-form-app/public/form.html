@@ -26,132 +26,39 @@
   </main>
 
 <script>
-(async () => {
-  const h1 = document.querySelector('#form-title');
-  const pDesc = document.querySelector('#form-desc');
-  const form = document.querySelector('#dynForm');
-  const alertBox = document.querySelector('#alert');
+(() => {
+  // sayfa yolu /formayvalik gibi ise slug'ı path'ten al
+  const path = location.pathname.replace(/^\/+|\/+$/g, "");
+  const slug  = new URLSearchParams(location.search).get("slug") || path;
 
-  const params = new URLSearchParams(location.search);
-  const slug = params.get('slug');
+  const form = document.getElementById("f");
+  if (!form) return;
 
-  function showErr(msg) {
-    alertBox.className = 'err';
-    alertBox.textContent = msg;
-    alertBox.style.display = 'block';
-  }
-  function showOk(msg) {
-    alertBox.className = 'ok';
-    alertBox.textContent = msg;
-    alertBox.style.display = 'block';
-  }
-
-  if (!slug) {
-    h1.textContent = 'Form bulunamadı (slug yok)';
-    showErr('URL’de ?slug=... parametresi gerekli. Örn: form.html?slug=formayvalik');
-    return;
-  }
-
-  // Şemayı çek
-  let schema;
-  try {
-    // redirect ile forms fonksiyonuna gider
-    const res = await fetch(`/api/forms/${encodeURIComponent(slug)}`, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`Şema alınamadı (${res.status})`);
-    const json = await res.json();
-    if (!json.ok || !json.schema) throw new Error('Geçersiz şema cevabı');
-    schema = json.schema;
-  } catch (e) {
-    h1.textContent = 'Form yüklenemedi.';
-    showErr(e.message);
-    return;
-  }
-
-  // Başlık / açıklama
-  document.title = schema.title || 'Anket';
-  h1.textContent = schema.title || slug;
-  if (schema.description) {
-    pDesc.style.display = 'block';
-    pDesc.textContent = schema.description;
-  }
-
-  // Alanları çiz
-  form.innerHTML = '';
-  (schema.fields || []).forEach(f => {
-    const wrap = document.createElement('div');
-    wrap.className = 'row';
-
-    const label = document.createElement('label');
-    label.setAttribute('for', f.name);
-    label.textContent = f.label || f.name;
-
-    let el;
-    if (f.type === 'textarea') {
-      el = document.createElement('textarea');
-      el.rows = f.rows || 4;
-    } else {
-      el = document.createElement('input');
-      el.type = f.type || 'text';
-    }
-    el.id = f.name;
-    el.name = f.name;
-    if (f.required) el.required = true;
-    if (f.placeholder) el.placeholder = f.placeholder;
-
-    wrap.appendChild(label);
-    wrap.appendChild(el);
-    form.appendChild(wrap);
-  });
-
-  // Gönder butonu
-  const btnRow = document.createElement('div');
-  btnRow.className = 'row';
-  const btn = document.createElement('button');
-  btn.type = 'submit';
-  btn.textContent = 'Gönder';
-  btnRow.appendChild(btn);
-  form.appendChild(btnRow);
-
-  // Submit
-  form.addEventListener('submit', async (e) => {
+  form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    alertBox.style.display = 'none';
 
-    // Browser yerleşik validasyonu
-    if (!form.reportValidity()) return;
-
-    // Cevapları topla
-    const fd = new FormData(form);
-    const answers = Object.fromEntries(fd.entries());
-
-    btn.disabled = true;
-    btn.textContent = 'Gönderiliyor…';
+    const fields = Object.fromEntries(new FormData(form).entries());
 
     try {
-      const res = await fetch('/api/submit-form', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          form_slug: slug,
-          answers
-          // istersen extra alanlar: ip, slug (kısa link) vs.
-        })
+      // REDIRECT KULLANMAYIP DOĞRUDAN FONKSİYONA VURUYORUZ
+      const res = await fetch("/.netlify/functions/submit-form", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: JSON.stringify({ form_slug: slug, ...fields })
       });
 
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.ok) {
-        showOk('Kaydedildi. Teşekkürler!');
+        alert("Gönderildi, teşekkürler!");
         form.reset();
-        // window.location.href = '/tesekkurler.html';
       } else {
-        const msg = (json && (json.error || json.message)) || `Hata: ${res.status}`;
-        showErr(msg);
+        alert("Hata: " + (json?.data?.message || json?.error || res.status));
       }
     } catch (err) {
-      showErr('Bağlantı hatası: ' + err.message);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Gönder';
+      alert("Bağlantı hatası: " + err.message);
     }
   });
 })();
