@@ -1,8 +1,20 @@
 [build]
-publish = "public"
-command = ""
+  publish = "mikroar-form-app/public"
+  command = ""
+
+[functions]
+  # Ekran görüntünde görünen gerçek konum:
+  directory = "mikroar-form-app/netlify/functions"
 
 [[redirects]]
-from = "/api/*"
-to = "/.netlify/functions/:splat"
-status = 200
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(), microphone=(), camera=()"
