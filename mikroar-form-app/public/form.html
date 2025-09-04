@@ -12,42 +12,76 @@
     <h1 id="form-title">Yükleniyor…</h1>
     <p id="form-desc" class="form-desc" style="display:none"></p>
 
-    <!-- Formu JS doldurur -->
+    <!-- Formu form.js dolduruyor -->
     <form id="f"></form>
   </main>
 
   <!-- Davranış / çizim -->
   <script src="/form.js?v=ipfix2d"></script>
+
+  <!-- SUBMIT bağlama -->
   <script>
-document.addEventListener('DOMContentLoaded', function () {
-  const form = document.querySelector('form#surveyForm') || document.querySelector('form');
-  if (!form) return console.error('Form bulunamadı');
+  document.addEventListener('DOMContentLoaded', function () {
+    // Form elemanını güvenli şekilde bul
+    const form =
+      document.getElementById('f') ||
+      document.querySelector('form#surveyForm') ||
+      document.querySelector('main form') ||
+      document.querySelector('form');
 
-  form.addEventListener('submit', async function (e) {
-    e.preventDefault();
-    const payload = Object.fromEntries(new FormData(form).entries());
-
-    try {
-      const res = await fetch('/api/submit-form', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      const json = await res.json().catch(() => ({}));
-      if (res.ok && json.ok) {
-        alert('Kaydedildi. Teşekkürler.');
-        form.reset();
-        // İstersen teşekkür sayfasına yönlendir:
-        // window.location.href = '/thanks.html';
-      } else {
-        alert('Hata: ' + (json.error || res.status));
-      }
-    } catch (err) {
-      alert('Bağlantı hatası: ' + err.message);
+    if (!form) {
+      console.error('Form bulunamadı');
+      return;
     }
+
+    // slug'ı URL (?slug=...) / data-attr / hidden input sırasıyla bul
+    const params = new URLSearchParams(location.search);
+    const slugFromUrl = params.get('slug') || params.get('s');
+    const slugFromAttr = form.dataset.slug || null;
+    const slugFromInput = form.querySelector('input[name="slug"]')?.value || null;
+    const slug = slugFromUrl || slugFromAttr || slugFromInput;
+
+    if (!slug) {
+      alert('Form slug bulunamadı. URL’yi ?slug=formayvalik gibi açın.');
+      return;
+    }
+
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
+
+      // Form alanlarını JSON'a çevir
+      const payload = Object.fromEntries(new FormData(form).entries());
+      // slug alanı formda yoksa URL’den geleni ekle
+      if (!('slug' in payload)) payload.slug = slug;
+
+      // Gönderim sırasında butonu kilitle
+      const btn = form.querySelector('[type="submit"]');
+      const oldText = btn?.textContent;
+      if (btn) { btn.disabled = true; btn.textContent = 'Gönderiliyor…'; }
+
+      try {
+        const res = await fetch('/api/submit-form', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json.ok) {
+          alert('Kaydedildi. Teşekkürler.');
+          form.reset();
+          // İstersen teşekkür sayfasına yönlendir:
+          // window.location.href = '/thanks.html';
+        } else {
+          alert('Hata: ' + (json?.error || res.status));
+        }
+      } catch (err) {
+        alert('Bağlantı hatası: ' + err.message);
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = oldText || 'Gönder'; }
+      }
+    });
   });
-});
-</script>
+  </script>
 </body>
 </html>
