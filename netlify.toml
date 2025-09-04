@@ -6,6 +6,12 @@
   # Ekran görüntünde görünen gerçek konum:
   directory = "mikroar-form-app/netlify/functions"
 
+# BUNU, /api/* kuralının ÜSTÜNE ekle
+[[redirects]]
+from = "/api/:slug"
+to   = "/.netlify/functions/forms/:slug"
+status = 200
+
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
