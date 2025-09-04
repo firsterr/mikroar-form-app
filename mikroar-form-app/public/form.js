@@ -1,3 +1,29 @@
+// en üstte:
+const API_BASE = '/.netlify/functions';
+// formEl'ı bulduktan hemen sonra (fallback için):
+formEl.action = '/.netlify/functions/submit-form';
+formEl.method = 'POST';
+
+// submit handler:
+formEl.addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const answers = Object.fromEntries(new FormData(formEl).entries());
+  const payload = { form_slug: slug, answers };
+
+  const res = await fetch('/.netlify/functions/submit-form', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  const json = await res.json().catch(()=> ({}));
+  if (res.ok && json.ok) {
+    // başarı
+  } else {
+    // hata göster
+  }
+});
 // public/form.js — auto-advance + required validation + smooth focus
 (function () {
   const $ = (s) => document.querySelector(s);
@@ -233,7 +259,7 @@
             answers[key] = val;
           }
         });
-const API_BASE = '/.netlify/functions';
+
 
 const schemaRes = await fetch(
   `${API_BASE}/forms?slug=${encodeURIComponent(slug)}`
