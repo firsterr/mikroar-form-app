@@ -3,7 +3,52 @@ const API_BASE = '/.netlify/functions';
 // formEl'ı bulduktan hemen sonra (fallback için):
 formEl.action = '/.netlify/functions/submit-form';
 formEl.method = 'POST';
+// --- slug'ı al ---
+const params = new URLSearchParams(location.search);
+const slug = params.get('slug'); // ör: ?slug=formayvalik
+if (!slug) {
+  document.getElementById('form-title').textContent = 'Form yüklenemedi.';
+  console.error('URL’de ?slug=... yok');
+  throw new Error('missing slug');
+}
 
+// --- Fallback için action/method'u sabitle (JS çalışmasa bile form_slug gitsin) ---
+formEl.action = `/.netlify/functions/submit-form?form_slug=${encodeURIComponent(slug)}`;
+formEl.method = 'POST';
+
+// --- Hidden input: native submit’te body’ye de düşsün ---
+let hid = formEl.querySelector('input[name="form_slug"]');
+if (!hid) {
+  hid = document.createElement('input');
+  hid.type = 'hidden';
+  hid.name = 'form_slug';
+  hid.value = slug;
+  formEl.appendChild(hid);
+}
+
+// --- AJAX submit (tercih edilen yol) ---
+formEl.addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const all = Object.fromEntries(new FormData(formEl).entries());
+  // hidden input sayesinde all.form_slug var; answers'a sadece soru alanlarını koy
+  const { form_slug, ...answers } = all;
+
+  const res = await fetch('/.netlify/functions/submit-form', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ form_slug: slug, answers })
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (res.ok && json.ok) {
+    alert('Kaydedildi. Teşekkürler.');
+    formEl.reset();
+  } else {
+    alert('Hata: ' + (json?.error || res.status));
+    console.error(json);
+  }
+});
 // submit handler:
 formEl.addEventListener('submit', async (e) => {
   e.preventDefault();
