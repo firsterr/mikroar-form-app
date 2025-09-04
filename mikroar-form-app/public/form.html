@@ -18,5 +18,36 @@
 
   <!-- Davranış / çizim -->
   <script src="/form.js?v=ipfix2d"></script>
+  <script>
+document.addEventListener('DOMContentLoaded', function () {
+  const form = document.querySelector('form#surveyForm') || document.querySelector('form');
+  if (!form) return console.error('Form bulunamadı');
+
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const payload = Object.fromEntries(new FormData(form).entries());
+
+    try {
+      const res = await fetch('/api/submit-form', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.ok) {
+        alert('Kaydedildi. Teşekkürler.');
+        form.reset();
+        // İstersen teşekkür sayfasına yönlendir:
+        // window.location.href = '/thanks.html';
+      } else {
+        alert('Hata: ' + (json.error || res.status));
+      }
+    } catch (err) {
+      alert('Bağlantı hatası: ' + err.message);
+    }
+  });
+});
+</script>
 </body>
 </html>
