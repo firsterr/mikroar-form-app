@@ -1,0 +1,52 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Submit Test</title>
+<style>
+  body { font: 16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 16px; }
+  label { display:block; margin: 12px 0 4px; font-weight:600 }
+  input, textarea { width:100%; padding:10px; border:1px solid #ccc; border-radius:8px }
+  button { margin-top:16px; padding:10px 16px; border:0; border-radius:10px; background:#111827; color:white; cursor:pointer }
+  pre { background:#0b1020; color:#d1e7ff; padding:12px; border-radius:10px; overflow:auto }
+</style>
+
+<h1>Submit Form — Hızlı Test</h1>
+
+<form id="f">
+  <label>Slug (ör. deneme)</label>
+  <input name="slug" value="deneme" />
+
+  <label>Ad</label>
+  <input name="ad" placeholder="Adınız" />
+
+  <label>E-posta</label>
+  <input name="email" placeholder="ornek@site.com" />
+
+  <label>Mesaj</label>
+  <textarea name="mesaj" rows="4" placeholder="Kısa bir mesaj"></textarea>
+
+  <button>Gönder</button>
+</form>
+
+<h3>Sonuç</h3>
+<pre id="out">–</pre>
+
+<script>
+document.getElementById('f').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const slug = fd.get('slug') || 'deneme';
+
+  // Form alanlarını answers içine topla:
+  const answers = {};
+  for (const [k, v] of fd.entries()) if (k !== 'slug') answers[k] = v;
+
+  const res = await fetch('/api/submit-form', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slug, answers })
+  });
+
+  const text = await res.text();
+  document.getElementById('out').textContent = `HTTP ${res.status}\n\n${text}`;
+});
+</script>
