@@ -233,13 +233,20 @@
             answers[key] = val;
           }
         });
+const API_BASE = '/.netlify/functions';
 
+const schemaRes = await fetch(
+  `${API_BASE}/forms?slug=${encodeURIComponent(slug)}`
+);
         // 3) Gönder
-        const resp = await fetch(`/api/forms/${encodeURIComponent(slug)}/submit`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ answers }),
-        });
+        const res = await fetch(`${API_BASE}/submit-form`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    form_slug: slug,                         // örn: "formayvalik"
+    answers: Object.fromEntries(new FormData(formEl).entries())
+  })
+});
 
         let j = {};
         try { j = await resp.json(); } catch {}
