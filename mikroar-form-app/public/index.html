@@ -3,122 +3,73 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Form seçin • MikroAR</title>
+  <title>Form seç</title>
   <style>
-    :root { color-scheme: dark; }
-    body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
-    .wrap { max-width: 980px; margin: 48px auto; padding: 0 16px; }
-    header { margin-bottom: 24px; }
-    h1{ font-size: clamp(26px,4vw,44px); line-height:1.2; margin:0 0 6px; }
-    p { color:#a1a1aa; margin: 0 0 20px; }
-    .card{ background:#0f172a; border:1px solid rgba(255,255,255,.06); border-radius:16px; padding:20px; }
-    .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
-    select{ min-width:320px; padding:10px 12px; border-radius:12px; border:1px solid rgba(255,255,255,.1); background:#0b1220; color:#fff; }
-    .btn{ appearance:none; border:0; background:#3b82f6; color:#fff; font-weight:700; padding:12px 18px; border-radius:12px; cursor:pointer; }
-    .btn[disabled]{ opacity:.5; cursor:not-allowed; }
-    .ghost{ background:transparent; border:1px solid rgba(255,255,255,.12); color:#e5e7eb; }
-    .err{ color:#ef4444; margin-top:12px; font-weight:600; }
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;background:#0b1220;color:#e6e6e6;margin:0}
+    .wrap{max-width:960px;margin:40px auto;padding:0 16px}
+    h1{font-size:40px;margin:0 0 24px}
+    .card{background:#111a2b;border-radius:16px;padding:20px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+    select,button{background:#0d1424;color:#fff;border:1px solid #21304c;border-radius:10px;padding:12px 14px;font-size:16px}
+    button{background:#2f6feb;border:0;cursor:pointer}
+    .muted{opacity:.75}
   </style>
 </head>
 <body>
   <div class="wrap">
-    <header>
-      <h1>Form seçin</h1>
-      <p>Aktif formlar listelenir. Bir form seçince <code>/form.html?slug=…</code> ile anket sayfasına gidilir.</p>
-    </header>
-
+    <h1>Form seç</h1>
     <div class="card">
-      <div class="row" style="margin-bottom:10px;">
-        <select id="sel" aria-label="Form seçimi">
-          <option value="">— Yükleniyor… —</option>
-        </select>
-        <button id="open" class="btn" disabled>Formu aç</button>
-        <button id="copy" class="btn ghost" disabled>Bağlantıyı kopyala</button>
+      <p class="muted">Bu sayfada aktif formlar listelenir. Bir form seçtiğinizde
+      <code>/form.html?slug=...</code> ile anket sayfasına gidersiniz.</p>
+      <div style="display:flex;gap:10px;align-items:center">
+        <select id="sel"><option>— Yükleniyor… —</option></select>
+        <button id="btnOpen">Formu aç</button>
+        <button id="btnCopy">Bağlantıyı kopyala</button>
       </div>
-      <p id="err" class="err" hidden></p>
     </div>
   </div>
 
-  <script>
-  (function () {
-    const $ = s => document.querySelector(s);
-    const el = { sel: $('#sel'), open: $('#open'), copy: $('#copy'), err: $('#err') };
+<script>
+const sel = document.getElementById('sel');
+const btnOpen = document.getElementById('btnOpen');
+const btnCopy = document.getElementById('btnCopy');
 
-    const setErr = (msg) => { el.err.hidden = !msg; el.err.textContent = msg || ''; };
-
-    const setButtonsState = () => {
-      const slug = el.sel.value;
-      const has = !!slug;
-      el.open.disabled = !has;
-      el.copy.disabled = !has;
-    };
-
-    const goForm = () => {
-      const slug = el.sel.value;
-      if (!slug) return;
-      location.href = `/form.html?slug=${encodeURIComponent(slug)}`;
-    };
-
-    const copyLink = async () => {
-      const slug = el.sel.value;
-      if (!slug) return;
-      const url = `${location.origin}/form.html?slug=${encodeURIComponent(slug)}`;
-      try {
-        await navigator.clipboard.writeText(url);
-        el.copy.textContent = 'Kopyalandı!';
-        setTimeout(() => (el.copy.textContent = 'Bağlantıyı kopyala'), 1200);
-      } catch {
-        setErr('Bağlantı kopyalanamadı.');
-      }
-    };
-
-    async function loadList() {
-      setErr('');
-      try {
-        // Ana uç: /api/forms  (gerekirse /api/forms-list yedek denenir)
-        let r = await fetch('/api/forms', { headers: { 'Accept':'application/json' } });
-        if (!r.ok) {
-          // bazı kurulumlarda farklı rota olabilir
-          r = await fetch('/api/forms-list', { headers: { 'Accept':'application/json' } });
-        }
-        if (!r.ok) throw new Error(`Sunucu ${r.status} döndürdü`);
-        const data = await r.json();
-
-        const rows = (data && (data.rows || data.forms || data)) || [];
-        el.sel.replaceChildren();
-
-        if (!Array.isArray(rows) || rows.length === 0) {
-          el.sel.append(new Option('— Aktif form yok —',''));
-          setButtonsState();
-          return;
-        }
-
-        el.sel.append(new Option('— Form seçin —',''));
-        rows.forEach(f => {
-          const slug = (f.slug || '').trim();
-          const title = (f.title || slug || 'adsız').trim();
-          if (!slug) return;
-          el.sel.append(new Option(title, slug));
-        });
-
-        // otomatik açılmasını istiyorsanız şu satırı aktif edebilirsiniz:
-        // el.sel.addEventListener('change', goForm);
-        el.sel.addEventListener('change', setButtonsState);
-
-        setButtonsState();
-      } catch (e) {
-        setErr('Yüklenemedi: ' + (e && e.message ? e.message : e));
-        el.sel.value = '';
-        setButtonsState();
-      }
+async function loadList(){
+  try{
+    const r = await fetch('/api/forms-list');
+    const data = await r.json();
+    if(!r.ok || data.ok===false) throw new Error(data.error || 'Liste alınamadı');
+    sel.innerHTML = '';
+    data.rows.forEach(row=>{
+      const opt = document.createElement('option');
+      opt.value = row.slug;
+      opt.textContent = `${row.title} — (${row.slug})`;
+      sel.appendChild(opt);
+    });
+    if(!data.rows.length){
+      sel.innerHTML = '<option>Aktif form yok</option>';
+      sel.disabled = true;
+      btnOpen.disabled = true;
+      btnCopy.disabled = true;
     }
-
-    // butonlar
-    el.open.addEventListener('click', goForm);
-    el.copy.addEventListener('click', copyLink);
-
-    loadList();
-  })();
-  </script>
+  }catch(e){
+    sel.innerHTML = `<option>Hata: ${e.message}</option>`;
+    btnOpen.disabled = true;
+    btnCopy.disabled = true;
+  }
+}
+btnOpen.onclick = ()=> {
+  const slug = sel.value;
+  if(slug) location.href = `/form.html?slug=${encodeURIComponent(slug)}`;
+};
+btnCopy.onclick = async ()=> {
+  const slug = sel.value;
+  if(!slug) return;
+  const url = `${location.origin}/form.html?slug=${encodeURIComponent(slug)}`;
+  await navigator.clipboard.writeText(url);
+  btnCopy.textContent = 'Kopyalandı';
+  setTimeout(()=>btnCopy.textContent='Bağlantıyı kopyala',1200);
+};
+loadList();
+</script>
 </body>
 </html>

@@ -3,112 +3,75 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>MikroAR • Anket Oluştur / Düzenle</title>
-  <meta name="color-scheme" content="light dark">
+  <title>MikroAR • Admin</title>
   <style>
-    :root{
-      --bg:#0b1220; --fg:#e6ecf2; --muted:#93a1b3; --card:#0f1a2d; --line:#21304a;
-      --accent:#4ea8ff; --accent-2:#22d3ee; --chip:#172446; --ok:#22c55e; --warn:#f59e0b; --err:#ef4444;
-      --radius:14px;
+    :root{ color-scheme:light; }
+    *{ box-sizing:border-box }
+    body{ margin:0; font:14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; background:#f7f7f8; color:#111 }
+    main{ max-width:980px; margin:24px auto; background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:18px }
+    h1{ margin:0 0 14px; font-size:20px }
+    label{ display:block; font-weight:600; margin:10px 0 6px }
+    input[type="text"], textarea, select{
+      width:100%; padding:9px 11px; border:1px solid #d1d5db; border-radius:8px; background:#fff
     }
-    @media (prefers-color-scheme:light){
-      :root{
-        --bg:#f7fafc; --fg:#0b1220; --muted:#475569; --card:#ffffff; --line:#e5e7eb;
-        --accent:#2563eb; --accent-2:#06b6d4; --chip:#eef2ff;
-      }
-    }
-    *{box-sizing:border-box}
-    html,body{height:100%;margin:0;color:var(--fg);background:
-      radial-gradient(1200px 600px at 120% -10%,rgba(78,168,255,.15),transparent 45%),
-      radial-gradient(900px 500px at -10% -10%,rgba(34,211,238,.12),transparent 40%),
-      var(--bg);
-      font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Inter,Ubuntu,sans-serif;
-    }
-    .wrap{max-width:1100px;margin:32px auto;padding:0 16px}
-    header{display:flex;gap:12px;align-items:center;margin-bottom:18px}
-    .logo{width:36px;height:36px;border-radius:10px;background:
-      linear-gradient(135deg,var(--accent),var(--accent-2));display:grid;place-items:center;color:white;font-weight:800}
-    h1{margin:0;font-size:22px}
-    .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
-    .row{display:grid;grid-template-columns:1fr 1fr auto;gap:12px}
-    .row > .wide{grid-column:1 / span 2}
-    label{display:block;font-size:13px;font-weight:600;margin:8px 0 6px;color:var(--muted)}
-    input[type="text"],select,textarea{
-      width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);
-      background:transparent;color:var(--fg);outline:0;min-height:38px;
-    }
-    textarea{min-height:90px;resize:vertical}
-    .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
-    .btn{
-      height:38px;padding:0 14px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--fg);
-      cursor:pointer;
-    }
-    .btn.pri{background:var(--accent);border-color:transparent;color:#fff;font-weight:700}
-    .btn.ok{background:var(--ok);border-color:transparent;color:#04150a;font-weight:700}
-    .btn.ghost{background:transparent}
-    .chips{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 0}
-    .chip{background:var(--chip);border:1px solid var(--line);color:var(--fg);padding:6px 10px;border-radius:999px;font-size:12px}
-    .q{border:1px dashed var(--line);border-radius:12px;padding:12px;margin-top:12px;display:grid;gap:10px}
-    .qhead{display:grid;grid-template-columns:190px 1fr 110px 32px 32px;gap:8px;align-items:center}
-    .req{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
-    .q textarea{grid-column:2 / -1}
-    .q .opts{grid-column:1 / -1}
-    .muted{color:var(--muted)}
-    .hint{font-size:12px;color:var(--muted)}
-    .toast{position:fixed;right:16px;bottom:16px;background:var(--card);border:1px solid var(--line);padding:10px 12px;border-radius:10px;display:none}
-    .foot{display:flex;gap:10px;justify-content:flex-end;margin-top:14px}
-    @media (max-width:820px){
-      .row{grid-template-columns:1fr}
-      .qhead{grid-template-columns:1fr}
-      .q textarea{grid-column:auto}
-    }
+    .row{ display:grid; grid-template-columns:1fr 1fr; gap:12px }
+    .actions{ display:flex; gap:8px; margin:14px 0 6px }
+    button.btn{ padding:8px 12px; border:1px solid #cfd3da; background:#fff; border-radius:8px; cursor:pointer }
+    button.btn.primary{ background:#1a73e8; color:#fff; border-color:#1a73e8 }
+    #meta{ display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 14px }
+    .chip{ display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border:1px solid #e5e7eb; border-radius:999px; background:#fafafa; font-size:12px }
+    .q{ border:1px solid #e5e7eb; border-radius:8px; padding:12px; margin:10px 0; background:#fff }
+    .qhead{ display:flex; gap:8px; align-items:center; flex-wrap:wrap }
+    .qhead select, .qhead input[type="text"]{ flex:1 }
+    .opts{ margin-top:8px }
+    .hint{ font-size:12px; color:#6b7280; margin-top:4px }
+    #toast{ display:none; margin-top:10px; padding:8px 10px; border:1px solid #e5e7eb; border-radius:8px }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <div class="logo">AR</div>
+  <main>
+    <h1>Anket Oluştur / Düzenle</h1>
+
+    <div class="row">
       <div>
-        <h1>MikroAR • Anket Oluştur / Düzenle</h1>
-        <div class="hint">“Yükle” mevcut formu getirir; düzenleyip “Kaydet” dersen üzerine yazar.</div>
+        <label for="slug">Slug</label>
+        <input id="slug" type="text" placeholder="ör. formayvalik" />
       </div>
-    </header>
-
-    <div class="card">
-      <div class="row">
-        <div>
-          <label for="slug">Slug</label>
-          <input id="slug" type="text" placeholder="ör. formayvalik" autocomplete="off"/>
-        </div>
-        <div class="wide">
-          <label for="title">Başlık</label>
-          <input id="title" type="text" placeholder="Anket başlığı"/>
-        </div>
-        <div>
-          <label for="active">Durum</label>
-          <select id="active">
-            <option value="true">Aktif</option>
-            <option value="false">Pasif</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="toolbar">
-        <button id="btnLoad"  class="btn">Yükle</button>
-        <button id="btnNew"   class="btn ghost">Yeni (sıfır)</button>
-        <button id="btnAdd"   class="btn ghost">+ Soru Ekle</button>
-        <span class="chips" id="meta"></span>
-      </div>
-
-      <div id="qs"></div>
-
-      <div class="foot">
-        <button id="btnSave" class="btn pri">Kaydet</button>
+      <div>
+        <label for="title">Başlık</label>
+        <input id="title" type="text" placeholder="Anket başlığı" />
+        <p id="form-desc" class="form-desc">__FORM_DESC__</p>
       </div>
     </div>
-  </div>
 
-  <div id="toast" class="toast"></div>
-  <script src="./admin.js"></script>
+    <label for="description">Açıklama (isteğe bağlı)</label>
+    <textarea id="description" rows="3" placeholder="Bu anketin kısa açıklaması..."></textarea>
+
+    <div class="row">
+      <div>
+        <label for="active">Durum</label>
+        <select id="active">
+          <option value="true">Aktif</option>
+          <option value="false">Pasif</option>
+        </select>
+      </div>
+      <div>
+        <label>Özet</label>
+        <div id="meta"></div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="btnLoad" class="btn">Yükle</button>
+      <button id="btnNew"  class="btn">Yeni</button>
+      <button id="btnAdd"  class="btn">Soru Ekle</button>
+      <button id="btnSave" class="btn primary">Kaydet</button>
+    </div>
+
+    <div id="qs"></div>
+    <div id="toast"></div>
+  </main>
+
+  <script src="/admin.js?v=desc-1"></script>
 </body>
 </html>

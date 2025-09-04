@@ -1,67 +1,57 @@
-(async function init(){
-  const sel  = document.getElementById('sel');
-  const open = document.getElementById('open');
-  const copy = document.getElementById('copy');
-  const msg  = document.getElementById('msg');
+// public/index.js
+(async function () {
+  const sel = document.getElementById('forms');
+  const btnOpen = document.getElementById('btn-open');
+  const btnCopy = document.getElementById('btn-copy');
+  const statusEl = document.getElementById('status');
 
-  function setLoading() {
-    sel.innerHTML = '<option value="">— Yükleniyor… —</option>';
-    sel.disabled = true; open.disabled = true; copy.disabled = true;
-    msg.textContent = '';
+  function setStatus(t) {
+    if (statusEl) statusEl.textContent = t || '';
   }
 
-  function populate(rows) {
+  try {
+    setStatus('Yükleniyor...');
+    const r = await fetch('/api/forms-list', { credentials: 'same-origin' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json(); // { ok, rows: [{slug,title},...] }
+
+    if (!data.ok) throw new Error(data.error || 'Liste alınamadı');
+
     sel.innerHTML = '';
-    if (!rows || rows.length === 0) {
-      sel.innerHTML = '<option value="">(Aktif form yok)</option>';
-      sel.disabled = true; open.disabled = true; copy.disabled = true;
-      msg.textContent = 'Admin üzerinden bir formı “Aktif” yapın.';
-      return;
-    }
-    sel.disabled = false;
-    for (const r of rows) {
+    (data.rows || []).forEach(row => {
       const opt = document.createElement('option');
-      opt.value = r.slug;
-      opt.textContent = r.title ? `${r.title}  •  ${r.slug}` : r.slug;
+      opt.value = row.slug;
+      opt.textContent = row.title || row.slug;
       sel.appendChild(opt);
+    });
+
+    if (!sel.options.length) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'Aktif form yok';
+      sel.appendChild(opt);
+      sel.disabled = true;
+      btnOpen.disabled = true;
+      btnCopy.disabled = true;
     }
-    open.disabled = false; copy.disabled = false;
-    msg.textContent = 'Bir form seçip “Formu aç” ile devam edin.';
+    setStatus('');
+  } catch (e) {
+    console.error(e);
+    setStatus('Liste alınamadı');
   }
 
-  async function loadForms(){
-    setLoading();
-    try {
-      // ÖNEMLİ: public endpoint
-      const res = await fetch('/api/forms', { cache: 'no-store' });
-      if (!res.ok) throw new Error('Sunucu '+res.status+' döndürdü');
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'Bilinmeyen hata');
-      populate(data.rows);
-    } catch (e) {
-      sel.innerHTML = '<option value="">(Yüklenemedi)</option>';
-      sel.disabled = true; open.disabled = true; copy.disabled = true;
-      msg.innerHTML = `<span class="error">Yüklenemedi:</span> ${e.message}`;
-    }
-  }
-
-  open.addEventListener('click', () => {
+  btnOpen?.addEventListener('click', () => {
     const slug = sel.value;
     if (!slug) return;
-    location.href = `/form.html?slug=${encodeURIComponent(slug)}`;
+    window.location.href = `/form.html?slug=${encodeURIComponent(slug)}`;
   });
 
-  copy.addEventListener('click', async () => {
+  btnCopy?.addEventListener('click', async () => {
     const slug = sel.value;
     if (!slug) return;
     const url = `${location.origin}/form.html?slug=${encodeURIComponent(slug)}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      msg.textContent = 'Bağlantı panoya kopyalandı.';
-    } catch {
-      msg.textContent = url;
-    }
+    await navigator.clipboard.writeText(url);
+    btnCopy.textContent = 'Kopyalandı';
+    setTimeout(() => (btnCopy.textContent = 'Bağlantıyı kopyala'), 800);
   });
-
-  await loadForms();
 })();

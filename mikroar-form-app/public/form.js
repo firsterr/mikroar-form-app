@@ -1,163 +1,290 @@
-(() => {
-  const qs = (s, r=document) => r.querySelector(s);
-  const els = {
-    title: qs("#pageTitle"),
-    skeleton: qs("#skeleton"),
-    content: qs("#content"),
-    form: qs("#theForm"),
-    questions: qs("#questions"),
-    msg: qs("#msg"),
-    sendBtn: qs("#sendBtn")
-  };
+// public/form.js — auto-advance + required validation + smooth focus
+(function () {
+  const $ = (s) => document.querySelector(s);
+  let FORM = null;
 
-  const slug = new URLSearchParams(location.search).get("slug") || "";
-  if (!slug) { location.href = "/index.html"; return; }
+  function renderForm(form) {
+    FORM = form;
+    const titleEl = $("#form-title");
+    const descEl  = $("#form-desc");
+    const formEl  = $("#f");
 
-  // Başlık: ilk karede HİÇ "yükleniyor" yazma; boşlukla yer tut.
-  els.title.textContent = "\u00A0"; // NBSP – yükseklik sabit kalsın
-  document.title = "Anket";
-
-  function showLoading(on) {
-    if (on) {
-      els.skeleton.classList.remove("hidden");
-      els.content.hidden = true;
-      els.content.classList.remove("visible");
+    titleEl.textContent = form.title || "Anket";
+    if (form.description && String(form.description).trim()) {
+      descEl.textContent = form.description;
+      descEl.style.display = "block";
     } else {
-      els.skeleton.classList.add("hidden");
-      els.content.hidden = false;
-      requestAnimationFrame(() => els.content.classList.add("visible"));
-    }
-  }
-
-  function normalizeKey(s) {
-    return (s ?? "").toString().trim().toLowerCase().replace(/\s+/g, " ").replace(/[^\p{L}\p{N}\s]/gu, "");
-  }
-
-  function buildQuestion(q, idx) {
-    const wrap = document.createElement("div");
-    wrap.className = "q";
-
-    const labelEl = document.createElement("label");
-    labelEl.className = "q-text";
-    labelEl.textContent = `${idx + 1}. ${q.label || q.text || "Soru"}`;
-    wrap.appendChild(labelEl);
-
-    const name = q.label ? `label::${normalizeKey(q.label)}` : `q_${idx}`;
-
-    if (q.type === "radio") {
-      (q.options || []).forEach(opt => {
-        const id = `q_${idx}_${normalizeKey(opt)}`;
-        const line = document.createElement("div");
-        const input = Object.assign(document.createElement("input"), { type:"radio", name, value:opt, id });
-        const l = Object.assign(document.createElement("label"), { htmlFor:id });
-        l.textContent = opt;
-        line.append(input, " ", l);
-        wrap.appendChild(line);
-      });
-    } else if (q.type === "checkbox") {
-      (q.options || []).forEach(opt => {
-        const id = `q_${idx}_${normalizeKey(opt)}`;
-        const line = document.createElement("div");
-        const input = Object.assign(document.createElement("input"), { type:"checkbox", name, value:opt, id });
-        const l = Object.assign(document.createElement("label"), { htmlFor:id });
-        l.textContent = opt;
-        line.append(input, " ", l);
-        wrap.appendChild(line);
-      });
-    } else {
-      const input = document.createElement(q.multiline ? "textarea" : "input");
-      if (!q.multiline) input.type = "text";
-      input.name = name;
-      input.placeholder = "Yanıtınız…";
-      input.style.width = "100%";
-      wrap.appendChild(input);
+      descEl.style.display = "none";
     }
 
-    return wrap;
-  }
+    formEl.innerHTML = "";
+    const schema = form.schema && Array.isArray(form.schema.questions)
+      ? form.schema
+      : { questions: [] };
 
-  function collectAnswers(schema) {
-    const answers = {};
-    const toKey = (raw) => raw.startsWith("label::") ? raw.slice(7) : raw;
+    schema.questions.forEach((q, i) => {
+      const wrap = document.createElement("div");
+      wrap.className = "q";
+      wrap.dataset.idx = i;
+      wrap.tabIndex = -1;
 
-    (schema.questions || []).forEach((q, idx) => {
-      const name = q.label ? `label::${normalizeKey(q.label)}` : `q_${idx}`;
-      if (q.type === "checkbox") {
-        const checked = [...els.form.querySelectorAll(`input[name="${CSS.escape(name)}"]:checked`)].map(i => i.value);
-        answers[toKey(name)] = checked;
-      } else if (q.type === "radio") {
-        const r = els.form.querySelector(`input[name="${CSS.escape(name)}"]:checked`);
-        answers[toKey(name)] = r ? r.value : "";
+      const label = document.createElement("label");
+      label.className = "q-label";
+      label.innerHTML = `${i + 1}. ${q.label || "Soru"} ${
+        q.required ? '<span class="req">*</span>' : ""
+      }`;
+      wrap.appendChild(label);
+
+      const body = document.createElement("div");
+      body.className = "q-body";
+      const name = "q_" + i;
+
+      if (q.type === "text") {
+        body.innerHTML = `<input type="text" name="${name}" placeholder="Yanıtınız">`;
+      } else if (q.type === "textarea") {
+        body.innerHTML = `<textarea name="${name}" placeholder="Yanıtınız"></textarea>`;
+      } else if (q.type === "checkbox") {
+        (q.options || []).forEach((opt, j) => {
+          const id = `${name}_${j}`;
+          body.insertAdjacentHTML(
+            "beforeend",
+            `<label class="opt"><input id="${id}" type="checkbox" name="${name}" value="${opt}"><span>${opt}</span></label>`
+          );
+        });
       } else {
-        const t = els.form.querySelector(`[name="${CSS.escape(name)}"]`);
-        answers[toKey(name)] = t ? t.value : "";
+        // radio (default)
+        (q.options || []).forEach((opt, j) => {
+          const id = `${name}_${j}`;
+          body.insertAdjacentHTML(
+            "beforeend",
+            `<label class="opt"><input id="${id}" type="radio" name="${name}" value="${opt}"><span>${opt}</span></label>`
+          );
+        });
       }
+      wrap.appendChild(body);
+      formEl.appendChild(wrap);
     });
 
-    return answers;
+    // Gönder barı
+    const bar = document.createElement("div");
+    bar.className = "sticky-submit";
+    bar.id = "submitBar";
+    bar.innerHTML = `
+      <button type="submit" id="btnSend">Gönder</button>
+      <div class="note">
+        <div>Bu form <strong>mikroar.com</strong> alanında oluşturulmuştur.</div>
+        <div>İletişim: <a href="mailto:iletisim@mikroar.com">iletisim@mikroar.com</a></div>
+        <strong>MikroAR Araştırma</strong>
+      </div>`;
+    formEl.appendChild(bar);
+
+    attachAutoAdvance(schema);
+    formEl.onsubmit = makeSubmitHandler(schema, form.slug);
   }
 
-  async function loadForm() {
-    try {
-      showLoading(true);
-
-      // Form bilgisini getir (cache bypass)
-      const res = await fetch(`/api/forms/${encodeURIComponent(slug)}`, { cache: "no-store" });
-      if (!res.ok) throw new Error("Form yüklenemedi");
-      const data = await res.json();
-      if (!data?.ok || !data.form) throw new Error("Form bulunamadı");
-
-      const form = data.form;
-      const schema = form.schema || {};
-      const questions = schema.questions || [];
-
-      // Başlığı HEMEN gerçek metinle değiştir
-      els.title.textContent = form.title || slug;
-      document.title = `${form.title || slug} – Anket`;
-
-      // Soruları çiz
-      els.questions.innerHTML = "";
-      questions.forEach((q, idx) => els.questions.appendChild(buildQuestion(q, idx)));
-
-      // Göster
-      showLoading(false);
-
-      // Gönder
-      els.form.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        els.msg.textContent = "";
-        els.msg.className = "muted";
-        els.sendBtn.disabled = true;
-
-        try {
-          const answers = collectAnswers(schema);
-          const resp = await fetch(`/api/forms/${encodeURIComponent(slug)}/submit`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ answers })
-          });
-          const j = await resp.json().catch(() => ({}));
-          if (!resp.ok || !j.ok) throw new Error(j.error || "Kayıt başarısız");
-
-          els.msg.textContent = "Cevaplarınız kaydedildi. Teşekkürler!";
-          els.msg.className = "ok";
-          els.form.reset();
-        } catch (err) {
-          els.msg.textContent = "Gönderilemedi: " + (err.message || err);
-          els.msg.className = "error";
-        } finally {
-          els.sendBtn.disabled = false;
-        }
-      });
-    } catch (err) {
-      // Başlık yine boş görünmesin
-      if (!els.title.textContent.trim()) els.title.textContent = "Anket";
-      els.msg.textContent = "Yüklenemedi: " + (err.message || err);
-      els.msg.className = "error";
-      showLoading(false);
-      els.form.style.display = "none";
+  // ---- ortak yardımcılar
+  function clearError(block) {
+    block.classList.remove("error");
+    const em = block.querySelector(".err-msg");
+    if (em) em.remove();
+  }
+  function markError(block, msg) {
+    block.classList.remove("answered");
+    block.classList.add("error", "active");
+    let em = block.querySelector(".err-msg");
+    if (!em) {
+      em = document.createElement("div");
+      em.className = "err-msg";
+      block.appendChild(em);
     }
+    em.textContent = msg || "Lütfen bu soruyu yanıtlayın.";
+  }
+  function scrollToBlock(idx) {
+    const target = document.querySelector(`.q[data-idx="${idx}"]`);
+    if (!target) return;
+    target.classList.add("active");
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    const first = target.querySelector("input,textarea,select");
+    if (first) setTimeout(() => first.focus(), 150);
+  }
+  function isAnswered(q, idx) {
+    const key = "q_" + idx;
+    if (q.type === "checkbox") {
+      return document.querySelectorAll(`[name="${key}"]:checked`).length > 0;
+    }
+    if (q.type === "radio") {
+      return !!document.querySelector(`[name="${key}"]:checked`);
+    }
+    const el = document.querySelector(`[name="${key}"]`);
+    const v = (el && el.value) ? el.value.trim() : "";
+    return v.length > 0;
   }
 
-  loadForm();
+  // --- Auto advance + hata temizleme
+  function attachAutoAdvance(schema) {
+    const formEl = $("#f");
+    const blocks = Array.from(formEl.querySelectorAll(".q"));
+
+    function goTo(idx) {
+      blocks.forEach((b) => b.classList.remove("active"));
+      const target = blocks[idx];
+      if (!target) {
+        const btn = $("#btnSend");
+        btn?.scrollIntoView({ behavior: "smooth", block: "center" });
+        btn?.classList.add("pulse");
+        setTimeout(() => btn?.classList.remove("pulse"), 1200);
+        return;
+      }
+      target.classList.add("active");
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      const first = target.querySelector("input,textarea,select");
+      if (first) setTimeout(() => first.focus(), 150);
+    }
+
+    (schema.questions || []).forEach((q, i) => {
+      const block = formEl.querySelector(`.q[data-idx="${i}"]`);
+      if (!block) return;
+
+      // Her etkileşimde hata temizle
+      block.addEventListener("input", () => clearError(block), { passive: true });
+      block.addEventListener("change", () => clearError(block), { passive: true });
+
+      if (q.type === "radio") {
+        block.querySelectorAll('input[type="radio"]').forEach((el) => {
+          el.addEventListener("change", () => {
+            block.classList.add("answered");
+            goTo(i + 1);
+          });
+        });
+      } else if (q.type === "text") {
+        const inp = block.querySelector('input[type="text"]');
+        if (inp) {
+          inp.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              block.classList.add("answered");
+              goTo(i + 1);
+            }
+          });
+          inp.addEventListener("blur", () => {
+            if (inp.value.trim()) block.classList.add("answered");
+          });
+        }
+      } else if (q.type === "textarea") {
+        const ta = block.querySelector("textarea");
+        if (ta) {
+          ta.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+              e.preventDefault();
+              block.classList.add("answered");
+              goTo(i + 1);
+            }
+          });
+        }
+      } else if (q.type === "checkbox") {
+        block.querySelectorAll('input[type="checkbox"]').forEach((el) => {
+          el.addEventListener("change", () => {
+            const any = block.querySelectorAll('input[type="checkbox"]:checked').length > 0;
+            block.classList.toggle("answered", any);
+          });
+        });
+      }
+    });
+  }
+
+  // --- Submit + zorunlu doğrulama
+  function makeSubmitHandler(schema, slug) {
+    return async function (e) {
+      e.preventDefault();
+      const btn = $("#btnSend");
+      btn.disabled = true;
+
+      // 1) Zorunlu soruları kontrol et, ilk eksikte odaklan ve engelle
+      const qs = schema.questions || [];
+      let firstMissing = -1;
+      for (let i = 0; i < qs.length; i++) {
+        const q = qs[i];
+        if (q.required && !isAnswered(q, i)) {
+          firstMissing = i;
+          break;
+        }
+      }
+      if (firstMissing !== -1) {
+        const block = document.querySelector(`.q[data-idx="${firstMissing}"]`);
+        if (block) {
+          markError(block, "Lütfen bu zorunlu soruyu yanıtlayın.");
+          scrollToBlock(firstMissing);
+        }
+        btn.disabled = false;
+        return;
+      }
+
+      try {
+        // 2) Cevapları topla
+        const answers = {};
+        qs.forEach((q, idx) => {
+          const key = "q_" + idx;
+          if (q.type === "checkbox") {
+            answers[key] = Array.from(
+              document.querySelectorAll(`[name="${key}"]:checked`)
+            ).map((el) => el.value);
+          } else {
+            const val = new FormData($("#f")).get(key);
+            answers[key] = val;
+          }
+        });
+
+        // 3) Gönder
+        const resp = await fetch(`/api/forms/${encodeURIComponent(slug)}/submit`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ answers }),
+        });
+
+        let j = {};
+        try { j = await resp.json(); } catch {}
+
+        if (resp.status === 409 || j.alreadySubmitted) {
+          const when = j.at ? ` (${new Date(j.at).toLocaleString()})` : "";
+          alert("Bu IP’den zaten yanıt gönderilmiş." + when);
+          btn.disabled = false;
+          return;
+        }
+        if (!resp.ok || !j.ok) {
+          alert(j.error || "Gönderilemedi");
+          btn.disabled = false;
+          return;
+        }
+        location.href = "/thanks.html";
+      } catch (err) {
+        alert("Hata: " + err.message);
+        btn.disabled = false;
+      }
+    };
+  }
+
+  // --- Boot
+  function boot() {
+    if (window.__FORM__ && window.__FORM__.slug) {
+      renderForm(window.__FORM__);
+      return;
+    }
+    const slug = new URLSearchParams(location.search).get("slug");
+    if (!slug) {
+      document.body.innerHTML = "<h2>Form bulunamadı (slug yok)</h2>";
+      return;
+    }
+    fetch(`/api/forms/${encodeURIComponent(slug)}`)
+      .then((r) => r.json())
+      .then((j) => {
+        if (!j.ok) throw new Error(j.error || "Form alınamadı");
+        renderForm(j.form);
+      })
+      .catch((e) => {
+        document.body.innerHTML = "<h2>Form yüklenemedi.</h2>";
+        console.error(e);
+      });
+  }
+
+  document.addEventListener("DOMContentLoaded", boot);
 })();

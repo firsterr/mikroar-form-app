@@ -1,23 +1,30 @@
-/* MikroAR – Admin Form Builder (hafif, responsive) */
+/* MikroAR – Admin Form Builder */
 const $ = s => document.querySelector(s);
 const qsWrap = $('#qs');
-const toast = (m, type='')=>{
-  const t = $('#toast');
-  t.textContent = m;
-  t.style.display='block';
-  t.style.borderColor = type==='err' ? '#ef4444' : type==='ok' ? '#22c55e' : 'var(--line)';
-  setTimeout(()=> t.style.display='none', 2000);
-};
 
 const els = {
   slug:   $('#slug'),
   title:  $('#title'),
+  description: $('#description'),
   active: $('#active'),
   meta:   $('#meta'),
   btnLoad:$('#btnLoad'),
   btnNew: $('#btnNew'),
   btnAdd: $('#btnAdd'),
   btnSave:$('#btnSave'),
+};
+
+const toast = (m, type='')=>{
+  const t = $('#toast');
+  t.textContent = m;
+  t.style.display='block';
+  t.style.borderColor =
+    type==='err' ? '#ef4444' :
+    type==='ok'  ? '#22c55e' : 'var(--line)';
+
+  // Mesajı görünür alana getir
+  setTimeout(()=> t.scrollIntoView({behavior:'smooth', block:'end'}), 0);
+  setTimeout(()=> t.style.display='none', 2200);
 };
 
 const blankQ = () => ({
@@ -83,7 +90,8 @@ function qRow(q,i){
   if (Array.isArray(q.options)) oTxt.value = q.options.join('\n');
 
   const updateVisible = ()=>{
-    div.querySelector('.opts').style.display = (tSel.value==='radio'||tSel.value==='checkbox') ? 'block' : 'none';
+    div.querySelector('.opts').style.display =
+      (tSel.value==='radio'||tSel.value==='checkbox') ? 'block' : 'none';
   };
   updateVisible();
 
@@ -109,8 +117,11 @@ function render(){
 
 function setForm(form){
   els.title.value  = form.title || '';
+  els.description.value = form.description || '';
   els.active.value = (form.active === false ? 'false' : 'true');
-  questions = Array.isArray(form.schema?.questions) ? JSON.parse(JSON.stringify(form.schema.questions)) : [];
+  questions = Array.isArray(form.schema?.questions)
+    ? JSON.parse(JSON.stringify(form.schema.questions))
+    : [];
   render();
 }
 
@@ -120,7 +131,7 @@ async function load(){
   try{
     const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`);
     const j = await r.json();
-    if (!j.ok) throw new Error(j.error || 'Bulunamadı');
+    if (!r.ok || j.ok === false) throw new Error(j.error || `HTTP ${r.status}`);
     setForm(j.form);
     toast('Yüklendi');
   }catch(e){ toast('Yüklenemedi: '+e.message,'err'); }
@@ -129,23 +140,37 @@ async function load(){
 async function save(){
   const slug = els.slug.value.trim();
   if (!slug) return toast('Slug gerekli','err');
+
   const body = {
     slug,
     title: els.title.value.trim(),
+    description: els.description.value.trim() || null,
     active: els.active.value === 'true',
     schema: { questions }
   };
+
   try{
-    const r = await fetch('/admin/api/forms',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
-    const j = await r.json();
-    if (!j.ok) throw new Error(j.error||'Kaydedilemedi');
+    const r = await fetch('/admin/api/forms', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+
+    // HTML 404 vs durumlarında sağlam kontrol
+    const ct = r.headers.get('content-type') || '';
+    let j = null;
+    if (ct.includes('application/json')) j = await r.json();
+    if (!r.ok || !j?.ok) throw new Error(j?.error || `HTTP ${r.status}`);
+
     toast('Kaydedildi ✓','ok');
-  }catch(e){ toast('Hata: '+e.message,'err'); }
+  }catch(e){
+    toast('Hata: '+e.message,'err');
+  }
 }
 
 // UI
 els.btnAdd.onclick = ()=>{ questions.push(blankQ()); render(); };
-els.btnNew.onclick = ()=>{ els.title.value=''; els.active.value='true'; questions=[]; render(); };
+els.btnNew.onclick = ()=>{ els.title.value=''; els.description.value=''; els.active.value='true'; questions=[]; render(); };
 els.btnLoad.onclick= load;
 els.btnSave.onclick= save;
 
