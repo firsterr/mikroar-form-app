@@ -26,7 +26,7 @@ export async function handler(event) {
   }
 
   // ✅ Tablo adını gerekirse 'responses' yap
-  const TABLE = 'forms';
+  const TABLE = 'responses';
   const endpoint = `${SUPABASE_URL}/rest/v1/${TABLE}`;
 
   // ✅ Şemaya uygun kayıt: form_slug + answers (jsonb)
