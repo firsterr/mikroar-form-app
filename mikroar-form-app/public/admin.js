@@ -155,9 +155,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!slug) return;
     try {
       const r = await fetch(`${API}/forms?slug=${encodeURIComponent(slug)}`);
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok || !j.ok || !j.schema) throw new Error(j.error || `HTTP ${r.status}`);
-      render(j.schema);
+     const j = await r.json().catch(() => ({}));
+if (!r.ok || !j.ok || !j.schema) throw new Error(j.error || `HTTP ${r.status}`);
+render(normalizeFormShape(j.schema));
       toast('Yüklendi', 'ok');
     } catch (e) {
       toast('Yüklenemedi: ' + e.message, 'err');
