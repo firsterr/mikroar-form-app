@@ -3,8 +3,7 @@
   command = ""
 
 [functions]
-  # Ekran görüntünde görünen gerçek konum:
-  directory = "mikroar-form-app/netlify/functions"
+  directory = "netlify/functions"
 
 # BUNU, /api/* kuralının ÜSTÜNE ekle
 [[redirects]]
