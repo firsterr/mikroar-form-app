@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="tr"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Form Yönetimi</title><link rel="stylesheet" href="/form.css">
+<style>textarea{width:100%;height:200px}</style>
+</head><body>
+<main>
+  <h1>Form Yönetimi</h1>
+
+  <section>
+    <h2>Yeni / Düzenle</h2>
+    <p><label>Admin Token <input id="adm" placeholder="X-Admin-Token"></label></p>
+    <p><label>Slug <input id="slug"></label></p>
+    <p><label>Başlık <input id="title"></label></p>
+    <p><label>Açıklama <input id="desc"></label></p>
+    <p><label>Fields JSON</label><br>
+      <textarea id="fields">[
+  {"type":"text","name":"ad","label":"Ad","required":true},
+  {"type":"email","name":"email","label":"E-posta","required":true},
+  {"type":"textarea","name":"mesaj","label":"Mesaj"}
+]</textarea></p>
+    <p>
+      <button id="save">Kaydet/Update</button>
+      <button id="del" style="margin-left:8px">Sil</button>
+    </p>
+  </section>
+
+  <section>
+    <h2>Mevcut formlar</h2>
+    <ul id="list"></ul>
+  </section>
+</main>
+<script>
+const API = '/.netlify/functions';
+const el = id => document.getElementById(id);
+
+async function loadList(){
+  const r = await fetch('/api/forms-list'); const j = await r.json().catch(()=>({}));
+  el('list').innerHTML = (j.forms||[]).map(f=> `
+    <li>
+      <b>${f.slug}</b> — ${f.title||''}
+      — <a href="/form.html?slug=${encodeURIComponent(f.slug)}" target="_blank">Göster</a>
+      — <a href="/results.html?slug=${encodeURIComponent(f.slug)}" target="_blank">Sonuç</a>
+      — <a href="/share/${encodeURIComponent(f.slug)}" target="_blank">Paylaş</a>
+    </li>`).join('');
+}
+
+el('save').onclick = async () => {
+  const body = {
+    slug: el('slug').value.trim(),
+    title: el('title').value.trim(),
+    description: el('desc').value.trim(),
+    fields: JSON.parse(el('fields').value)
+  };
+  const r = await fetch(`${API}/forms-admin`,{
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-Admin-Token':el('adm').value},
+    body: JSON.stringify(body)
+  });
+  alert((await r.json()).message || r.status);
+  loadList();
+};
+
+el('del').onclick = async () => {
+  const slug = el('slug').value.trim();
+  if (!slug || !confirm(`${slug} silinsin mi?`)) return;
+  const r = await fetch(`${API}/forms-admin?slug=${encodeURIComponent(slug)}`,{
+    method:'DELETE', headers:{'X-Admin-Token':el('adm').value}
+  });
+  alert((await r.json()).message || r.status);
+  loadList();
+};
+
+loadList();
+</script>
+</body></html>
