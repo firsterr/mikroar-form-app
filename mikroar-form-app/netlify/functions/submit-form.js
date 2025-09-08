@@ -26,7 +26,10 @@ export async function handler(event) {
     H['x-nf-client-connection-ip'] ||
     (H['x-forwarded-for'] ? H['x-forwarded-for'].split(',')[0].trim() : '') ||
     H['x-real-ip'] || H['client-ip'] || null;
-
+  
+const fwd = (event.headers['x-forwarded-for'] || '').split(',')[0].trim();
+const ip  = fwd || event.clientIp || event.ip || null;
+  
   // Insert
   const insert = await fetch(`${SUPABASE_URL}/rest/v1/responses`, {
     method: 'POST',
