@@ -185,7 +185,7 @@ render(normalizeFormShape(j.schema));
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
       toast('Kaydedildi', 'ok');
-      render(j.form || j.schema || payload); // geri geleni yeniden çiz
+     render(normalizeFormShape(j.form || j.schema || payload));
     } catch (e) {
       toast('Kaydedilemedi: ' + e.message, 'err');
     }
