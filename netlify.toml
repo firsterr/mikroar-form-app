@@ -38,3 +38,7 @@
   from = "/s/:code"
   to   = "/.netlify/functions/go?code=:code"
   status = 200
+  [[redirects]]
+  from = "/share/:slug"
+  to   = "/.netlify/functions/share?slug=:slug"
+  status = 200
