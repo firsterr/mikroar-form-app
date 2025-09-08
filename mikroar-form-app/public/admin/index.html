@@ -24,7 +24,7 @@
   <h1>Form Yönetimi</h1>
 
   <section id="editor">
-    <div class="row"><label>Admin Token <input id="adm" placeholder="X-Admin-Token"/></label></div>
+    <div class="row"><label>Admin Token <input id="adm" placeholder="ilker-super-secret24198823Gds!!?*"/></label></div>
     <div class="row"><label>Slug <input id="slug" placeholder="örn: formayvalik"/></label></div>
     <div class="row"><label>Başlık <input id="title" placeholder="Form başlığı"/></label></div>
     <div class="row"><label>Açıklama <input id="desc" placeholder="Kısa açıklama"/></label></div>
@@ -124,7 +124,7 @@
         if (!confirm(`${slug} silinsin mi?`)) return;
         setMsg('Siliniyor…');
         const r = await fetch(`${API_ADMIN}?slug=${encodeURIComponent(slug)}`,{
-          method:'DELETE', headers:{ 'X-Admin-Token': el.adm.value }
+          method:'DELETE', headers:{ 'ilker-super-secret24198823Gds!!?*': el.adm.value }
         });
         const j = await r.json().catch(()=>({}));
         setMsg(j.message || r.status);
@@ -153,7 +153,7 @@
     setMsg('Kaydediliyor…');
     const r = await fetch(API_ADMIN, {
       method:'POST',
-      headers:{ 'Content-Type':'application/json', 'X-Admin-Token': token },
+      headers:{ 'Content-Type':'application/json', 'ilker-super-secret24198823Gds!!?*': token },
       body: JSON.stringify(body)
     });
     const j = await r.json().catch(()=>({}));
@@ -168,7 +168,7 @@
     if (!confirm(`${slug} silinsin mi?`)) return;
     setMsg('Siliniyor…');
     const r = await fetch(`${API_ADMIN}?slug=${encodeURIComponent(slug)}`, {
-      method:'DELETE', headers:{ 'X-Admin-Token': token }
+      method:'DELETE', headers:{ 'ilker-super-secret24198823Gds!!?*': token }
     });
     const j = await r.json().catch(()=>({}));
     setMsg(j.message || r.status);
