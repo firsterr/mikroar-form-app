@@ -1,203 +1,205 @@
-// public/admin.js
-// Admin Panel JS (self-contained)
-// /api/* -> /.netlify/functions/* yönlendirmesi varsayılır
-const API = '/api';
-function normalizeFormShape(raw) {
-  // raw -> { slug,title,description,active,fields? | schema.fields? | schema.questions? | questions? }
-  const pick = (o, k, d) => (o && o[k] !== undefined ? o[k] : d);
+// /public/admin.js
+(() => {
+  const API = '/api';
+  const $ = (s, el=document) => el.querySelector(s);
+  const $$ = (s, el=document) => Array.from(el.querySelectorAll(s));
 
-  // 1) field kaynaklarını sırayla dene
-  let fields = [];
-  if (Array.isArray(raw?.fields)) {
-    fields = raw.fields;
-  } else if (Array.isArray(raw?.schema?.fields)) {
-    fields = raw.schema.fields;
-  } else if (Array.isArray(raw?.schema?.questions)) {
-    fields = raw.schema.questions.map(q => ({
-      type: q.type || 'text',
-      name: q.name || '',
-      label: q.label || '',
-      required: !!q.required,
-      options: q.options || []
-    }));
-  } else if (Array.isArray(raw?.questions)) {
-    fields = raw.questions.map(q => ({
-      type: q.type || 'text',
-      name: q.name || '',
-      label: q.label || '',
-      required: !!q.required,
-      options: q.options || []
-    }));
-  }
-
-  return {
-    slug:        pick(raw, 'slug', ''),
-    title:       pick(raw, 'title', ''),
-    description: pick(raw, 'description', ''),
-    active:      raw?.active !== false,
-    schema: { fields }
+  const els = {
+    slug:        $('#slug'),
+    title:       $('#title'),
+    description: $('#description'),
+    status:      $('#status'),
+    summary:     $('#summary'),
+    qs:          $('#qs'),
+    btnLoad:     $('#btnLoad'),
+    btnNew:      $('#btnNew'),
+    btnAdd:      $('#btnAdd'),
+    btnSave:     $('#btnSave'),
+    toast:       $('#toast'),
   };
-}
-// ---------- helpers ----------
-const $  = (s, el = document) => el.querySelector(s);
-const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
 
-function toast(msg, type = 'err') {
-  const t = $('#toast');
-  if (!t) return;
-  t.textContent = msg;
-  t.className = type;     // 'ok' | 'err'
-  t.style.display = 'block';
-  setTimeout(() => (t.style.display = 'none'), 4000);
-}
-
-function getToken() {
-  let t = localStorage.getItem('ADMIN_TOKEN');
-  if (!t) {
-    t = prompt('Admin token (X-Admin-Token):') || '';
-    if (t) localStorage.setItem('ADMIN_TOKEN', t);
-  }
-  return t;
-}
-
-// ---------- state ----------
-let CURRENT = null; // {slug,title,description,active,schema:{fields:[]}}
-const types = [
-  { v: 'text',     label: 'Metin' },
-  { v: 'email',    label: 'E-posta' },
-  { v: 'textarea', label: 'Uzun metin' },
-  { v: 'radio',    label: 'Tek seçim' },
-  { v: 'checkbox', label: 'Çoklu seçim' },
-];
-
-// ---------- rendering ----------
-function clearForm() {
-  $('#slug').value = '';
-  $('#title').value = '';
-  $('#description').value = '';
-  $('#active').value = 'true';
-  $('#form-desc').textContent = '';
-  $('#meta').innerHTML = '';
-  $('#qs').innerHTML = '';
-}
-
-function addQuestionRow(f = { type: 'text', name: '', label: '', required: false, options: [] }) {
-  const row = document.createElement('div');
-  row.className = 'q-row';
-  row.innerHTML = `
-    <select class="q-type">
-      ${types.map(t => `<option value="${t.v}" ${f.type === t.v ? 'selected' : ''}>${t.label}</option>`).join('')}
-    </select>
-    <input  class="q-name"     placeholder="alan adı (örn. ad)"  value="${f.name   || ''}">
-    <input  class="q-label"    placeholder="Etiket (örn. Ad)"    value="${f.label  || ''}">
-    <label class="q-req"><input type="checkbox" class="q-required" ${f.required ? 'checked' : ''}> Zorunlu</label>
-    <input  class="q-options"  placeholder="Seçenekler (virgülle)" value="${(f.options || []).join(', ')}">
-    <button type="button" class="q-del">Sil</button>
-  `;
-  const syncOptionsVisibility = () => {
-    const t = $('.q-type', row).value;
-    $('.q-options', row).style.display = (t === 'radio' || t === 'checkbox') ? 'inline-block' : 'none';
-  };
-  $('.q-type', row).addEventListener('change', syncOptionsVisibility);
-  $('.q-del',  row).addEventListener('click',   () => row.remove());
-  syncOptionsVisibility();
-  $('#qs').appendChild(row);
-}
-
-function render(form) {
-  CURRENT = form;
-  $('#slug').value        = form.slug || '';
-  $('#title').value       = form.title || '';
-  $('#description').value = form.description || '';
-  $('#active').value      = (form.active === false ? 'false' : 'true');
-  $('#form-desc').textContent = form.description || '';
-  $('#meta').innerHTML = `
-    <div>Slug: <code>${form.slug || '-'}</code></div>
-    <div>Oluşturuldu: <code>${form.created_at || '-'}</code></div>
-  `;
-  $('#qs').innerHTML = '';
-  const fields = Array.isArray(form?.schema?.fields) ? form.schema.fields : [];
-if (fields.length === 0) addQuestionRow();
-fields.forEach(addQuestionRow);
-}
-
-function collect() {
-  const slug        = $('#slug').value.trim();
-  const title       = $('#title').value.trim();
-  const description = $('#description').value.trim();
-  const active      = $('#active').value === 'true';
-
-  const fields = $$('.q-row').map(row => {
-    const type     = $('.q-type', row).value;
-    const name     = $('.q-name', row).value.trim();
-    const label    = $('.q-label', row).value.trim();
-    const required = $('.q-required', row).checked;
-    const optsRaw  = $('.q-options', row).value.trim();
-    const options  = (type === 'radio' || type === 'checkbox')
-      ? optsRaw.split(',').map(s => s.trim()).filter(Boolean)
-      : undefined;
-
-    const f = { type, name, label, required };
-    if (options) f.options = options;
-    return f;
-  });
-
-  return { slug, title, description, active, schema: { fields } };
-}
-
-// ---------- events ----------
-document.addEventListener('DOMContentLoaded', () => {
-  $('#btnAdd') ?.addEventListener('click', () => addQuestionRow());
-  $('#btnNew') ?.addEventListener('click', () => { clearForm(); addQuestionRow(); });
-
-  $('#btnLoad')?.addEventListener('click', async () => {
-    const slug = prompt('Yüklenecek slug?', ($('#slug').value || ''))?.trim();
-    if (!slug) return;
-    try {
-      const r = await fetch(`${API}/forms?slug=${encodeURIComponent(slug)}`);
-     const j = await r.json().catch(() => ({}));
-if (!r.ok || !j.ok || !j.schema) throw new Error(j.error || `HTTP ${r.status}`);
-render(normalizeFormShape(j.schema));
-      toast('Yüklendi', 'ok');
-    } catch (e) {
-      toast('Yüklenemedi: ' + e.message, 'err');
+  // ---- Admin token
+  function getToken() {
+    let t = localStorage.getItem('ADMIN_TOKEN') || '';
+    if (!t) {
+      t = prompt('Admin token (bir kez girilecek):') || '';
+      if (t) localStorage.setItem('ADMIN_TOKEN', t);
     }
-  });
-
-  $('#btnSave')?.addEventListener('click', async () => {
-    const token = getToken();
-    if (!token) { toast('Token gerekli', 'err'); return; }
-
-    const payload = collect();
-    if (!payload.slug)  { toast('Slug zorunlu',   'err'); return; }
-    if (!payload.title) { toast('Başlık zorunlu', 'err'); return; }
-
-    try {
-      const r = await fetch(`${API}/forms-admin`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Admin-Token': token,
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
-      toast('Kaydedildi', 'ok');
-     render(normalizeFormShape(j.form || j.schema || payload));
-    } catch (e) {
-      toast('Kaydedilemedi: ' + e.message, 'err');
-    }
-  });
-
-  // ?slug=… ile otomatik yükleme
-  const qs = new URLSearchParams(location.search);
-  const slugParam = qs.get('slug');
-  if (slugParam) {
-    $('#slug').value = slugParam;
-    $('#btnLoad').click();
-  } else {
-    addQuestionRow(); // boş sayfayı bir soruyla başlat
+    return t;
   }
-});
+
+  async function api(url, opts={}) {
+    const headers = Object.assign(
+      { 'Accept': 'application/json' },
+      opts.headers || {},
+      { 'X-Admin-Token': getToken() }
+    );
+    const res = await fetch(url, { ...opts, headers });
+    const text = await res.text();
+    let json;
+    try { json = text ? JSON.parse(text) : {}; } catch { json = { ok:false, message:text || 'Parse error'}; }
+    if (!res.ok || json.ok === false) {
+      const msg = json.message || json.error || `HTTP ${res.status}`;
+      throw new Error(msg);
+    }
+    return json;
+  }
+
+  function toast(msg, ok=true) {
+    const el = els.toast;
+    el.textContent = msg;
+    el.className = ok ? 'ok' : 'err';
+    el.style.display = 'block';
+    setTimeout(()=> (el.style.display='none'), 2500);
+  }
+
+  // ---------- Question editor ----------
+  function makeQRow(field = {type:'text', name:'', label:'', required:false}) {
+    const row = document.createElement('div');
+    row.className = 'q-row';
+
+    row.innerHTML = `
+      <div class="q-grid">
+        <select class="q-type">
+          <option value="text">Metin</option>
+          <option value="email">E-posta</option>
+          <option value="textarea">Metin (uzun)</option>
+          <option value="radio">Tek seçim</option>
+          <option value="checkbox">Çoklu seçim</option>
+        </select>
+        <input class="q-name"  type="text" placeholder="alan adı (örn. ad)">
+        <input class="q-label" type="text" placeholder="Etiket (örn. Ad)">
+        <label class="q-req"><input class="q-required" type="checkbox"> Zorunlu</label>
+        <button type="button" class="q-del">Sil</button>
+      </div>
+      <div class="q-options" style="display:none">
+        <input class="q-opts" type="text" placeholder="Seçenekleri virgülle yazın (örn: A,B,C)">
+      </div>
+    `;
+
+    // Set initial values
+    $('.q-type', row).value = field.type || 'text';
+    $('.q-name', row).value = field.name || '';
+    $('.q-label', row).value = field.label || '';
+    $('.q-required', row).checked = !!field.required;
+
+    // Options for radio/checkbox
+    const optsWrap = $('.q-options', row);
+    if (field.type === 'radio' || field.type === 'checkbox') {
+      optsWrap.style.display = '';
+      $('.q-opts', row).value = (field.options || []).join(',');
+    }
+
+    $('.q-type', row).addEventListener('change', (e) => {
+      const t = e.target.value;
+      if (t === 'radio' || t === 'checkbox') {
+        optsWrap.style.display = '';
+      } else {
+        optsWrap.style.display = 'none';
+      }
+    });
+
+    $('.q-del', row).addEventListener('click', () => {
+      row.remove();
+    });
+
+    return row;
+  }
+
+  function renderFields(fields = []) {
+    // Eski şemadaki "questions" dizisini de destekle
+    els.qs.innerHTML = '';
+    fields.forEach(f => els.qs.appendChild(makeQRow(f)));
+    if (!fields.length) els.qs.appendChild(makeQRow());
+  }
+
+  function collectFields() {
+    const rows = $$('.q-row', els.qs);
+    const fields = rows.map(r => {
+      const type = $('.q-type', r).value.trim() || 'text';
+      const name = $('.q-name', r).value.trim();
+      const label = $('.q-label', r).value.trim();
+      const required = $('.q-required', r).checked;
+      const f = { type, name, label, required };
+      if ((type === 'radio' || type === 'checkbox')) {
+        const raw = ($('.q-opts', r).value || '').trim();
+        f.options = raw ? raw.split(',').map(s => s.trim()).filter(Boolean) : [];
+      }
+      return f;
+    }).filter(f => f.name);
+    return fields;
+  }
+
+  // ---------- Load existing ----------
+  async function loadBySlug(slug) {
+    if (!slug) throw new Error('Slug boş');
+    const j = await api(`${API}/forms-admin?slug=${encodeURIComponent(slug)}`);
+    const form = j.form || j.data || j; // farklı şekilleri tolere et
+    els.slug.value = form.slug || '';
+    els.title.value = form.title || '';
+    els.description.value = form.description || '';
+    els.status.value = form.active ? 'Aktif' : 'Pasif';
+    els.summary.textContent = `Slug: ${form.slug || '—'}  Oluşturuldu: ${form.created_at ? new Date(form.created_at).toLocaleString() : '—'}`;
+    const schema = form.schema || {};
+    const fields = schema.fields || schema.questions || [];
+    renderFields(fields);
+    toast('Yüklendi');
+  }
+
+  function clearForm() {
+    els.slug.value = '';
+    els.title.value = '';
+    els.description.value = '';
+    els.status.value = 'Aktif';
+    els.summary.textContent = '';
+    renderFields([]);
+  }
+
+  // ---------- Save (create/update) ----------
+  async function save() {
+    const slug = els.slug.value.trim();
+    const title = els.title.value.trim();
+    const description = els.description.value.trim();
+    const active = (els.status.value || 'Aktif') === 'Aktif';
+    const fields = collectFields();
+
+    if (!slug || !/^[a-z0-9-]+$/i.test(slug)) {
+      toast('Geçerli bir slug girin (harf, sayı, tire).', false);
+      els.slug.focus(); return;
+    }
+    if (!title) {
+      toast('Başlık gerekli.', false);
+      els.title.focus(); return;
+    }
+    if (!fields.length) {
+      toast('En az 1 soru ekleyin.', false);
+      return;
+    }
+
+    const body = JSON.stringify({ slug, title, description, active, schema:{ fields } });
+    const j = await api(`${API}/forms-admin`, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json' },
+      body
+    });
+    toast('Kaydedildi');
+    if (j.form?.slug) {
+      els.summary.textContent = `Slug: ${j.form.slug}  Oluşturuldu: ${j.form.created_at ? new Date(j.form.created_at).toLocaleString() : '—'}`;
+    }
+  }
+
+  // ---------- Wire UI ----------
+  els.btnAdd.addEventListener('click', () => els.qs.appendChild(makeQRow()));
+  els.btnNew.addEventListener('click', clearForm);
+  els.btnSave.addEventListener('click', () => { save().catch(e => toast('Kaydedilemedi: '+e.message, false)); });
+  els.btnLoad.addEventListener('click', async () => {
+    const s = prompt('Slug? (örn: formayvalik)');
+    if (!s) return;
+    try { await loadBySlug(s); }
+    catch (e) { toast('Yüklenemedi: ' + e.message, false); }
+  });
+
+  // Auto-load when /admin?slug=xyz
+  const initSlug = new URLSearchParams(location.search).get('slug');
+  if (initSlug) loadBySlug(initSlug).catch(e => toast('Yüklenemedi: ' + e.message, false));
+})();
