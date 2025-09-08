@@ -53,35 +53,79 @@
   formEl.action = `${API}/submit-form?slug=${encodeURIComponent(slug)}`;
   formEl.method = "POST";
 
-  // --- ŞEMA NORMALİZASYONU (fields veya questions)
-  function normalizeFields(schema) {
-    if (!schema) return [];
-    if (Array.isArray(schema.fields)) return schema.fields;
-
-    if (Array.isArray(schema.questions)) {
-      return schema.questions.map((q, i) => {
-        const type = (q.type || 'text').toLowerCase();
-        const safeType = ['text','email','textarea','radio','checkbox'].includes(type) ? type : 'text';
-        return {
-          name    : q.name || `q_${i}`,
-          label   : q.label || `Soru ${i+1}`,
-          required: !!q.required,
-          type    : safeType,
-          options : (safeType === 'radio' || safeType === 'checkbox') ? (q.options || []).map(String) : undefined
-        };
+  // ---------- ŞEMA NORMALİZASYONU ----------
+  function optType(t){
+    const x = String(t||'text').toLowerCase();
+    return ['text','email','textarea','radio','checkbox'].includes(x) ? x : 'text';
+  }
+  function mapQ(q, i){
+    const type = optType(q.type);
+    return {
+      name    : q.name || `q_${i}`,
+      label   : q.label || `Soru ${i+1}`,
+      required: !!q.required,
+      type,
+      options : (type==='radio' || type==='checkbox') ? (q.options||[]).map(String) : undefined
+    };
+  }
+  function asArray(x){
+    // dizi ise direkt
+    if (Array.isArray(x)) return x;
+    // {q_0:{…}, q_1:{…}} benzeri nesne ise anahtarlarına göre sırala
+    if (x && typeof x === 'object') {
+      const keys = Object.keys(x).sort((a,b)=> {
+        const na = (a.match(/\d+/)||[0])[0]|0;
+        const nb = (b.match(/\d+/)||[0])[0]|0;
+        return na-nb || a.localeCompare(b);
       });
+      return keys.map(k => x[k]);
     }
     return [];
   }
+  function normalizeFields(schema) {
+    if (!schema) return [];
 
-  // --- Şemayı getir ve çiz
+    // 1) fields
+    if (Array.isArray(schema.fields)) {
+      return schema.fields.map(mapQ);
+    }
+
+    // 2) questions (array veya q_ map)
+    if (schema.questions) {
+      return asArray(schema.questions).map(mapQ);
+    }
+
+    // 3) items dizisi
+    if (Array.isArray(schema.items)) {
+      return schema.items.map(mapQ);
+    }
+
+    // 4) schema doğrudan dizi ise
+    if (Array.isArray(schema)) {
+      return schema.map(mapQ);
+    }
+
+    // 5) root’ta q_… anahtarları varsa
+    const qKeys = Object.keys(schema||{}).filter(k => /^q[_-]?\d+/i.test(k));
+    if (qKeys.length) {
+      const arr = asArray(schema);
+      return arr.map(mapQ);
+    }
+
+    // 6) fallback: yok
+    return [];
+  }
+  // -----------------------------------------
+
+  // Şemayı getir ve çiz
   fetch(`${API}/forms?slug=${encodeURIComponent(slug)}`)
     .then(r => r.json())
     .then(j => {
       if (!j.ok || !j.schema) throw new Error(j.error || "Şema alınamadı");
       const schema = j.schema;
       const fields = normalizeFields(schema);
-      console.debug('Form schema', schema);   // kontrol için
+      console.debug('Form schema (raw):', schema);
+      console.debug('Normalized fields:', fields);
 
       titleEl.textContent = schema.title || `Form: ${slug}`;
       if (schema.description) {
@@ -89,14 +133,13 @@
         descEl.style.display = "block";
       }
 
-      // Alanları çiz
       formEl.innerHTML = "";
       let inputCount = 0;
 
-      fields.forEach(f => {
+      fields.forEach((f, idx) => {
         const row = document.createElement("div");
         row.className = "row";
-        const id  = `fld_${f.name}`;
+        const id  = `fld_${f.name || ('q_'+idx)}`;
         const req = f.required ? "required" : "";
 
         let control = '';
@@ -124,7 +167,6 @@
       });
 
       if (!inputCount) {
-        // Soru yoksa boş submit göstermeyelim
         const msg = "Bu formda soru tanımı bulunamadı.";
         alertEl.className = "err";
         alertEl.textContent = msg;
@@ -132,7 +174,6 @@
         throw new Error(msg);
       }
 
-      // Gönder butonu
       const btn = document.createElement("button");
       btn.type = "submit";
       btn.textContent = "Gönder";
@@ -145,7 +186,7 @@
       alertEl.style.display = "block";
     });
 
-  // --- Submit
+  // Submit
   formEl.addEventListener("submit", async (e) => {
     e.preventDefault();
     const btn = formEl.querySelector('button[type="submit"]');
