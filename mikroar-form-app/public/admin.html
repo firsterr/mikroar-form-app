@@ -2,77 +2,124 @@
 <html lang="tr">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Admin • Anket Oluştur</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Admin • Anket Oluştur / Düzenle</title>
   <link rel="stylesheet" href="/form.css"/>
   <style>
-    main{max-width:980px;margin:32px auto;padding:0 16px}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-    label{font-weight:600;margin:8px 0;display:block}
-    input[type="text"],textarea,select{width:100%;padding:12px;border:1px solid #ccd;border-radius:8px;font:inherit}
+    :root{--gap:14px}
+    main{max-width:1000px;margin:32px auto;padding:0 16px}
+    .tabs{display:flex;gap:10px;margin-bottom:18px}
+    .tab{padding:10px 14px;border:1px solid #d9dbe0;border-radius:10px;background:#fff;cursor:pointer;font-weight:700}
+    .tab.active{background:#111827;color:#fff;border-color:#111827}
+    .panel{display:none}
+    .panel.active{display:block}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap)}
+    label{display:block;font-weight:600;margin:8px 0 6px}
+    input[type="text"],textarea,select{width:100%;padding:12px;border:1px solid #ccd;border-radius:10px;font:inherit}
     textarea{min-height:120px}
-    .toolbar{display:flex;gap:8px;align-items:center;margin:12px 0}
-    button{padding:10px 16px;border:0;border-radius:8px;background:#2563eb;color:#fff;cursor:pointer;font-weight:700}
-    button.secondary{background:#e5e7eb;color:#111}
+    .toolbar{display:flex;gap:10px;align-items:center;margin-top:10px}
+    button{padding:11px 16px;border:0;border-radius:10px;cursor:pointer;font-weight:700}
+    .primary{background:#2563eb;color:#fff}
+    .secondary{background:#e5e7eb}
     .ok,.err{padding:10px 12px;border-radius:8px;margin:12px 0;display:none}
     .ok{background:#eefbea;border:1px solid #86efac;color:#14532d}
     .err{background:#fee2e2;border:1px solid #fca5a5;color:#7f1d1d}
-    #qs{margin-top:12px}
-    .q-row{border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin:12px 0}
-    .q-grid{display:grid;grid-template-columns:150px 1fr 1fr 140px 80px;gap:8px}
-    .q-grid .q-del{background:#ef4444}
+    /* soru editörü */
+    .q-row{border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin:12px 0;background:#fff}
+    .q-grid{display:grid;grid-template-columns:150px 1fr 1fr 140px 90px;gap:10px}
     .q-options{margin-top:8px}
-    #summary{color:#475569;margin-left:8px}
+    .q-del{background:#ef4444;color:#fff}
+    #summary,#summaryE{color:#475569;margin-top:10px}
+    #qsCreate,#qsEdit{margin-top:8px}
   </style>
 </head>
 <body>
   <main>
     <h1>Anket Oluştur / Düzenle</h1>
 
-    <div class="ok" id="toast"></div>
-
-    <div class="grid">
-      <div>
-        <label for="slug">Slug</label>
-        <input id="slug" type="text" placeholder="ör. formayvalik" />
-      </div>
-      <div>
-        <label for="title">Başlık</label>
-        <input id="title" type="text" placeholder="Anket başlığı" />
-      </div>
+    <div class="tabs">
+      <button class="tab active" data-tab="create">Oluştur</button>
+      <button class="tab" data-tab="edit">Düzenle</button>
     </div>
 
-    <div class="grid">
-      <div>
-        <label for="description">Açıklama (isteğe bağlı)</label>
-        <textarea id="description" placeholder="Bu anketin kısa açıklaması…"></textarea>
-      </div>
-      <div>
-        <label>Özet</label>
-        <div id="summary"></div>
-      </div>
-    </div>
+    <div id="toast" class="ok"></div>
+    <div id="toaste" class="err"></div>
 
-    <div class="grid" style="align-items:end">
-      <div>
-        <label for="status">Durum</label>
-        <select id="status">
-          <option>Aktif</option>
-          <option>Pasif</option>
-        </select>
+    <!-- OLUSTUR -->
+    <section id="panel-create" class="panel active">
+      <div class="grid">
+        <div>
+          <label for="slug">Slug</label>
+          <input id="slug" type="text" placeholder="ör. formayvalik"/>
+        </div>
+        <div>
+          <label for="title">Başlık</label>
+          <input id="title" type="text" placeholder="Anket başlığı"/>
+        </div>
       </div>
+
+      <div class="grid">
+        <div>
+          <label for="description">Açıklama (isteğe bağlı)</label>
+          <textarea id="description" placeholder="Bu anketin kısa açıklaması…"></textarea>
+        </div>
+        <div>
+          <label for="status">Durum</label>
+          <select id="status">
+            <option>Aktif</option>
+            <option>Pasif</option>
+          </select>
+          <div id="summary"></div>
+        </div>
+      </div>
+
+      <h2>Sorular</h2>
+      <div id="qsCreate"></div>
       <div class="toolbar">
-        <button type="button" class="secondary" id="btnLoad">Yükle</button>
-        <button type="button" class="secondary" id="btnNew">Yeni</button>
-        <button type="button" class="secondary" id="btnAdd">Soru Ekle</button>
-        <button type="button" id="btnSave">Kaydet</button>
+        <button type="button" id="btnAddCreate" class="secondary">Soru Ekle</button>
+        <button type="button" id="btnSaveCreate" class="primary">Kaydet</button>
       </div>
-    </div>
+    </section>
 
-    <h2>Sorular</h2>
-    <div id="qs"></div>
+    <!-- DUZENLE -->
+    <section id="panel-edit" class="panel">
+      <div class="grid">
+        <div>
+          <label for="selForm">Form seç</label>
+          <select id="selForm"></select>
+        </div>
+        <div class="toolbar" style="align-items:end">
+          <button type="button" id="btnLoad" class="secondary">Yükle</button>
+        </div>
+      </div>
+
+      <div class="grid" style="margin-top:10px">
+        <div>
+          <label for="titleE">Başlık</label>
+          <input id="titleE" type="text" placeholder="Anket başlığı"/>
+        </div>
+        <div>
+          <label for="statusE">Durum</label>
+          <select id="statusE">
+            <option>Aktif</option>
+            <option>Pasif</option>
+          </select>
+          <div id="summaryE"></div>
+        </div>
+      </div>
+
+      <label for="descriptionE">Açıklama</label>
+      <textarea id="descriptionE" placeholder="Açıklama…"></textarea>
+
+      <h2>Sorular</h2>
+      <div id="qsEdit"></div>
+      <div class="toolbar">
+        <button type="button" id="btnAddEdit" class="secondary">Soru Ekle</button>
+        <button type="button" id="btnSaveEdit" class="primary">Kaydet</button>
+      </div>
+    </section>
   </main>
 
-  <script src="/admin.js?v=v4"></script>
+  <script src="/admin.js?v=v6"></script>
 </body>
 </html>
