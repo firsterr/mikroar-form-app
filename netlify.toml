@@ -3,7 +3,7 @@
   command = ""
 
 [functions]
-  directory = "netlify/functions"
+  directory = "mikroar-form-app/netlify/functions"
 
 # BUNU, /api/* kuralının ÜSTÜNE ekle
 [[redirects]]
