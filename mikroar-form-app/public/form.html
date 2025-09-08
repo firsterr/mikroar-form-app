@@ -31,9 +31,10 @@
   const titleEl = $("#title");
   const descEl  = $("#desc");
   const alertEl = $("#alert");
+  const API = "/.netlify/functions"; // redirect'e takılmasın
 
-  // 1) Slug: ?slug=… varsa onu, yoksa /formayvalik gibi path’i kullan
-  const rawPath = location.pathname.replace(/^\/+|\/+$/g, "");
+  // Slug: ?slug=… varsa onu; yoksa /formayvalik gibi path'i kullan
+  const rawPath  = location.pathname.replace(/^\/+|\/+$/g, "");
   const pathSlug = rawPath && rawPath !== "form.html" ? rawPath : "";
   const slug = new URLSearchParams(location.search).get("slug") || pathSlug;
 
@@ -45,12 +46,12 @@
     return;
   }
 
-  // **Fallback** (JS kapalıysa bile çalışsın)
-  formEl.action = `/api/submit-form?slug=${encodeURIComponent(slug)}`;
+  // JS kapalı senaryosu için fallback
+  formEl.action = `${API}/submit-form?slug=${encodeURIComponent(slug)}`;
   formEl.method = "POST";
 
-  // 2) Şemayı al
-  fetch(`/api/forms?slug=${encodeURIComponent(slug)}`)
+  // Şemayı çek
+  fetch(`${API}/forms?slug=${encodeURIComponent(slug)}`, { cache: "no-store" })
     .then((r) => r.json())
     .then((j) => {
       if (!j.ok || !j.schema) throw new Error(j.error || "Şema alınamadı");
@@ -62,7 +63,7 @@
         descEl.style.display = "block";
       }
 
-      // 3) Alanları çiz
+      // Alanları çiz
       formEl.innerHTML = "";
       (schema.fields || []).forEach((f) => {
         const row = document.createElement("div");
@@ -72,10 +73,9 @@
 
         row.innerHTML = `
           <label for="${id}">${f.label || f.name}${f.required ? " *" : ""}</label>
-          ${
-            f.type === "textarea"
-              ? `<textarea id="${id}" name="${f.name}" ${req}></textarea>`
-              : `<input id="${id}" type="${f.type || "text"}" name="${f.name}" ${req} />`
+          ${f.type === "textarea"
+            ? `<textarea id="${id}" name="${f.name}" ${req}></textarea>`
+            : `<input id="${id}" type="${f.type || "text"}" name="${f.name}" ${req} />`
           }`;
         formEl.appendChild(row);
       });
@@ -92,7 +92,7 @@
       alertEl.style.display = "block";
     });
 
-  // 4) Gönder
+  // Submit
   formEl.addEventListener("submit", async (e) => {
     e.preventDefault();
     const btn = formEl.querySelector('button[type="submit"]');
@@ -102,8 +102,7 @@
     const answers = Object.fromEntries(new FormData(formEl).entries());
 
     try {
-      // ❗ slug’ı query’de gönderiyoruz — backend’in slug zorunluluğu böyle kesin çözülür
-      const res = await fetch(`/api/submit-form?slug=${encodeURIComponent(slug)}`, {
+      const res = await fetch(`${API}/submit-form?slug=${encodeURIComponent(slug)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Accept": "application/json" },
         body: JSON.stringify({ answers })
