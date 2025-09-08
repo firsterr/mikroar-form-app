@@ -34,3 +34,7 @@
   for = "/form.html"
   [headers.values]
     Cache-Control = "no-cache"
+    [[redirects]]
+  from = "/s/:code"
+  to   = "/.netlify/functions/go?code=:code"
+  status = 200
