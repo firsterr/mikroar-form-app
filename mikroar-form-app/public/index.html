@@ -1,75 +1,25 @@
 <!doctype html>
-<html lang="tr">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Form seç</title>
-  <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;background:#0b1220;color:#e6e6e6;margin:0}
-    .wrap{max-width:960px;margin:40px auto;padding:0 16px}
-    h1{font-size:40px;margin:0 0 24px}
-    .card{background:#111a2b;border-radius:16px;padding:20px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
-    select,button{background:#0d1424;color:#fff;border:1px solid #21304c;border-radius:10px;padding:12px 14px;font-size:16px}
-    button{background:#2f6feb;border:0;cursor:pointer}
-    .muted{opacity:.75}
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <h1>Form seç</h1>
-    <div class="card">
-      <p class="muted">Bu sayfada aktif formlar listelenir. Bir form seçtiğinizde
-      <code>/form.html?slug=...</code> ile anket sayfasına gidersiniz.</p>
-      <div style="display:flex;gap:10px;align-items:center">
-        <select id="sel"><option>— Yükleniyor… —</option></select>
-        <button id="btnOpen">Formu aç</button>
-        <button id="btnCopy">Bağlantıyı kopyala</button>
-      </div>
-    </div>
-  </div>
-
+<html lang="tr"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Formlar</title><link rel="stylesheet" href="/form.css">
+</head><body>
+<main>
+  <h1>Formlar</h1>
+  <ul id="list"></ul>
+</main>
 <script>
-const sel = document.getElementById('sel');
-const btnOpen = document.getElementById('btnOpen');
-const btnCopy = document.getElementById('btnCopy');
-
-async function loadList(){
-  try{
-    const r = await fetch('/api/forms-list');
-    const data = await r.json();
-    if(!r.ok || data.ok===false) throw new Error(data.error || 'Liste alınamadı');
-    sel.innerHTML = '';
-    data.rows.forEach(row=>{
-      const opt = document.createElement('option');
-      opt.value = row.slug;
-      opt.textContent = `${row.title} — (${row.slug})`;
-      sel.appendChild(opt);
-    });
-    if(!data.rows.length){
-      sel.innerHTML = '<option>Aktif form yok</option>';
-      sel.disabled = true;
-      btnOpen.disabled = true;
-      btnCopy.disabled = true;
-    }
-  }catch(e){
-    sel.innerHTML = `<option>Hata: ${e.message}</option>`;
-    btnOpen.disabled = true;
-    btnCopy.disabled = true;
-  }
-}
-btnOpen.onclick = ()=> {
-  const slug = sel.value;
-  if(slug) location.href = `/form.html?slug=${encodeURIComponent(slug)}`;
-};
-btnCopy.onclick = async ()=> {
-  const slug = sel.value;
-  if(!slug) return;
-  const url = `${location.origin}/form.html?slug=${encodeURIComponent(slug)}`;
-  await navigator.clipboard.writeText(url);
-  btnCopy.textContent = 'Kopyalandı';
-  setTimeout(()=>btnCopy.textContent='Bağlantıyı kopyala',1200);
-};
-loadList();
+(async () => {
+  const ul = document.querySelector('#list');
+  const r = await fetch('/api/forms-list');
+  const j = await r.json().catch(()=>({}));
+  if (!j.ok) { ul.innerHTML = '<li>Liste alınamadı</li>'; return; }
+  ul.innerHTML = j.forms.map(f => `
+    <li>
+      <strong>${f.title || f.slug}</strong>
+      — <a href="/form.html?slug=${encodeURIComponent(f.slug)}">Doldur</a>
+      — <a href="/results.html?slug=${encodeURIComponent(f.slug)}">Sonuçlar</a>
+      — <a href="/share/${encodeURIComponent(f.slug)}" target="_blank">Paylaş</a>
+    </li>`).join('');
+})();
 </script>
-</body>
-</html>
+</body></html>
