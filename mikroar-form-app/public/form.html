@@ -25,82 +25,88 @@
   </main>
 
 <script>
-(async () => {
+(() => {
   const $ = (s) => document.querySelector(s);
-  const formEl = $("#form");
+  const formEl  = $("#form");
+  const titleEl = $("#title");
+  const descEl  = $("#desc");
   const alertEl = $("#alert");
 
-  // slug: ?slug=... yoksa path /formayvalik gibi ise path’i kullan
-  const pathSlug = location.pathname.replace(/^\/+|\/+$/g, "");
+  // 1) Slug: ?slug=… varsa onu, yoksa /formayvalik gibi path’i kullan
+  const rawPath = location.pathname.replace(/^\/+|\/+$/g, "");
+  const pathSlug = rawPath && rawPath !== "form.html" ? rawPath : "";
   const slug = new URLSearchParams(location.search).get("slug") || pathSlug;
 
   if (!slug) {
-    $("#title").textContent = "Form yüklenemedi.";
-    alertEl.style.display = "block";
+    titleEl.textContent = "Form yüklenemedi.";
     alertEl.className = "err";
-    alertEl.textContent = "URL’de ?slug=... bulunamadı.";
+    alertEl.textContent = "URL’de ?slug=… yok.";
+    alertEl.style.display = "block";
     return;
   }
 
-  // Fallback: JS çalışmasa bile POST olsun
-  formEl.action = "/.netlify/functions/submit-form?form_slug=" + encodeURIComponent(slug);
+  // **Fallback** (JS kapalıysa bile çalışsın)
+  formEl.action = `/api/submit-form?slug=${encodeURIComponent(slug)}`;
   formEl.method = "POST";
 
-  // Şemayı çek
-  const schRes = await fetch("/.netlify/functions/forms?slug=" + encodeURIComponent(slug));
-  const schJson = await schRes.json().catch(() => ({}));
-  if (!schRes.ok || !schJson?.ok || !schJson?.schema) {
-    $("#title").textContent = "Form yüklenemedi.";
-    alertEl.style.display = "block";
-    alertEl.className = "err";
-    alertEl.textContent = schJson?.error || ("Hata: " + schRes.status);
-    return;
-  }
+  // 2) Şemayı al
+  fetch(`/api/forms?slug=${encodeURIComponent(slug)}`)
+    .then((r) => r.json())
+    .then((j) => {
+      if (!j.ok || !j.schema) throw new Error(j.error || "Şema alınamadı");
+      const schema = j.schema;
 
-  const schema = schJson.schema;
-  $("#title").textContent = schema.title || ("Form: " + slug);
-  if (schema.description) { $("#desc").textContent = schema.description; $("#desc").style.display = "block"; }
+      titleEl.textContent = schema.title || `Form: ${slug}`;
+      if (schema.description) {
+        descEl.textContent = schema.description;
+        descEl.style.display = "block";
+      }
 
-  // Alanları çiz
-  formEl.innerHTML = "";
-  (schema.fields || []).forEach((f) => {
-    const row = document.createElement("div");
-    row.className = "row";
-    const id = "fld_" + f.name;
+      // 3) Alanları çiz
+      formEl.innerHTML = "";
+      (schema.fields || []).forEach((f) => {
+        const row = document.createElement("div");
+        row.className = "row";
+        const id = `fld_${f.name}`;
+        const req = f.required ? "required" : "";
 
-    let control = "";
-    if (f.type === "textarea") {
-      control = `<textarea id="${id}" name="${f.name}" ${f.required ? "required": ""}></textarea>`;
-    } else {
-      // text, email, vb.
-      control = `<input id="${id}" type="${f.type || "text"}" name="${f.name}" ${f.required ? "required": ""} />`;
-    }
+        row.innerHTML = `
+          <label for="${id}">${f.label || f.name}${f.required ? " *" : ""}</label>
+          ${
+            f.type === "textarea"
+              ? `<textarea id="${id}" name="${f.name}" ${req}></textarea>`
+              : `<input id="${id}" type="${f.type || "text"}" name="${f.name}" ${req} />`
+          }`;
+        formEl.appendChild(row);
+      });
 
-    row.innerHTML = `<label for="${id}">${f.label || f.name}${f.required ? " *" : ""}</label>${control}`;
-    formEl.appendChild(row);
-  });
+      const btn = document.createElement("button");
+      btn.type = "submit";
+      btn.textContent = "Gönder";
+      formEl.appendChild(btn);
+    })
+    .catch((e) => {
+      titleEl.textContent = "Form yüklenemedi.";
+      alertEl.className = "err";
+      alertEl.textContent = e.message;
+      alertEl.style.display = "block";
+    });
 
-  // Gönder butonu
-  const btn = document.createElement("button");
-  btn.type = "submit";
-  btn.textContent = "Gönder";
-  formEl.appendChild(btn);
-
-  // AJAX submit
+  // 4) Gönder
   formEl.addEventListener("submit", async (e) => {
     e.preventDefault();
+    const btn = formEl.querySelector('button[type="submit"]');
     btn.disabled = true;
     alertEl.style.display = "none";
 
-    // form’daki alanları topla -> answers
     const answers = Object.fromEntries(new FormData(formEl).entries());
-    const payload = { form_slug: slug, answers };
 
     try {
-      const res = await fetch("/.netlify/functions/submit-form", {
+      // ❗ slug’ı query’de gönderiyoruz — backend’in slug zorunluluğu böyle kesin çözülür
+      const res = await fetch(`/api/submit-form?slug=${encodeURIComponent(slug)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Accept": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ answers })
       });
       const j = await res.json().catch(() => ({}));
 
@@ -111,7 +117,7 @@
         formEl.reset();
       } else {
         alertEl.className = "err";
-        alertEl.textContent = j?.data?.message || j?.error || ("Hata: " + res.status);
+        alertEl.textContent = j?.data?.message || j?.error || `Hata: ${res.status}`;
         alertEl.style.display = "block";
       }
     } catch (err) {
