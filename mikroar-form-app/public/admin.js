@@ -2,7 +2,42 @@
 // Admin Panel JS (self-contained)
 // /api/* -> /.netlify/functions/* yönlendirmesi varsayılır
 const API = '/api';
+function normalizeFormShape(raw) {
+  // raw -> { slug,title,description,active,fields? | schema.fields? | schema.questions? | questions? }
+  const pick = (o, k, d) => (o && o[k] !== undefined ? o[k] : d);
 
+  // 1) field kaynaklarını sırayla dene
+  let fields = [];
+  if (Array.isArray(raw?.fields)) {
+    fields = raw.fields;
+  } else if (Array.isArray(raw?.schema?.fields)) {
+    fields = raw.schema.fields;
+  } else if (Array.isArray(raw?.schema?.questions)) {
+    fields = raw.schema.questions.map(q => ({
+      type: q.type || 'text',
+      name: q.name || '',
+      label: q.label || '',
+      required: !!q.required,
+      options: q.options || []
+    }));
+  } else if (Array.isArray(raw?.questions)) {
+    fields = raw.questions.map(q => ({
+      type: q.type || 'text',
+      name: q.name || '',
+      label: q.label || '',
+      required: !!q.required,
+      options: q.options || []
+    }));
+  }
+
+  return {
+    slug:        pick(raw, 'slug', ''),
+    title:       pick(raw, 'title', ''),
+    description: pick(raw, 'description', ''),
+    active:      raw?.active !== false,
+    schema: { fields }
+  };
+}
 // ---------- helpers ----------
 const $  = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
