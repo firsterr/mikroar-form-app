@@ -47,3 +47,14 @@ export async function handler(event) {
     body: JSON.stringify({ ok: true, schema })
   };
 }
+
+return {
+  statusCode: 200,
+  headers: {
+    'Content-Type': 'application/json',
+    // Netlify CDN'de 120 saniye cache (kullanıcıya anında),
+    // tarayıcı cachelemesin diye max-age=0 bırakıyoruz.
+    'Cache-Control': 'public, max-age=0, s-maxage=120'
+  },
+  body: JSON.stringify({ ok: true, schema })
+};
