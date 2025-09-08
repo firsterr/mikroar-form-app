@@ -1,60 +1,81 @@
-// netlify/functions/forms.js
+// mikroar-form-app/netlify/functions/forms.js
 export async function handler(event) {
-  // Sadece GET
+  const CORS = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 204, headers: CORS, body: '' };
+  }
   if (event.httpMethod !== 'GET') {
-    return { statusCode: 405, headers: { Allow: 'GET' }, body: 'Method Not Allowed' };
+    return { statusCode: 405, headers: CORS, body: 'Method Not Allowed' };
   }
 
-  // slug'ı hem path'ten (/forms/<slug>) hem de ?slug=... şeklinden yakalamayı dene
-  let slug = null;
+  const { SUPABASE_URL, SUPABASE_ANON_KEY } = process.env;
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return json(500, { ok:false, error:'Missing Supabase env vars' }, CORS);
+  }
 
-  try {
-    const url = new URL(event.rawUrl || 'http://x');
-    const qSlug = url.searchParams.get('slug');
-    if (qSlug) slug = qSlug;
-  } catch {}
+  const slug = (event.queryStringParameters?.slug || '').trim();
 
-  const p = event.path || '';
-  // Netlify’da path genelde "/.netlify/functions/forms/<slug>" olur
-  const m = p.match(/\/forms\/([^/]+)$/);
-  if (!slug && m) slug = decodeURIComponent(m[1]);
-
+  // Liste modu (slug yoksa) — mevcut fonksiyon akışına uyumlu kalsın
   if (!slug) {
+    const url = `${SUPABASE_URL}/rest/v1/forms?select=slug,title,description,active&active=is.true&order=created_at.desc`;
+    const r = await fetch(url, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
+    });
+    const rows = await r.json().catch(() => []);
+    if (!r.ok) return json(r.status, { ok:false, error:'List fetch failed', data:rows }, CORS);
     return {
-      statusCode: 400,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ok: false, error: 'slug missing' })
+      statusCode: 200,
+      headers: {
+        ...CORS,
+        'Content-Type': 'application/json',
+        'Cache-Control': 'public, max-age=0, s-maxage=60' // 1 dk edge cache
+      },
+      body: JSON.stringify({ ok:true, forms: rows })
     };
   }
 
-  // NOT: Burada DB'den gerçek form şemanı çekebilirsin.
-  // Şimdilik frontend'in render edebilmesi için basit bir "stub" dönüyoruz.
-  // Form.js genelde title/desc + fields gibi bir şema bekliyor.
+  // Tek form: slug ile getir
+  const url = `${SUPABASE_URL}/rest/v1/forms?select=slug,title,description,schema,fields,active&slug=eq.${encodeURIComponent(slug)}&active=is.true&limit=1`;
+  const resp = await fetch(url, {
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
+  });
+  const data = await resp.json().catch(() => []);
+  if (!resp.ok) return json(resp.status, { ok:false, error:'Fetch failed', data }, CORS);
+
+  const row = Array.isArray(data) ? data[0] : null;
+  if (!row) return json(404, { ok:false, error:'Form not found' }, CORS);
+
+  // Esnek alan çözümü: schema.fields veya fields
+  const fields = (row.schema && Array.isArray(row.schema.fields))
+    ? row.schema.fields
+    : (Array.isArray(row.fields) ? row.fields : []);
+
   const schema = {
-    slug,
-    title: `Form: ${slug}`,
-    description: 'Test şeması — geçici',
-    fields: [
-      { type: 'text', name: 'ad',     label: 'Ad',      required: true },
-      { type: 'email', name: 'email', label: 'E-posta', required: true },
-      { type: 'textarea', name: 'mesaj', label: 'Mesaj', required: false },
-    ]
+    slug: row.slug,
+    title: row.title || row.slug,
+    description: row.description || '',
+    fields
   };
 
   return {
     statusCode: 200,
-    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
-    body: JSON.stringify({ ok: true, schema })
+    headers: {
+      ...CORS,
+      'Content-Type': 'application/json',
+      'Cache-Control': 'public, max-age=0, s-maxage=120' // 2 dk edge cache
+    },
+    body: JSON.stringify({ ok:true, schema })
   };
 }
 
-return {
-  statusCode: 200,
-  headers: {
-    'Content-Type': 'application/json',
-    // Netlify CDN'de 120 saniye cache (kullanıcıya anında),
-    // tarayıcı cachelemesin diye max-age=0 bırakıyoruz.
-    'Cache-Control': 'public, max-age=0, s-maxage=120'
-  },
-  body: JSON.stringify({ ok: true, schema })
-};
+function json(status, body, extra = {}) {
+  return {
+    statusCode: status,
+    headers: { 'Content-Type': 'application/json', ...extra },
+    body: JSON.stringify(body)
+  };
+}
