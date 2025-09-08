@@ -10,7 +10,7 @@
 <script>
 (async () => {
   const ul = document.querySelector('#list');
-  const r = await fetch('/api/forms-list');
+ const r = await fetch('/api/forms'); // forms.js list modu
   const j = await r.json().catch(()=>({}));
   if (!j.ok) { ul.innerHTML = '<li>Liste alınamadı</li>'; return; }
   ul.innerHTML = j.forms.map(f => `
