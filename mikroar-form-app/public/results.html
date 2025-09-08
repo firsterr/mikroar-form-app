@@ -1,48 +1,47 @@
 <!doctype html>
-<html lang="tr">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Sonuçlar</title>
-  <link rel="stylesheet" href="/form.css">
-  <style>main{max-width:1100px;margin:40px auto;padding:0 16px} table{width:100%;border-collapse:collapse} th,td{padding:8px;border:1px solid #ddd} .bar{display:flex;gap:12px;align-items:center;margin-bottom:12px}</style>
-</head>
-<body>
-  <main>
-    <div class="bar">
-      <h1 id="t" style="margin-right:auto">Sonuçlar</h1>
-      <a id="csv" class="btn" href="#">CSV indir</a>
-    </div>
-    <div id="wrap">Yükleniyor…</div>
-  </main>
+<html lang="tr"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sonuçlar</title><link rel="stylesheet" href="/form.css">
+<style>table{border-collapse:collapse}td,th{border:1px solid #ddd;padding:6px}</style>
+</head><body>
+<main>
+  <h1 id="h">Sonuçlar</h1>
+  <p><button id="csvBtn">CSV indir</button></p>
+  <table id="t"><thead></thead><tbody></tbody></table>
+</main>
 <script>
 (async () => {
-  const params = new URLSearchParams(location.search);
-  const slug = params.get('slug');
-  if (!slug) { document.getElementById('wrap').textContent = 'slug yok'; return; }
+  const p = new URLSearchParams(location.search);
+  const slug = p.get('slug');
+  if (!slug) { document.querySelector('#h').textContent='Slug yok'; return; }
 
-  document.getElementById('t').textContent = `Sonuçlar – ${slug}`;
-  document.getElementById('csv').href = `/.netlify/functions/responses?slug=${encodeURIComponent(slug)}&format=csv`;
+  // şema başlıklarını çekelim
+  const s = await (await fetch('/api/forms?slug='+encodeURIComponent(slug))).json();
+  const fields = (s.schema && s.schema.fields) || [];
+  const columns = ['created_at','ip', ...fields.map(f=>f.name)];
 
-  const r = await fetch(`/.netlify/functions/responses?slug=${encodeURIComponent(slug)}`);
-  const j = await r.json();
-  if (!j.ok) { document.getElementById('wrap').textContent = j.error || 'Hata'; return; }
+  const r = await (await fetch('/api/responses?slug='+encodeURIComponent(slug))).json();
+  const rows = (r.rows || []).map(x => {
+    const ans = x.answers || {};
+    return [x.created_at, x.ip, ...fields.map(f => ans[f.name] ?? '')];
+  });
 
-  const rows = j.rows;
-  // kolonları answers anahtarlarına göre oluştur
-  const keys = new Set();
-  rows.forEach(x => Object.keys(x.answers||{}).forEach(k => keys.add(k)));
-  const cols = ['created_at','ip', ...keys];
+  // başlık
+  document.querySelector('#h').textContent = `Sonuçlar: ${slug}`;
+  document.querySelector('#t thead').innerHTML =
+    '<tr>' + columns.map(c=>`<th>${c}</th>`).join('') + '</tr>';
+  document.querySelector('#t tbody').innerHTML =
+    rows.map(r=>'<tr>'+r.map(v=>`<td>${String(v).replaceAll('<','&lt;')}</td>`).join('')+'</tr>').join('');
 
-  const th = cols.map(c => `<th>${c}</th>`).join('');
-  const tr = rows.map(r => {
-    const base = [r.created_at, r.ip];
-    const ans  = [...keys].map(k => (r.answers||{})[k] ?? '');
-    return `<tr>${[...base, ...ans].map(x=>`<td>${(x??'')}</td>`).join('')}</tr>`;
-  }).join('');
-
-  document.getElementById('wrap').innerHTML = `<table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table>`;
+  // CSV
+  document.querySelector('#csvBtn').onclick = () => {
+    const csv = [columns.join(','), ...rows.map(r=>r.map(v=>`"${String(v).replaceAll('"','""')}"`).join(','))].join('\n');
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+    const a = Object.assign(document.createElement('a'), {
+      href: URL.createObjectURL(blob), download: `${slug}-results.csv`
+    });
+    document.body.appendChild(a); a.click(); a.remove();
+  };
 })();
 </script>
-</body>
-</html>
+</body></html>
