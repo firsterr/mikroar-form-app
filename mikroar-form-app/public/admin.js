@@ -116,9 +116,9 @@ function render(form) {
     <div>Oluşturuldu: <code>${form.created_at || '-'}</code></div>
   `;
   $('#qs').innerHTML = '';
-  const fields = (form.schema && form.schema.fields) || [];
-  if (fields.length === 0) addQuestionRow();
-  fields.forEach(addQuestionRow);
+  const fields = Array.isArray(form?.schema?.fields) ? form.schema.fields : [];
+if (fields.length === 0) addQuestionRow();
+fields.forEach(addQuestionRow);
 }
 
 function collect() {
