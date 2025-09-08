@@ -1,4 +1,6 @@
-/* MikroAR – Admin Form Builder */
+<!-- public/admin.js -->
+<script>
+/* MikroAR – Admin (fields tabanlı) */
 const $ = s => document.querySelector(s);
 const qsWrap = $('#qs');
 
@@ -12,29 +14,31 @@ const els = {
   btnNew: $('#btnNew'),
   btnAdd: $('#btnAdd'),
   btnSave:$('#btnSave'),
+  toast:  $('#toast'),
 };
 
+const API_FORM_READ  = (slug) => `/api/forms?slug=${encodeURIComponent(slug)}`;
+const API_FORM_WRITE = `/admin/api/forms`;
+
 const toast = (m, type='')=>{
-  const t = $('#toast');
+  const t = els.toast;
   t.textContent = m;
   t.style.display='block';
   t.style.borderColor =
     type==='err' ? '#ef4444' :
-    type==='ok'  ? '#22c55e' : 'var(--line)';
-
-  // Mesajı görünür alana getir
-  setTimeout(()=> t.scrollIntoView({behavior:'smooth', block:'end'}), 0);
-  setTimeout(()=> t.style.display='none', 2200);
+    type==='ok'  ? '#22c55e' : '#e5e7eb';
+  setTimeout(()=> t.scrollIntoView({behavior:'smooth',block:'end'}), 0);
+  setTimeout(()=> t.style.display='none', 2300);
 };
 
-const blankQ = () => ({
-  type:'radio',        // 'radio' | 'checkbox' | 'text' | 'textarea'
-  label:'',            // soru metni
-  required:true,
-  options:['Evet','Hayır']
+const blankField = () => ({
+  type:'text',       // 'text' | 'email' | 'textarea'
+  name:'',           // anahtar (ör. "email")
+  label:'',          // görünen etiket
+  required:false
 });
 
-let questions = [];   // state
+let fields = [];   // state
 
 function chip(k,v){
   const s = document.createElement('span');
@@ -42,85 +46,73 @@ function chip(k,v){
   s.textContent = `${k}: ${v}`;
   return s;
 }
-
 function renderMeta(){
   els.meta.innerHTML='';
   els.meta.append(
-    chip('Soru', questions.length),
-    chip('Zorunlu', questions.filter(q=>q.required).length)
+    chip('Alan', fields.length),
+    chip('Zorunlu', fields.filter(f=>f.required).length)
   );
 }
 
-function qRow(q,i){
+function fieldRow(f,i){
   const div = document.createElement('div');
   div.className='q'; div.dataset.idx = i;
 
   div.innerHTML = `
-    <div class="qhead">
-      <select class="qtype">
-        <option value="radio">Tek seçenek (radyo)</option>
-        <option value="checkbox">Çoklu seçenek (checkbox)</option>
-        <option value="text">Kısa metin</option>
+    <div class="qhead" style="display:grid;grid-template-columns:120px 1fr 1fr auto auto auto;gap:8px">
+      <select class="ftype">
+        <option value="text">Metin</option>
+        <option value="email">E-posta</option>
         <option value="textarea">Uzun metin</option>
       </select>
-      <input class="qlabel" type="text" placeholder="Soru metni"/>
-      <label class="req"><input class="qreq" type="checkbox"/> Zorunlu</label>
-      <button class="up btn" title="Yukarı">↑</button>
+      <input class="fname"  type="text" placeholder="name (ör. email)">
+      <input class="flabel" type="text" placeholder="Etiket (ör. E-posta)">
+      <label class="req" style="display:flex;gap:6px;align-items:center"><input class="freq" type="checkbox"> Zorunlu</label>
+      <button class="up btn"   title="Yukarı">↑</button>
       <button class="down btn" title="Aşağı">↓</button>
     </div>
-    <div class="opts">
-      <label>Seçenekler (her satır bir seçenek):</label>
-      <textarea class="qopts" placeholder="Evet&#10;Hayır"></textarea>
-      <div class="hint">Metin sorularında seçenek gerekmez.</div>
-      <div style="display:flex;gap:8px;margin-top:6px">
-        <button class="dup btn">Kopyala</button>
-        <button class="del btn" style="color:#ef4444;border-color:#ef4444">Sil</button>
-      </div>
+    <div class="opts" style="margin-top:8px;display:flex;gap:8px">
+      <button class="dup btn">Kopyala</button>
+      <button class="del btn" style="color:#ef4444;border-color:#ef4444">Sil</button>
     </div>
   `;
 
-  const tSel = div.querySelector('.qtype');
-  const lInp = div.querySelector('.qlabel');
-  const rChk = div.querySelector('.qreq');
-  const oTxt = div.querySelector('.qopts');
+  const tSel = div.querySelector('.ftype');
+  const nInp = div.querySelector('.fname');
+  const lInp = div.querySelector('.flabel');
+  const rChk = div.querySelector('.freq');
 
-  tSel.value = q.type;
-  lInp.value = q.label || '';
-  rChk.checked = !!q.required;
-  if (Array.isArray(q.options)) oTxt.value = q.options.join('\n');
-
-  const updateVisible = ()=>{
-    div.querySelector('.opts').style.display =
-      (tSel.value==='radio'||tSel.value==='checkbox') ? 'block' : 'none';
-  };
-  updateVisible();
+  tSel.value     = f.type || 'text';
+  nInp.value     = f.name || '';
+  lInp.value     = f.label || '';
+  rChk.checked   = !!f.required;
 
   // events
-  tSel.onchange = ()=>{ q.type = tSel.value; updateVisible(); renderMeta(); };
-  lInp.oninput  = ()=>{ q.label = lInp.value; };
-  rChk.onchange = ()=>{ q.required = rChk.checked; renderMeta(); };
-  oTxt.oninput  = ()=>{ q.options = oTxt.value.split('\n').map(s=>s.trim()).filter(Boolean); };
+  tSel.onchange = ()=>{ f.type = tSel.value; renderMeta(); };
+  nInp.oninput  = ()=>{ f.name = nInp.value.trim(); };
+  lInp.oninput  = ()=>{ f.label = lInp.value; };
+  rChk.onchange = ()=>{ f.required = rChk.checked; renderMeta(); };
 
-  div.querySelector('.up').onclick   = ()=>{ if (i>0){ [questions[i-1],questions[i]]=[questions[i],questions[i-1]]; render(); } };
-  div.querySelector('.down').onclick = ()=>{ if (i<questions.length-1){ [questions[i+1],questions[i]]=[questions[i],questions[i+1]]; render(); } };
-  div.querySelector('.del').onclick  = ()=>{ questions.splice(i,1); render(); };
-  div.querySelector('.dup').onclick  = ()=>{ questions.splice(i+1,0, JSON.parse(JSON.stringify(q))); render(); };
+  div.querySelector('.up').onclick   = ()=>{ if (i>0){ [fields[i-1],fields[i]]=[fields[i],fields[i-1]]; render(); } };
+  div.querySelector('.down').onclick = ()=>{ if (i<fields.length-1){ [fields[i+1],fields[i]]=[fields[i],fields[i+1]]; render(); } };
+  div.querySelector('.del').onclick  = ()=>{ fields.splice(i,1); render(); };
+  div.querySelector('.dup').onclick  = ()=>{ fields.splice(i+1,0, JSON.parse(JSON.stringify(f))); render(); };
 
   return div;
 }
 
 function render(){
   qsWrap.innerHTML='';
-  questions.forEach((q,i)=> qsWrap.appendChild(qRow(q,i)));
+  fields.forEach((f,i)=> qsWrap.appendChild(fieldRow(f,i)));
   renderMeta();
 }
 
 function setForm(form){
-  els.title.value  = form.title || '';
+  els.title.value       = form.title || '';
   els.description.value = form.description || '';
-  els.active.value = (form.active === false ? 'false' : 'true');
-  questions = Array.isArray(form.schema?.questions)
-    ? JSON.parse(JSON.stringify(form.schema.questions))
+  els.active.value      = (form.active === false ? 'false' : 'true');
+  fields = Array.isArray(form.schema?.fields)
+    ? JSON.parse(JSON.stringify(form.schema.fields))
     : [];
   render();
 }
@@ -129,39 +121,58 @@ async function load(){
   const slug = els.slug.value.trim();
   if (!slug) return toast('Slug gerekli','err');
   try{
-    const r = await fetch(`/api/forms/${encodeURIComponent(slug)}`);
+    const r = await fetch(API_FORM_READ(slug));
     const j = await r.json();
     if (!r.ok || j.ok === false) throw new Error(j.error || `HTTP ${r.status}`);
-    setForm(j.form);
+    const schema = j.schema || {};
+    // /api/forms?slug=… yanıtı {schema:{title,description,fields}} şeklinde
+    const form = {
+      title: schema.title || slug,
+      description: schema.description || '',
+      active: true,
+      schema
+    };
+    setForm(form);
     toast('Yüklendi');
   }catch(e){ toast('Yüklenemedi: '+e.message,'err'); }
 }
 
+function validate(slug){
+  if (!/^[a-z0-9-]{2,}$/.test(slug)) return 'Slug [a-z0-9-] olmalı (min 2).';
+  if (fields.length===0) return 'En az bir alan ekleyin.';
+  const names = fields.map(f=>f.name);
+  if (names.some(n=>!/^[a-zA-Z0-9_]{2,}$/.test(n))) return 'Alan adları [a-zA-Z0-9_] ve min 2 harf olmalı.';
+  const dup = names.find((n,i)=> names.indexOf(n)!==i);
+  if (dup) return `"${dup}" alan adı tekrarlı.`;
+  return null;
+}
+
 async function save(){
   const slug = els.slug.value.trim();
-  if (!slug) return toast('Slug gerekli','err');
+  const err = validate(slug);
+  if (err) return toast(err,'err');
 
   const body = {
     slug,
-    title: els.title.value.trim(),
+    title: els.title.value.trim() || slug,
     description: els.description.value.trim() || null,
     active: els.active.value === 'true',
-    schema: { questions }
+    schema: { fields }
   };
 
+  const headers = {'Content-Type':'application/json'};
+  const token = localStorage.getItem('ADMIN_TOKEN'); // tarayıcıya bir kez kaydedin
+  if (token) headers['X-Admin-Token'] = token;
+
   try{
-    const r = await fetch('/admin/api/forms', {
+    const r = await fetch(API_FORM_WRITE, {
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers,
       body: JSON.stringify(body)
     });
-
-    // HTML 404 vs durumlarında sağlam kontrol
     const ct = r.headers.get('content-type') || '';
-    let j = null;
-    if (ct.includes('application/json')) j = await r.json();
+    const j = ct.includes('application/json') ? await r.json() : null;
     if (!r.ok || !j?.ok) throw new Error(j?.error || `HTTP ${r.status}`);
-
     toast('Kaydedildi ✓','ok');
   }catch(e){
     toast('Hata: '+e.message,'err');
@@ -169,11 +180,12 @@ async function save(){
 }
 
 // UI
-els.btnAdd.onclick = ()=>{ questions.push(blankQ()); render(); };
-els.btnNew.onclick = ()=>{ els.title.value=''; els.description.value=''; els.active.value='true'; questions=[]; render(); };
+els.btnAdd.onclick = ()=>{ fields.push(blankField()); render(); };
+els.btnNew.onclick = ()=>{ els.title.value=''; els.description.value=''; els.active.value='true'; fields=[]; render(); };
 els.btnLoad.onclick= load;
 els.btnSave.onclick= save;
 
 // URL param’dan otomatik yükle
 const uSlug = new URLSearchParams(location.search).get('slug');
 if (uSlug){ els.slug.value = uSlug; load(); }
+</script>
