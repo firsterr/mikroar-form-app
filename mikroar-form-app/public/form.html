@@ -1,5 +1,3 @@
-<h1 id="title" style="display:none"></h1>
-<form id="form" novalidate hidden></form>
 <!doctype html>
 <html lang="tr">
 <head>
@@ -19,11 +17,13 @@
 </head>
 <body>
   <main>
-    <h1 id="title">Yükleniyor…</h1>
+    <!-- Başlık/açıklama başlangıçta gizli -->
+    <h1 id="title" style="display:none"></h1>
     <p id="desc" style="display:none"></p>
     <div id="alert" style="display:none"></div>
 
-    <form id="form" novalidate></form>
+    <!-- Form DOM’a çizilinceye kadar gizli -->
+    <form id="form" novalidate hidden></form>
   </main>
 
 <script>
@@ -33,27 +33,27 @@
   const titleEl = $("#title");
   const descEl  = $("#desc");
   const alertEl = $("#alert");
-  const API = "/.netlify/functions"; // redirect'e takılmasın
+  const API     = "/.netlify/functions"; // direkt functions'a git
 
   // Slug: ?slug=… varsa onu; yoksa /formayvalik gibi path'i kullan
   const rawPath  = location.pathname.replace(/^\/+|\/+$/g, "");
   const pathSlug = rawPath && rawPath !== "form.html" ? rawPath : "";
-  const slug = new URLSearchParams(location.search).get("slug") || pathSlug;
+  const slug     = new URLSearchParams(location.search).get("slug") || pathSlug;
 
   if (!slug) {
     titleEl.style.display = "block";
-    titleEl.textContent = "Form yüklenemedi.";
-    alertEl.className = "err";
-    alertEl.textContent = "URL’de ?slug=… yok.";
+    titleEl.textContent   = "Form yüklenemedi.";
+    alertEl.className     = "err";
+    alertEl.textContent   = "URL’de ?slug=… yok.";
     alertEl.style.display = "block";
     return;
   }
 
-  // JS kapalı senaryosu için fallback (slug'ı query'de)
+  // JS kapalıysa da çalışsın diye fallback
   formEl.action = `${API}/submit-form?slug=${encodeURIComponent(slug)}`;
   formEl.method = "POST";
 
-  // Şemayı çek (sessiz, 'yükleniyor' yazısı yok)
+  // Şemayı çek (hiç 'Yükleniyor…' göstermiyoruz)
   fetch(`${API}/forms?slug=${encodeURIComponent(slug)}`, { cache: "no-store" })
     .then((r) => r.json())
     .then((j) => {
@@ -73,7 +73,7 @@
       (schema.fields || []).forEach((f) => {
         const row = document.createElement("div");
         row.className = "row";
-        const id = `fld_${f.name}`;
+        const id  = `fld_${f.name}`;
         const req = f.required ? "required" : "";
         row.innerHTML = `
           <label for="${id}">${f.label || f.name}${f.required ? " *" : ""}</label>
@@ -90,14 +90,14 @@
       btn.textContent = "Gönder";
       formEl.appendChild(btn);
 
-      // Formu görünür yap
+      // Form hazır → görünür yap
       formEl.hidden = false;
     })
     .catch((e) => {
       titleEl.style.display = "block";
-      titleEl.textContent = "Form yüklenemedi.";
-      alertEl.className = "err";
-      alertEl.textContent = e.message;
+      titleEl.textContent   = "Form yüklenemedi.";
+      alertEl.className     = "err";
+      alertEl.textContent   = e.message;
       alertEl.style.display = "block";
     });
 
@@ -118,7 +118,6 @@
       });
       const j = await res.json().catch(() => ({}));
 
-      // Tekrarlı gönderim (unique constraint)
       if (res.status === 409 || j.already) {
         const when = j.at ? ` (${new Date(j.at).toLocaleString()})` : "";
         alertEl.className = "err";
@@ -147,6 +146,5 @@
   });
 })();
 </script>
-
 </body>
 </html>
