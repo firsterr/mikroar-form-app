@@ -1,47 +1,47 @@
-// netlify/functions/submit-form.js
+// mikroar-form-app/netlify/functions/submit-form.js
 export async function handler(event) {
-  const CORS = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  };
-
-  // 1) Preflight
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers: CORS };
-  }
-
-  // 2) Sadece POST kabul et
+  // Sadece POST kabul et
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers: { ...CORS, Allow: 'POST,OPTIONS' }, body: 'Method Not Allowed' };
+    return json(405, { ok: false, error: 'Method Not Allowed' }, { Allow: 'POST' });
   }
 
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+  const { SUPABASE_URL, SUPABASE_ANON_KEY } = process.env;
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return json(500, { ok: false, error: 'Missing Supabase env vars' });
+  }
 
-  // Body'yi al (JSON veya form-encoded)
-  let obj = {};
+  // slug: URL query'den (…/submit-form?slug=FORM_SLUG)
+  const slug = event.queryStringParameters?.slug;
+  if (!slug) return json(400, { ok: false, error: "form_slug (slug) gerekli" });
+
+  // Body
+  let body = {};
   try {
-    const ct = (event.headers['content-type'] || '').toLowerCase();
-    if (ct.includes('application/json')) {
-      obj = JSON.parse(event.body || '{}');
-    } else {
-      obj = Object.fromEntries(new URLSearchParams(event.body || ''));
-    }
+    body = JSON.parse(event.body || '{}');
   } catch {
-    return { statusCode: 400, headers: CORS, body: 'Invalid body' };
+    return json(400, { ok: false, error: 'Invalid JSON' });
   }
 
-  const form_slug = obj.form_slug || obj.slug;
-  if (!form_slug) {
-    return { statusCode: 400, headers: { ...CORS, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ok: false, error: 'form_slug (slug) gerekli' }) };
-  }
+  // IP'yi güvenli şekilde birden çok header’dan dene
+  const h = normalizeHeaders(event.headers || {});
+  const ip =
+    h['x-nf-client-connection-ip'] ||
+    h['client-ip'] ||
+    (h['x-forwarded-for'] ? h['x-forwarded-for'].split(',')[0].trim() : null) ||
+    h['x-real-ip'] ||
+    null;
 
-  // Cevapları ayıkla
-  const answers = obj.answers ?? Object.fromEntries(
-    Object.entries(obj).filter(([k]) => !['form_slug','slug'].includes(k))
-  );
+  // Kayıt payload’u — responses tablosu şemanıza uygun
+  const record = {
+    form_slug: slug,
+    ip,                               // inet sütunu: string IPv4/IPv6
+    answers: {
+      ad: body.ad ?? null,
+      email: body.email ?? null,
+      mesaj: body.mesaj ?? null,
+    },
+    slug: body.slug ?? null           // varsa, yoksa kalsın
+  };
 
   try {
     const resp = await fetch(`${SUPABASE_URL}/rest/v1/responses`, {
@@ -50,22 +50,37 @@ export async function handler(event) {
         apikey: SUPABASE_ANON_KEY,
         Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
         'Content-Type': 'application/json',
-        Prefer: 'return=representation',
+        Prefer: 'return=representation'
       },
-      body: JSON.stringify({ form_slug, answers }),
+      body: JSON.stringify(record)
     });
 
-    const data = await resp.json().catch(() => null);
-    return {
-      statusCode: resp.ok ? 200 : resp.status,
-      headers: { ...CORS, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ok: resp.ok, data }),
-    };
+    const data = await safeJson(resp);
+    return json(resp.status, { ok: resp.ok, data, ipUsed: ip });
   } catch (err) {
-    return {
-      statusCode: 500,
-      headers: { ...CORS, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ok: false, error: String(err) }),
-    };
+    return json(500, { ok: false, error: String(err) });
   }
+}
+
+/* helpers */
+function json(status, body, extraHeaders = {}) {
+  return {
+    statusCode: status,
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      ...extraHeaders
+    },
+    body: JSON.stringify(body)
+  };
+}
+
+async function safeJson(r) {
+  try { return await r.json(); } catch { return null; }
+}
+
+function normalizeHeaders(headers) {
+  const out = {};
+  for (const k in headers) out[k.toLowerCase()] = headers[k];
+  return out;
 }
