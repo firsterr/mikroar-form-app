@@ -1,38 +1,37 @@
 <!doctype html>
 <html lang="tr">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>MikroAR • Admin</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Admin • Anket Oluştur</title>
+  <link rel="stylesheet" href="/form.css"/>
   <style>
-    :root{ color-scheme:light; }
-    *{ box-sizing:border-box }
-    body{ margin:0; font:14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; background:#f7f7f8; color:#111 }
-    main{ max-width:980px; margin:24px auto; background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:18px }
-    h1{ margin:0 0 14px; font-size:20px }
-    label{ display:block; font-weight:600; margin:10px 0 6px }
-    input[type="text"], textarea, select{
-      width:100%; padding:9px 11px; border:1px solid #d1d5db; border-radius:8px; background:#fff
-    }
-    .row{ display:grid; grid-template-columns:1fr 1fr; gap:12px }
-    .actions{ display:flex; gap:8px; margin:14px 0 6px }
-    button.btn{ padding:8px 12px; border:1px solid #cfd3da; background:#fff; border-radius:8px; cursor:pointer }
-    button.btn.primary{ background:#1a73e8; color:#fff; border-color:#1a73e8 }
-    #meta{ display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 14px }
-    .chip{ display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border:1px solid #e5e7eb; border-radius:999px; background:#fafafa; font-size:12px }
-    .q{ border:1px solid #e5e7eb; border-radius:8px; padding:12px; margin:10px 0; background:#fff }
-    .qhead{ display:flex; gap:8px; align-items:center; flex-wrap:wrap }
-    .qhead select, .qhead input[type="text"]{ flex:1 }
-    .opts{ margin-top:8px }
-    .hint{ font-size:12px; color:#6b7280; margin-top:4px }
-    #toast{ display:none; margin-top:10px; padding:8px 10px; border:1px solid #e5e7eb; border-radius:8px }
+    main{max-width:980px;margin:32px auto;padding:0 16px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    label{font-weight:600;margin:8px 0;display:block}
+    input[type="text"],textarea,select{width:100%;padding:12px;border:1px solid #ccd;border-radius:8px;font:inherit}
+    textarea{min-height:120px}
+    .toolbar{display:flex;gap:8px;align-items:center;margin:12px 0}
+    button{padding:10px 16px;border:0;border-radius:8px;background:#2563eb;color:#fff;cursor:pointer;font-weight:700}
+    button.secondary{background:#e5e7eb;color:#111}
+    .ok,.err{padding:10px 12px;border-radius:8px;margin:12px 0;display:none}
+    .ok{background:#eefbea;border:1px solid #86efac;color:#14532d}
+    .err{background:#fee2e2;border:1px solid #fca5a5;color:#7f1d1d}
+    #qs{margin-top:12px}
+    .q-row{border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin:12px 0}
+    .q-grid{display:grid;grid-template-columns:150px 1fr 1fr 140px 80px;gap:8px}
+    .q-grid .q-del{background:#ef4444}
+    .q-options{margin-top:8px}
+    #summary{color:#475569;margin-left:8px}
   </style>
 </head>
 <body>
   <main>
     <h1>Anket Oluştur / Düzenle</h1>
 
-    <div class="row">
+    <div class="ok" id="toast"></div>
+
+    <div class="grid">
       <div>
         <label for="slug">Slug</label>
         <input id="slug" type="text" placeholder="ör. formayvalik" />
@@ -40,38 +39,40 @@
       <div>
         <label for="title">Başlık</label>
         <input id="title" type="text" placeholder="Anket başlığı" />
-        <p id="form-desc" class="form-desc">__FORM_DESC__</p>
       </div>
     </div>
 
-    <label for="description">Açıklama (isteğe bağlı)</label>
-    <textarea id="description" rows="3" placeholder="Bu anketin kısa açıklaması..."></textarea>
-
-    <div class="row">
+    <div class="grid">
       <div>
-        <label for="active">Durum</label>
-        <select id="active">
-          <option value="true">Aktif</option>
-          <option value="false">Pasif</option>
-        </select>
+        <label for="description">Açıklama (isteğe bağlı)</label>
+        <textarea id="description" placeholder="Bu anketin kısa açıklaması…"></textarea>
       </div>
       <div>
         <label>Özet</label>
-        <div id="meta"></div>
+        <div id="summary"></div>
       </div>
     </div>
 
-    <div class="actions">
-      <button id="btnLoad" class="btn">Yükle</button>
-      <button id="btnNew"  class="btn">Yeni</button>
-      <button id="btnAdd"  class="btn">Soru Ekle</button>
-      <button id="btnSave" class="btn primary">Kaydet</button>
+    <div class="grid" style="align-items:end">
+      <div>
+        <label for="status">Durum</label>
+        <select id="status">
+          <option>Aktif</option>
+          <option>Pasif</option>
+        </select>
+      </div>
+      <div class="toolbar">
+        <button type="button" class="secondary" id="btnLoad">Yükle</button>
+        <button type="button" class="secondary" id="btnNew">Yeni</button>
+        <button type="button" class="secondary" id="btnAdd">Soru Ekle</button>
+        <button type="button" id="btnSave">Kaydet</button>
+      </div>
     </div>
 
+    <h2>Sorular</h2>
     <div id="qs"></div>
-    <div id="toast"></div>
   </main>
 
-  <script src="/admin.js?v=3"></script>
+  <script src="/admin.js?v=v4"></script>
 </body>
 </html>
