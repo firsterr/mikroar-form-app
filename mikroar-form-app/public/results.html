@@ -1,163 +1,48 @@
 <!doctype html>
 <html lang="tr">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Sonuçlar</title>
-  <style>
-    body{font-family:system-ui,Arial,sans-serif;padding:24px}
-    h1{font-size:42px;margin:0 0 20px}
-    input,button{font-size:18px;padding:10px 14px}
-    #info{margin:14px 0;color:#555}
-    table{border-collapse:collapse;width:100%;margin-top:12px}
-    th,td{border:1px solid #ccc;padding:10px;text-align:left;vertical-align:top}
-    th{background:#f6f6f6}
-  </style>
+  <link rel="stylesheet" href="/form.css">
+  <style>main{max-width:1100px;margin:40px auto;padding:0 16px} table{width:100%;border-collapse:collapse} th,td{padding:8px;border:1px solid #ddd} .bar{display:flex;gap:12px;align-items:center;margin-bottom:12px}</style>
 </head>
 <body>
-  <h1>Sonuçlar</h1>
+  <main>
+    <div class="bar">
+      <h1 id="t" style="margin-right:auto">Sonuçlar</h1>
+      <a id="csv" class="btn" href="#">CSV indir</a>
+    </div>
+    <div id="wrap">Yükleniyor…</div>
+  </main>
+<script>
+(async () => {
+  const params = new URLSearchParams(location.search);
+  const slug = params.get('slug');
+  if (!slug) { document.getElementById('wrap').textContent = 'slug yok'; return; }
 
-  <input id="slug" placeholder="ör. formayvalik" />
-  <button id="btn-load">Yükle</button>
-  <button id="btn-copy">Kopyala (TSV)</button>
-  <button id="btn-csv">CSV indir</button>
+  document.getElementById('t').textContent = `Sonuçlar – ${slug}`;
+  document.getElementById('csv').href = `/.netlify/functions/responses?slug=${encodeURIComponent(slug)}&format=csv`;
 
-  <div id="info"></div>
-  <table id="table"></table>
+  const r = await fetch(`/.netlify/functions/responses?slug=${encodeURIComponent(slug)}`);
+  const j = await r.json();
+  if (!j.ok) { document.getElementById('wrap').textContent = j.error || 'Hata'; return; }
 
-  <script>
-    const $ = s => document.querySelector(s);
-    const inpSlug = $('#slug');
-    const btnLoad = $('#btn-load');
-    const btnCopy = $('#btn-copy');
-    const btnCsv  = $('#btn-csv');
-    const info    = $('#info');
-    const tbl     = $('#table');
+  const rows = j.rows;
+  // kolonları answers anahtarlarına göre oluştur
+  const keys = new Set();
+  rows.forEach(x => Object.keys(x.answers||{}).forEach(k => keys.add(k)));
+  const cols = ['created_at','ip', ...keys];
 
-    let lastData = null;
+  const th = cols.map(c => `<th>${c}</th>`).join('');
+  const tr = rows.map(r => {
+    const base = [r.created_at, r.ip];
+    const ans  = [...keys].map(k => (r.answers||{})[k] ?? '');
+    return `<tr>${[...base, ...ans].map(x=>`<td>${(x??'')}</td>`).join('')}</tr>`;
+  }).join('');
 
-    // ---- Basic Auth: bir kez sor, sessionStorage'a koy
-    function authHeader(){
-      let cred = sessionStorage.getItem('resultsAuth');
-      if (!cred) {
-        const u = prompt('Admin kullanıcı adı:');
-        const p = prompt('Admin şifre:');
-        if (!u || !p) return {};
-        cred = btoa(u + ':' + p);
-        sessionStorage.setItem('resultsAuth', cred);
-      }
-      return { 'Authorization': 'Basic ' + cred };
-    }
-
-    btnLoad.addEventListener('click', load);
-    inpSlug.addEventListener('keydown', (e)=>{
-      if (e.key === 'Enter') load();
-    });
-    btnCopy.addEventListener('click', ()=> downloadSeparated('\t'));
-    btnCsv.addEventListener('click',  ()=> downloadSeparated(','));
-
-    async function load(){
-      const slug = inpSlug.value.trim();
-      if (!slug) return;
-
-      info.textContent = 'Yükleniyor...';
-      tbl.innerHTML = '';
-
-      try {
-        const res = await fetch(`/api/admin/forms/${encodeURIComponent(slug)}/responses`, {
-          headers: { 'Accept': 'application/json', ...authHeader() }
-        });
-
-        if (!res.ok) {
-          info.textContent = `Hata: ${res.status} ${res.statusText}`;
-          return;
-        }
-
-        const data = await res.json();
-        if (!data.ok) {
-          info.textContent = `Hata: ${data.error || 'Bilinmeyen hata'}`;
-          return;
-        }
-
-        lastData = data;
-        render(data);
-      } catch (err) {
-        console.error(err);
-        info.textContent = 'Hata: ' + err.message;
-      }
-    }
-
-    function render(data){
-      const q = Array.isArray(data.meta?.schema?.questions) ? data.meta.schema.questions : [];
-      const headers = ['Tarih', 'IP', ...q.map(x => x.label || '')];
-
-      const thead = document.createElement('thead');
-      const trH = document.createElement('tr');
-      headers.forEach(h => {
-        const th = document.createElement('th'); th.textContent = h;
-        trH.appendChild(th);
-      });
-      thead.appendChild(trH);
-
-      const tbody = document.createElement('tbody');
-      data.rows.forEach(r => {
-        const tr = document.createElement('tr');
-
-        const tdT = document.createElement('td');
-        tdT.textContent = new Date(r.created_at).toISOString(); tr.appendChild(tdT);
-
-        const tdIp = document.createElement('td');
-        tdIp.textContent = r.ip || ''; tr.appendChild(tdIp);
-
-        q.forEach((_, idx)=>{
-          const key = 'q_' + idx;
-          let v = r.answers?.[key];
-          if (Array.isArray(v)) v = v.join(', ');
-          if (v == null) v = '';
-          const td = document.createElement('td');
-          td.textContent = v; tr.appendChild(td);
-        });
-
-        tbody.appendChild(tr);
-      });
-
-      tbl.innerHTML = '';
-      tbl.appendChild(thead);
-      tbl.appendChild(tbody);
-
-      info.textContent = `kayıt: ${data.rows.length}, sütun: ${headers.length}`;
-    }
-
-    function downloadSeparated(sep){
-      if (!lastData) return;
-      const q = Array.isArray(lastData.meta?.schema?.questions) ? lastData.meta.schema.questions : [];
-      const headers = ['Tarih', 'IP', ...q.map(x => x.label || '')];
-
-      const lines = [];
-      lines.push(headers.join(sep));
-      lastData.rows.forEach(r=>{
-        const row = [];
-        row.push(new Date(r.created_at).toISOString());
-        row.push(r.ip || '');
-        q.forEach((_,i)=>{
-          let v = r.answers?.['q_'+i];
-          if (Array.isArray(v)) v = v.join(', ');
-          if (v == null) v = '';
-          v = String(v).replace(/"/g,'""');
-          if (sep === ',') v = `"${v}"`;
-          row.push(v);
-        });
-        lines.push(row.join(sep));
-      });
-
-      const blob = new Blob([lines.join('\n')], {type:'text/plain;charset=utf-8'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = sep === ',' ? 'results.csv' : 'results.tsv';
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-  </script>
+  document.getElementById('wrap').innerHTML = `<table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table>`;
+})();
+</script>
 </body>
 </html>
