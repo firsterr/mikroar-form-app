@@ -1,4 +1,5 @@
 <h1 id="title" style="display:none"></h1>
+<form id="form" novalidate hidden></form>
 <!doctype html>
 <html lang="tr">
 <head>
@@ -40,6 +41,7 @@
   const slug = new URLSearchParams(location.search).get("slug") || pathSlug;
 
   if (!slug) {
+    titleEl.style.display = "block";
     titleEl.textContent = "Form yüklenemedi.";
     alertEl.className = "err";
     alertEl.textContent = "URL’de ?slug=… yok.";
@@ -47,18 +49,20 @@
     return;
   }
 
-  // JS kapalı senaryosu için fallback
+  // JS kapalı senaryosu için fallback (slug'ı query'de)
   formEl.action = `${API}/submit-form?slug=${encodeURIComponent(slug)}`;
   formEl.method = "POST";
 
-  // Şemayı çek
+  // Şemayı çek (sessiz, 'yükleniyor' yazısı yok)
   fetch(`${API}/forms?slug=${encodeURIComponent(slug)}`, { cache: "no-store" })
     .then((r) => r.json())
     .then((j) => {
       if (!j.ok || !j.schema) throw new Error(j.error || "Şema alınamadı");
       const schema = j.schema;
 
+      // Başlık / açıklama
       titleEl.textContent = schema.title || `Form: ${slug}`;
+      titleEl.style.display = "block";
       if (schema.description) {
         descEl.textContent = schema.description;
         descEl.style.display = "block";
@@ -71,7 +75,6 @@
         row.className = "row";
         const id = `fld_${f.name}`;
         const req = f.required ? "required" : "";
-
         row.innerHTML = `
           <label for="${id}">${f.label || f.name}${f.required ? " *" : ""}</label>
           ${f.type === "textarea"
@@ -81,63 +84,69 @@
         formEl.appendChild(row);
       });
 
+      // Gönder butonu
       const btn = document.createElement("button");
       btn.type = "submit";
       btn.textContent = "Gönder";
       formEl.appendChild(btn);
+
+      // Formu görünür yap
+      formEl.hidden = false;
     })
     .catch((e) => {
+      titleEl.style.display = "block";
       titleEl.textContent = "Form yüklenemedi.";
       alertEl.className = "err";
       alertEl.textContent = e.message;
       alertEl.style.display = "block";
     });
 
- // Submit
-formEl.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const btn = formEl.querySelector('button[type="submit"]');
-  btn.disabled = true;
-  alertEl.style.display = "none";
+  // Submit
+  formEl.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = formEl.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    alertEl.style.display = "none";
 
-  const answers = Object.fromEntries(new FormData(formEl).entries());
+    const answers = Object.fromEntries(new FormData(formEl).entries());
 
-  try {
-    const res = await fetch(`${API}/submit-form?slug=${encodeURIComponent(slug)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify({ answers })
-    });
-    const j = await res.json().catch(() => ({}));
+    try {
+      const res = await fetch(`${API}/submit-form?slug=${encodeURIComponent(slug)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({ answers })
+      });
+      const j = await res.json().catch(() => ({}));
 
-    // Tekrarlı gönderim (unique constraint) — kullanıcı dostu mesaj
-    if (res.status === 409 || j.already) {
-      const when = j.at ? ` (${new Date(j.at).toLocaleString()})` : "";
+      // Tekrarlı gönderim (unique constraint)
+      if (res.status === 409 || j.already) {
+        const when = j.at ? ` (${new Date(j.at).toLocaleString()})` : "";
+        alertEl.className = "err";
+        alertEl.textContent = "Bu formu bu IP ile zaten göndermişsiniz." + when;
+        alertEl.style.display = "block";
+        return;
+      }
+
+      if (res.ok && j.ok) {
+        alertEl.className = "ok";
+        alertEl.textContent = "Gönderildi, teşekkürler!";
+        alertEl.style.display = "block";
+        formEl.reset();
+      } else {
+        alertEl.className = "err";
+        alertEl.textContent = j?.data?.message || j?.error || `Hata: ${res.status}`;
+        alertEl.style.display = "block";
+      }
+    } catch (err) {
       alertEl.className = "err";
-      alertEl.textContent = "Bu formu bu IP ile zaten göndermişsiniz." + when;
+      alertEl.textContent = "Bağlantı hatası: " + err.message;
       alertEl.style.display = "block";
-      return;
+    } finally {
+      btn.disabled = false;
     }
-
-    if (res.ok && j.ok) {
-      alertEl.className = "ok";
-      alertEl.textContent = "Gönderildi, teşekkürler!";
-      alertEl.style.display = "block";
-      formEl.reset();
-    } else {
-      alertEl.className = "err";
-      alertEl.textContent = j?.data?.message || j?.error || `Hata: ${res.status}`;
-      alertEl.style.display = "block";
-    }
-  } catch (err) {
-    alertEl.className = "err";
-    alertEl.textContent = "Bağlantı hatası: " + err.message;
-    alertEl.style.display = "block";
-  } finally {
-    btn.disabled = false;
-  }
-});
+  });
 })();
 </script>
+
 </body>
 </html>
