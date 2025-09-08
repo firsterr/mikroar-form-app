@@ -5,15 +5,16 @@
 [functions]
   directory = "mikroar-form-app/netlify/functions"
 
-# BUNU, /api/* kuralının ÜSTÜNE ekle
+# Sadece form şemasını okumak için:
 [[redirects]]
-from = "/api/:slug"
-to   = "/.netlify/functions/forms/:slug"
-status = 200
+  from = "/api/forms"
+  to   = "/.netlify/functions/forms"
+  status = 200
 
+# Kalan tüm /api/* çağrılarını aynı isimli fonksiyona gönder:
 [[redirects]]
   from = "/api/*"
-  to = "/.netlify/functions/:splat"
+  to   = "/.netlify/functions/:splat"
   status = 200
 
 [[headers]]
