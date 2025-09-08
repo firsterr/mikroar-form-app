@@ -92,41 +92,50 @@
       alertEl.style.display = "block";
     });
 
-  // Submit
-  formEl.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const btn = formEl.querySelector('button[type="submit"]');
-    btn.disabled = true;
-    alertEl.style.display = "none";
+ // Submit
+formEl.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = formEl.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  alertEl.style.display = "none";
 
-    const answers = Object.fromEntries(new FormData(formEl).entries());
+  const answers = Object.fromEntries(new FormData(formEl).entries());
 
-    try {
-      const res = await fetch(`${API}/submit-form?slug=${encodeURIComponent(slug)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Accept": "application/json" },
-        body: JSON.stringify({ answers })
-      });
-      const j = await res.json().catch(() => ({}));
+  try {
+    const res = await fetch(`${API}/submit-form?slug=${encodeURIComponent(slug)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify({ answers })
+    });
+    const j = await res.json().catch(() => ({}));
 
-      if (res.ok && j.ok) {
-        alertEl.className = "ok";
-        alertEl.textContent = "Gönderildi, teşekkürler!";
-        alertEl.style.display = "block";
-        formEl.reset();
-      } else {
-        alertEl.className = "err";
-        alertEl.textContent = j?.data?.message || j?.error || `Hata: ${res.status}`;
-        alertEl.style.display = "block";
-      }
-    } catch (err) {
+    // Tekrarlı gönderim (unique constraint) — kullanıcı dostu mesaj
+    if (res.status === 409 || j.already) {
+      const when = j.at ? ` (${new Date(j.at).toLocaleString()})` : "";
       alertEl.className = "err";
-      alertEl.textContent = "Bağlantı hatası: " + err.message;
+      alertEl.textContent = "Bu formu bu IP ile zaten göndermişsiniz." + when;
       alertEl.style.display = "block";
-    } finally {
-      btn.disabled = false;
+      return;
     }
-  });
+
+    if (res.ok && j.ok) {
+      alertEl.className = "ok";
+      alertEl.textContent = "Gönderildi, teşekkürler!";
+      alertEl.style.display = "block";
+      formEl.reset();
+    } else {
+      alertEl.className = "err";
+      alertEl.textContent = j?.data?.message || j?.error || `Hata: ${res.status}`;
+      alertEl.style.display = "block";
+    }
+  } catch (err) {
+    alertEl.className = "err";
+    alertEl.textContent = "Bağlantı hatası: " + err.message;
+    alertEl.style.display = "block";
+  } finally {
+    btn.disabled = false;
+  }
+});
 })();
 </script>
 </body>
