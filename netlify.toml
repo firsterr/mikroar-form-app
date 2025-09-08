@@ -10,7 +10,11 @@
   from = "/api/forms"
   to   = "/.netlify/functions/forms"
   status = 200
-
+# Admin CRUD isteklerini forms-admin fonksiyonuna gönder
+[[redirects]]
+  from = "/api/admin/forms"
+  to   = "/.netlify/functions/forms-admin"
+  status = 200
 # Kalan tüm /api/* çağrılarını aynı isimli fonksiyona gönder:
 [[redirects]]
   from = "/api/*"
