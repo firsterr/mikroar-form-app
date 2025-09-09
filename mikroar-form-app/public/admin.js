@@ -82,20 +82,19 @@ function collectQuestions() {
   const rows = [...qsEl.querySelectorAll('.qrow')];
   return rows.map((r, idx) => {
     const type = r.querySelector('.q-type').value;
-    let name   = sanitizeName(r.querySelector('.q-name').value.trim());
+    let name = sanitizeName(r.querySelector('.q-name').value.trim());
     const label = r.querySelector('.q-label').value.trim() || `Soru ${idx + 1}`;
     const required = r.querySelector('.q-req input').checked;
-    const rawOpts = r.querySelector('.q-opts').value;
+    const opts = r.querySelector('.q-opts').value
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
 
     if (!name) name = `q${idx + 1}`;
 
     const q = { type, name, label, required };
-    if (/^(radio|checkbox|select)$/.test(type)) {
-      q.options = rawOpts
-        .split(',')
-        .map(s => s.trim())
-        .filter(Boolean);
-    }
+    // select eklendi
+    if (/(radio|checkbox|select)/.test(type)) q.options = opts;
     return q;
   });
 }
