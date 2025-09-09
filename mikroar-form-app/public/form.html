@@ -6,16 +6,106 @@
 <title>Form</title>
 <link rel="stylesheet" href="/form.css">
 <style>
-  .note{display:none;margin:16px 0;padding:12px;border-radius:8px}
-  .note.err{display:block;background:#ffe8e8;color:#b00020;border:1px solid #f3c5c5}
-  .note.warn{display:block;background:#fff5da;color:#6b5100;border:1px solid #f1e2b3}
-  .note.ok{display:block;background:#e7fff1;color:#0a7d3b;border:1px solid #bdf0cf}
-  .row{margin:18px 0}
-  label{display:block;font-weight:600;margin-bottom:8px}
-  .muted{color:#666;font-size:.95rem}
-  .inline{display:flex;gap:8px;align-items:center}
-  select.inline-input{flex:1;padding:10px;border:1px solid #ccd;border-radius:8px}
-  button.primary{padding:10px 14px;border-radius:10px;border:1px solid #2d6ef7;background:#2d6ef7;color:#fff;cursor:pointer}
+  /* —— Google Forms tadında sade kartlı tema —— */
+
+  :root{
+    --bg:#f6f7fb;
+    --card:#fff;
+    --text:#1f2937;
+    --muted:#6b7280;
+    --border:#e5e7eb;
+    --primary:#2563eb;
+    --primary-600:#1d4ed8;
+    --danger:#b91c1c;
+    --warn:#b45309;
+    --shadow: 0 10px 20px rgba(17,24,39,.06), 0 2px 6px rgba(17,24,39,.06);
+  }
+
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji"}
+  .wrap{max-width:860px;margin:48px auto;padding:0 20px}
+
+  /* Başlık & açıklama küçük kart görünümü */
+  #title, #desc, #alert{display:block}
+  #title{
+    font-size:34px;margin:0 0 6px;font-weight:800;letter-spacing:-.01em
+  }
+  #desc{color:var(--muted);margin:0 0 14px}
+  .note{margin:14px 0;padding:12px 14px;border-radius:12px;border:1px solid var(--border);background:#fff;box-shadow:var(--shadow)}
+  .note.err{background:#fef2f2;border-color:#fecaca;color:var(--danger)}
+  .note.warn{background:#fff7ed;border-color:#fed7aa;color:var(--warn)}
+  .note.ok{background:#ecfdf5;border-color:#bbf7d0;color:#047857}
+
+  /* Soru kartları */
+  #form{margin-top:18px;display:flex;flex-direction:column;gap:16px}
+  .row{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:16px;
+    padding:18px 18px 16px;
+    box-shadow:var(--shadow);
+  }
+  .row > label{
+    display:block;
+    font-weight:700;
+    margin:0 0 10px;
+    letter-spacing:.2px;
+  }
+
+  /* Metin / e-posta / select / textarea */
+  input[type=text],
+  input[type=email],
+  select,
+  textarea{
+    width:100%;
+    padding:12px 14px;
+    border:1px solid var(--border);
+    border-radius:12px;
+    background:#fff;
+    font:inherit;
+    outline:none;
+    transition:border-color .15s, box-shadow .15s;
+  }
+  textarea{min-height:120px;resize:vertical}
+  input[type=text]:focus,
+  input[type=email]:focus,
+  select:focus,
+  textarea:focus{
+    border-color:var(--primary);
+    box-shadow:0 0 0 3px rgba(37,99,235,.12);
+  }
+  select:invalid{color:var(--muted)}
+  select option[value=""]{color:var(--muted)}
+
+  /* Radio/checkbox satırları */
+  .row > div > div{display:flex;align-items:center;gap:10px;margin:8px 0}
+  input[type=radio], input[type=checkbox]{width:18px;height:18px}
+
+  /* Gönder butonu */
+  button[type=submit]{
+    appearance:none;border:0;background:var(--primary);color:#fff;
+    font-weight:700;padding:12px 18px;border-radius:12px;cursor:pointer;
+    margin-top:4px;box-shadow:var(--shadow)
+  }
+  button[type=submit]:hover{background:var(--primary-600)}
+  button[disabled]{opacity:.6;cursor:not-allowed}
+
+  /* Slug seçme ekranı (form.html slug yokken) */
+  .selector{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:16px;
+    padding:18px;
+    box-shadow:var(--shadow);
+    margin-top:18px;
+  }
+  .selector h2{margin:0 0 12px}
+  .selector .bar{display:flex;gap:10px}
+  .selector select{flex:1}
+
+  @media (max-width:640px){
+    .wrap{padding:0 14px}
+    #title{font-size:28px}
+  }
 </style>
 </head>
 <body>
