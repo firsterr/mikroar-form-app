@@ -1,269 +1,74 @@
 <!doctype html>
 <html lang="tr">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Admin • Anket Oluştur / Düzenle</title>
-  <link rel="stylesheet" href="/form.css"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Anket Oluştur / Düzenle</title>
+  <link rel="stylesheet" href="/form.css">
   <style>
-    :root{--gap:14px}
-    main{max-width:1000px;margin:32px auto;padding:0 16px}
-    .tabs{display:flex;gap:10px;margin-bottom:18px}
-    .tab{padding:10px 14px;border:1px solid #d9dbe0;border-radius:10px;background:#fff;cursor:pointer;font-weight:700}
-    .tab.active{background:#111827;color:#fff;border-color:#111827}
-    .panel{display:none}
-    .panel.active{display:block}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap)}
-    label{display:block;font-weight:600;margin:8px 0 6px}
-    input[type="text"],textarea,select{width:100%;padding:12px;border:1px solid #ccd;border-radius:10px;font:inherit}
-    textarea{min-height:120px}
-    .toolbar{display:flex;gap:10px;align-items:center;margin-top:10px}
-    button{padding:11px 16px;border:0;border-radius:10px;cursor:pointer;font-weight:700}
-    .primary{background:#2563eb;color:#fff}
-    .secondary{background:#e5e7eb}
-    .ok,.err{padding:10px 12px;border-radius:8px;margin:12px 0;display:none}
-    .ok{background:#eefbea;border:1px solid #86efac;color:#14532d}
-    .err{background:#fee2e2;border:1px solid #fca5a5;color:#7f1d1d}
-    /* soru editörü */
-    .q-row{border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin:12px 0;background:#fff}
-    .q-grid{display:grid;grid-template-columns:150px 1fr 1fr 140px 90px;gap:10px}
-    .q-options{margin-top:8px}
-    .q-del{background:#ef4444;color:#fff}
-    #summary,#summaryE{color:#475569;margin-top:10px}
-    #qsCreate,#qsEdit{margin-top:8px}
+    main{max-width:980px;margin:36px auto;padding:0 16px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .row>label{display:flex;flex-direction:column;gap:6px}
+    input[type=text],textarea,select{width:100%;padding:12px;border:1px solid #ccd;border-radius:10px;font:inherit}
+    textarea{min-height:140px}
+    h1{font-size:32px;margin:0 0 16px}
+    .bar{display:flex;gap:10px;align-items:center;margin:8px 0 20px}
+    .bar .tab{padding:10px 14px;border-radius:10px;border:1px solid #ccd;background:#f6f7f8;cursor:pointer}
+    .bar .tab.active{background:#e8f0ff;border-color:#9bb7ff}
+    .bar .token{margin-left:auto;padding:8px 10px;border-radius:8px;border:1px solid #ccd;background:#fff;cursor:pointer}
+    h2{margin:28px 0 8px}
+    #qs .qrow{display:grid;grid-template-columns:130px 1fr 1fr 130px 1fr 90px;gap:10px;align-items:center;margin:10px 0;padding:10px;border:1px dashed #d9dee3;border-radius:12px}
+    #qs .qrow input[type=text], #qs .qrow select{height:40px}
+    #qs .qrow .q-req{display:flex;align-items:center;gap:8px;justify-content:center}
+    button{padding:10px 14px;border-radius:10px;border:1px solid #ccd;background:#f6f7f8;cursor:pointer}
+    .primary{background:#2d6ef7;color:#fff;border-color:#2d6ef7}
+    .note{margin-top:10px;padding:10px 12px;border-radius:10px;border:1px solid #ccd;background:#f7faff}
+    .note.err{background:#fee;border-color:#f5b6b6}
+    .note.ok{background:#eefbea;border-color:#a6e3a1}
   </style>
 </head>
 <body>
   <main>
     <h1>Anket Oluştur / Düzenle</h1>
 
-    <div class="tabs">
-      <button class="tab active" data-tab="create">Oluştur</button>
-      <button class="tab" data-tab="edit">Düzenle</button>
+    <div class="bar">
+      <button class="tab active" id="tabCreate">Oluştur</button>
+      <button class="tab" id="tabEdit">Düzenle</button>
+      <button class="token" id="btnToken" title="Yönetici anahtarı">🔑 Anahtar</button>
     </div>
 
-    <div id="toast" class="ok"></div>
-    <div id="toaste" class="err"></div>
+    <div class="row">
+      <label>Slug
+        <input id="inSlug" type="text" placeholder="ör. formayvalik" />
+      </label>
+      <label>Başlık
+        <input id="inTitle" type="text" placeholder="Anket başlığı" />
+      </label>
+      <label>Açıklama (isteğe bağlı)
+        <textarea id="inDesc" placeholder="Kısa açıklama..."></textarea>
+      </label>
+      <label>Durum
+        <select id="selStatus">
+          <option value="true" selected>Aktif</option>
+          <option value="false">Pasif</option>
+        </select>
+      </label>
+    </div>
 
-    <!-- OLUSTUR -->
-    <section id="panel-create" class="panel active">
-      <div class="grid">
-        <div>
-          <label for="slug">Slug</label>
-          <input id="slug" type="text" placeholder="ör. formayvalik"/>
-        </div>
-        <div>
-          <label for="title">Başlık</label>
-          <input id="title" type="text" placeholder="Anket başlığı"/>
-        </div>
-      </div>
+    <h2>Sorular</h2>
+    <div id="qs"></div>
 
-      <div class="grid">
-        <div>
-          <label for="description">Açıklama (isteğe bağlı)</label>
-          <textarea id="description" placeholder="Bu anketin kısa açıklaması…"></textarea>
-        </div>
-        <div>
-          <label for="status">Durum</label>
-          <select id="status">
-            <option>Aktif</option>
-            <option>Pasif</option>
-          </select>
-          <div id="summary"></div>
-        </div>
-      </div>
+    <div class="bar">
+      <button id="btnAddQ">Soru Ekle</button>
+      <button id="btnLoad">Yükle</button>
+      <button id="btnNew">Yeni</button>
+      <button id="btnSave" class="primary">Kaydet</button>
+    </div>
 
-      <h2>Sorular</h2>
-      <div id="qsCreate"></div>
-      <div class="toolbar">
-        <button type="button" id="btnAddCreate" class="secondary">Soru Ekle</button>
-        <button type="button" id="btnSaveCreate" class="primary">Kaydet</button>
-      </div>
-    </section>
-
-    <!-- DUZENLE -->
-    <section id="panel-edit" class="panel">
-      <div class="grid">
-        <div>
-          <label for="selForm">Form seç</label>
-          <select id="selForm"></select>
-        </div>
-        <div class="toolbar" style="align-items:end">
-          <button type="button" id="btnLoad" class="secondary">Yükle</button>
-        </div>
-      </div>
-
-      <div class="grid" style="margin-top:10px">
-        <div>
-          <label for="titleE">Başlık</label>
-          <input id="titleE" type="text" placeholder="Anket başlığı"/>
-        </div>
-        <div>
-          <label for="statusE">Durum</label>
-          <select id="statusE">
-            <option>Aktif</option>
-            <option>Pasif</option>
-          </select>
-          <div id="summaryE"></div>
-        </div>
-      </div>
-
-      <label for="descriptionE">Açıklama</label>
-      <textarea id="descriptionE" placeholder="Açıklama…"></textarea>
-
-      <h2>Sorular</h2>
-      <div id="qsEdit"></div>
-      <div class="toolbar">
-        <button type="button" id="btnAddEdit" class="secondary">Soru Ekle</button>
-        <button type="button" id="btnSaveEdit" class="primary">Kaydet</button>
-      </div>
-    </section>
+    <div id="alert" class="note" style="display:none"></div>
   </main>
 
- <script>
-(() => {
-  const API = '/api';
-  const $ = (s) => document.querySelector(s);
-
-  const formEl  = $("#form");
-  const titleEl = $("#title");
-  const descEl  = $("#desc");
-  const alertEl = $("#alert");
-
-  // slug: ?slug=… yoksa path'i kullan ( /formayvalik gibi )
-  const rawPath  = location.pathname.replace(/^\/+|\/+$/g, "");
-  const pathSlug = rawPath && rawPath !== "form.html" ? rawPath : "";
-  const slug = new URLSearchParams(location.search).get("slug") || pathSlug;
-
-  if (!slug) {
-    titleEl.textContent = "Form yüklenemedi.";
-    alertEl.className = "err";
-    alertEl.textContent = "URL’de ?slug=… yok.";
-    alertEl.style.display = "block";
-    return;
-  }
-
-  // JS kapalıyken de çalışsın
-  formEl.action = `${API}/submit-form?slug=${encodeURIComponent(slug)}`;
-  formEl.method = "POST";
-
-  function normalizeFields(schema) {
-    if (!schema) return [];
-    // fields zaten varsa direkt kullan
-    if (Array.isArray(schema.fields)) return schema.fields;
-
-    // eski tip questions -> fields'e çevir
-    if (Array.isArray(schema.questions)) {
-      return schema.questions.map((q, i) => {
-        const name = q.name || `q_${i}`;
-        const type = q.type || 'text';
-        const f = {
-          name,
-          label: q.label || name,
-          required: !!q.required,
-          type: (['text','email','textarea','radio','checkbox'].includes(type) ? type : 'text')
-        };
-        if (type === 'radio' || type === 'checkbox') {
-          f.options = (q.options || []).map(String);
-        }
-        return f;
-      });
-    }
-    return [];
-  }
-
-  // Şemayı getir
-  fetch(`${API}/forms?slug=${encodeURIComponent(slug)}`)
-    .then(r => r.json())
-    .then(j => {
-      if (!j.ok || !j.schema) throw new Error(j.error || "Şema alınamadı");
-      const fields = normalizeFields(j.schema);
-      if (!fields.length) throw new Error("Bu formun alanları tanımlı değil.");
-
-      titleEl.textContent = j.schema.title || `Form: ${slug}`;
-      if (j.schema.description) {
-        descEl.textContent = j.schema.description;
-        descEl.style.display = "block";
-      }
-
-      // Alanları çiz
-      formEl.innerHTML = "";
-      fields.forEach(f => {
-        const row = document.createElement("div");
-        row.className = "row";
-        const id = `fld_${f.name}`;
-        const req = f.required ? "required" : "";
-
-        let control = '';
-        if (f.type === 'textarea') {
-          control = `<textarea id="${id}" name="${f.name}" ${req}></textarea>`;
-        } else if (f.type === 'radio' || f.type === 'checkbox') {
-          const type = f.type;
-          control = (f.options || []).map((opt, i) => {
-            const oid = `${id}_${i}`;
-            return `<label style="display:flex;gap:8px;align-items:center;margin:4px 0">
-                      <input id="${oid}" type="${type}" name="${f.name}" value="${opt}">
-                      <span>${opt}</span>
-                    </label>`;
-          }).join('') || `<em>Seçenek yok</em>`;
-        } else {
-          // text, email (default)
-          control = `<input id="${id}" type="${f.type || 'text'}" name="${f.name}" ${req} />`;
-        }
-
-        row.innerHTML = `<label for="${id}">${f.label || f.name}${f.required ? " *" : ""}</label>${control}`;
-        formEl.appendChild(row);
-      });
-
-      // Gönder butonu
-      const btn = document.createElement("button");
-      btn.type = "submit";
-      btn.textContent = "Gönder";
-      formEl.appendChild(btn);
-    })
-    .catch(e => {
-      titleEl.textContent = "Form yüklenemedi.";
-      alertEl.className = "err";
-      alertEl.textContent = e.message || "Hata";
-      alertEl.style.display = "block";
-    });
-
-  // Submit
-  formEl.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const btn = formEl.querySelector('button[type="submit"]');
-    btn.disabled = true;
-    alertEl.style.display = "none";
-
-    const answers = Object.fromEntries(new FormData(formEl).entries());
-
-    try {
-      const res = await fetch(`${API}/submit-form?slug=${encodeURIComponent(slug)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Accept": "application/json" },
-        body: JSON.stringify({ answers })
-      });
-      const j = await res.json().catch(() => ({}));
-
-      if (res.ok && j.ok) {
-        alertEl.className = "ok";
-        alertEl.textContent = "Gönderildi, teşekkürler!";
-        alertEl.style.display = "block";
-        formEl.reset();
-      } else {
-        alertEl.className = "err";
-        alertEl.textContent = j?.data?.message || j?.error || `Hata: ${res.status}`;
-        alertEl.style.display = "block";
-      }
-    } catch (err) {
-      alertEl.className = "err";
-      alertEl.textContent = "Bağlantı hatası: " + err.message;
-      alertEl.style.display = "block";
-    } finally {
-      btn.disabled = false;
-    }
-  });
-})();
-</script>
+  <!-- defer: DOM yüklendikten sonra çalışsın -->
+  <script src="/admin.js?v=V11" defer></script>
 </body>
 </html>
