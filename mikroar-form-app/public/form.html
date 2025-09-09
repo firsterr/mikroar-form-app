@@ -28,191 +28,130 @@
   </main>
 
 <script>
-(async () => {
+(() => {
   const $ = (s) => document.querySelector(s);
-  const formEl  = $('#form');
-  const alertEl = $('#alert');
-  const titleEl = $('#title');
-  const descEl  = $('#desc');
+  const formEl  = $("#form");
+  const titleEl = $("#title");
+  const descEl  = $("#desc");
+  const alertEl = $("#alert");
+  const loadingEl = $("#loading"); // varsa
 
-  // slug
-  const slug = new URLSearchParams(location.search).get('slug')
-    || location.pathname.replace(/^\/+|\/+$/g,''); // (opsiyonel fallback)
-  if (!slug) {
-    titleEl.textContent = 'Form yüklenemedi.';
-    alertEl.className = 'note err';
-    alertEl.textContent = 'URL’de ?slug=… yok.';
-    alertEl.style.display = 'block';
-    return;
+  function hideLoading(){ if (loadingEl) loadingEl.style.display = 'none'; }
+
+  function info(msg){
+    const div = document.createElement('div');
+    div.className = 'warn';
+    div.textContent = msg;
+    formEl.appendChild(div);
   }
 
-  // Fallback (JS kapalıysa)
-  formEl.action = `/api/submit-form?slug=${encodeURIComponent(slug)}`;
-  formEl.method = 'POST';
+  function makeRow(html){ const d = document.createElement('div'); d.className='row'; d.innerHTML = html; return d; }
 
-  // Şemayı çek
-  let j;
-  try {
-    const r = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`);
-    j = await r.json();
-    if (!r.ok || !j?.ok || !j?.schema) throw new Error(j?.error || `HTTP ${r.status}`);
-  } catch (e) {
-    titleEl.textContent = 'Form yüklenemedi.';
-    alertEl.className = 'note err';
-    alertEl.textContent = e.message || 'Form alınamadı';
-    alertEl.style.display = 'block';
-    return;
-  }
+  function render(schema){
+    formEl.innerHTML = "";
+    titleEl.textContent = schema.title || "";
+    if (schema.description) { descEl.textContent = schema.description; descEl.style.display = "block"; }
 
-  const schema = j.schema;
-  titleEl.textContent = schema.title || slug;
-  if (schema.description) { descEl.textContent = schema.description; descEl.style.display = 'block'; }
+    const qs = schema.questions || schema.fields || [];
+    if (!qs.length){ info("Bu formda soru tanımı bulunamadı."); return; }
 
-  // Alanları çiz
-  formEl.innerHTML = '';
-  const qs = schema.questions || schema.fields || [];
-
-  if (!qs.length) {
-    const warn = document.createElement('div');
-    warn.className = 'note err';
-    warn.textContent = 'Bu formda soru tanımı bulunamadı.';
-    formEl.appendChild(warn);
-  } else {
     qs.forEach((q, i) => {
-      const row = document.createElement('div');
-      row.className = 'row';
-      const name = q.name || `q_${i}`;
-      const labelText = `${q.label || name}${q.required ? ' *' : ''}`;
+      const name = q.name || `q${i+1}`;
+      const req  = q.required ? 'required' : '';
+      const label = `<label>${(q.label || ("Soru " + (i+1))).toUpperCase()} ${q.required?'<span class="req">*</span>':''}</label>`;
 
-      const label = document.createElement('label');
-      label.htmlFor = `f_${name}`;
-      label.textContent = labelText;
-      row.appendChild(label);
+      if (q.type === 'radio') {
+        if (!Array.isArray(q.options) || !q.options.length){ formEl.appendChild(makeRow(`${label}<div>Bu soru için seçenek tanımlı değil.</div>`)); return; }
+        const body = q.options.map((opt, j) =>
+          `<label class="opt"><input type="radio" name="${name}" value="${opt}" ${req}> <span>${opt}</span></label>`
+        ).join('');
+        formEl.appendChild(makeRow(`${label}<div class="opts">${body}</div>`));
 
-      // renderer
-      const type = (q.type || 'text').toLowerCase();
-      const opts = Array.isArray(q.options) ? q.options : [];
+      } else if (q.type === 'checkbox') {
+        if (!Array.isArray(q.options) || !q.options.length){ formEl.appendChild(makeRow(`${label}<div>Bu soru için seçenek tanımlı değil.</div>`)); return; }
+        const body = q.options.map((opt, j) =>
+          `<label class="opt"><input type="checkbox" name="${name}" value="${opt}" ${req}> <span>${opt}</span></label>`
+        ).join('');
+        formEl.appendChild(makeRow(`${label}<div class="opts">${body}</div>`));
 
-      function warnNoOptions() {
-        const w = document.createElement('div');
-        w.className = 'note err';
-        w.textContent = 'Bu soru için seçenek tanımlı değil.';
-        row.appendChild(w);
-      }
+      } else if (q.type === 'select') {
+        if (!Array.isArray(q.options) || !q.options.length){ formEl.appendChild(makeRow(`${label}<div>Bu soru için seçenek tanımlı değil.</div>`)); return; }
+        const opts = ['<option value="">Seçiniz</option>']
+          .concat(q.options.map(o => `<option value="${o}">${o}</option>`))
+          .join('');
+        formEl.appendChild(makeRow(`${label}<select name="${name}" ${req}>${opts}</select>`));
 
-      if (type === 'text' || type === 'email') {
-        const inp = document.createElement('input');
-        inp.type = type;
-        inp.id = `f_${name}`;
-        inp.name = name;
-        if (q.required) inp.required = true;
-        row.appendChild(inp);
-      } else if (type === 'textarea') {
-        const ta = document.createElement('textarea');
-        ta.id = `f_${name}`;
-        ta.name = name;
-        if (q.required) ta.required = true;
-        row.appendChild(ta);
-      } else if (type === 'radio') {
-        if (!opts.length) warnNoOptions();
-        opts.forEach((opt, j) => {
-          const id = `f_${name}_${j}`;
-          const wrap = document.createElement('label');
-          wrap.className = 'opt';
-          wrap.innerHTML = `<input type="radio" id="${id}" name="${name}" value="${opt}"> <span>${opt}</span>`;
-          row.appendChild(wrap);
-        });
-        if (q.required) {
-          // bir tane required hilesi
-          const first = row.querySelector(`input[name="${name}"]`);
-          if (first) first.required = true;
-        }
-      } else if (type === 'checkbox') {
-        if (!opts.length) warnNoOptions();
-        opts.forEach((opt, j) => {
-          const id = `f_${name}_${j}`;
-          const wrap = document.createElement('label');
-          wrap.className = 'opt';
-          wrap.innerHTML = `<input type="checkbox" id="${id}" name="${name}" value="${opt}"> <span>${opt}</span>`;
-          row.appendChild(wrap);
-        });
-      } else if (type === 'select') {
-        if (!opts.length) warnNoOptions();
-        const sel = document.createElement('select');
-        sel.id = `f_${name}`;
-        sel.name = name;
-        if (q.required) sel.required = true;
-        sel.innerHTML = `<option value="">Seçiniz</option>` + opts.map(o => `<option value="${o}">${o}</option>`).join('');
-        row.appendChild(sel);
+      } else if (q.type === 'textarea') {
+        formEl.appendChild(makeRow(`${label}<textarea name="${name}" ${req}></textarea>`));
+      } else if (q.type === 'email') {
+        formEl.appendChild(makeRow(`${label}<input type="email" name="${name}" ${req}>`));
       } else {
-        // bilinmeyen -> text
-        const inp = document.createElement('input');
-        inp.type = 'text';
-        inp.id = `f_${name}`;
-        inp.name = name;
-        if (q.required) inp.required = true;
-        row.appendChild(inp);
+        formEl.appendChild(makeRow(`${label}<input type="text" name="${name}" ${req}>`));
       }
-
-      formEl.appendChild(row);
     });
 
-    // Gönder düğmesi
+    // submit butonu
     const btn = document.createElement('button');
-    btn.type = 'submit';
-    btn.textContent = 'Gönder';
+    btn.type = 'submit'; btn.textContent = 'Gönder'; btn.id='btnSend';
     formEl.appendChild(btn);
   }
 
-  // Submit
-  formEl.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const btn = formEl.querySelector('button[type="submit"]');
-    if (btn) btn.disabled = true;
-    alertEl.style.display = 'none';
+  async function boot(){
+    const slug = new URLSearchParams(location.search).get('slug');
+    if (!slug){ titleEl.textContent = "Form yüklenemedi"; alertEl.className='err'; alertEl.textContent='URL’de ?slug=… yok.'; alertEl.style.display='block'; hideLoading(); return; }
 
-    // cevapları topla
-    const answers = {};
-    qs.forEach((q, i) => {
-      const name = q.name || `q_${i}`;
-      const type = (q.type || 'text').toLowerCase();
-      if (type === 'checkbox') {
-        answers[name] = Array.from(document.querySelectorAll(`[name="${name}"]:checked`)).map(el => el.value);
-      } else if (type === 'radio') {
-        const el = document.querySelector(`input[name="${name}"]:checked`);
-        answers[name] = el ? el.value : '';
-      } else {
-        const el = document.querySelector(`[name="${name}"]`);
-        answers[name] = el ? (el.value ?? '').trim() : '';
-      }
-    });
-
-    try {
-      const res = await fetch(`/api/submit-form?slug=${encodeURIComponent(slug)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({ answers })
-      });
-      const jr = await res.json().catch(() => ({}));
-
-      if (res.ok && jr.ok) {
-        alertEl.className = 'note ok';
-        alertEl.textContent = 'Gönderildi, teşekkürler!';
-        alertEl.style.display = 'block';
-        formEl.reset();
-      } else {
-        alertEl.className = 'note err';
-        alertEl.textContent = jr?.data?.message || jr?.error || `Hata: ${res.status}`;
-        alertEl.style.display = 'block';
-      }
-    } catch (err) {
-      alertEl.className = 'note err';
-      alertEl.textContent = 'Bağlantı hatası: ' + err.message;
-      alertEl.style.display = 'block';
+    try{
+      const r = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`);
+      const j = await r.json().catch(()=> ({}));
+      if (!r.ok || !j.ok || !j.schema){ throw new Error(j.error || `HTTP ${r.status}`); }
+      render(j.schema);
+    } catch(err){
+      titleEl.textContent = "Form yüklenemedi";
+      alertEl.className='err';
+      alertEl.textContent = err.message || 'Hata';
+      alertEl.style.display='block';
     } finally {
-      if (btn) btn.disabled = false;
+      hideLoading();
     }
-  });
+
+    // submit
+    formEl.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = $("#btnSend"); btn.disabled = true;
+
+      const answers = {};
+      [...formEl.elements].forEach(el => {
+        if (!el.name) return;
+        if (el.type === 'checkbox'){
+          answers[el.name] = answers[el.name] || [];
+          if (el.checked) answers[el.name].push(el.value);
+        } else if (el.type === 'radio'){
+          if (el.checked) answers[el.name] = el.value;
+        } else {
+          answers[el.name] = el.value;
+        }
+      });
+
+      try{
+        const res = await fetch(`/api/submit-form?slug=${encodeURIComponent(slug)}`,{
+          method:'POST',
+          headers:{ 'Content-Type':'application/json', 'Accept':'application/json' },
+          body: JSON.stringify({ answers })
+        });
+        const j = await res.json().catch(()=> ({}));
+        if (res.ok && j.ok){
+          alertEl.className='ok'; alertEl.textContent='Gönderildi, teşekkürler!'; alertEl.style.display='block';
+          formEl.reset();
+        } else {
+          alertEl.className='err'; alertEl.textContent = j?.data?.message || j?.error || `Hata: ${res.status}`; alertEl.style.display='block';
+        }
+      } catch(err){
+        alertEl.className='err'; alertEl.textContent = 'Bağlantı hatası: ' + err.message; alertEl.style.display='block';
+      } finally { btn.disabled = false; }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', boot);
 })();
 </script>
 </body>
