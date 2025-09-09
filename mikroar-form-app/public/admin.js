@@ -1,185 +1,194 @@
-// ---- Admin Panel (robust binding) ----
-const API = '/api';
-const LS_KEY = 'ADMIN_TOKEN';
+// ---- Basit Admin Panel JS (stabil) ----
+(function () {
+  var API = '/api';
+  var LS_KEY = 'ADMIN_TOKEN';
 
-const $ = (s) => document.querySelector(s);
-let qsEl, alertEl;
+  function $(sel) { return document.querySelector(sel); }
+  var qsEl = $('#qs');
+  var alertEl = $('#alert');
 
-function toast(msg, type = 'ok') {
-  if (!alertEl) { console.log(type.toUpperCase()+':', msg); return; }
-  alertEl.textContent = msg;
-  alertEl.className = 'note ' + type;
-  alertEl.style.display = 'block';
-  setTimeout(() => (alertEl.style.display = 'none'), 3000);
-}
-
-function getToken() {
-  let t = localStorage.getItem(LS_KEY);
-  if (!t) {
-    t = prompt('Yönetici anahtarı (X-Admin-Token):');
-    if (t) localStorage.setItem(LS_KEY, t);
+  // ---- UI: bildirim
+  function toast(msg, type) {
+    type = type || 'ok';
+    if (!alertEl) return;
+    alertEl.textContent = msg;
+    alertEl.className = 'note ' + type;
+    alertEl.style.display = 'block';
+    setTimeout(function () { alertEl.style.display = 'none'; }, 4000);
   }
-  return t;
-}
-function authHeaders() {
-  const t = getToken();
-  if (!t) throw new Error('no-token');
-  return { 'Content-Type': 'application/json', 'X-Admin-Token': t };
-}
 
-function clearForm() {
-  $('#inSlug')?.value = '';
-  $('#inTitle')?.value = '';
-  $('#inDesc')?.value = '';
-  $('#selStatus')?.value = 'true';
-  if (qsEl) qsEl.innerHTML = '';
-}
-
-function addQuestion(q = { type: 'text', name: '', label: '', required: false, options: [] }) {
-  const div = document.createElement('div');
-  div.className = 'qrow';
-  div.innerHTML = `
-    <select class="q-type">
-      <option value="text" ${q.type === 'text' ? 'selected' : ''}>Metin</option>
-      <option value="email" ${q.type === 'email' ? 'selected' : ''}>E-posta</option>
-      <option value="textarea" ${q.type === 'textarea' ? 'selected' : ''}>Metin alanı</option>
-      <option value="radio" ${q.type === 'radio' ? 'selected' : ''}>Tek seçim</option>
-      <option value="checkbox" ${q.type === 'checkbox' ? 'selected' : ''}>Çoklu seçim</option>
-      <option value="select" ${q.type === 'select' ? 'selected' : ''}>Açılır menü</option>
-    </select>
-    <input class="q-name"  type="text" placeholder="alan adı (boşsa q1,q2…)" value="${q.name || ''}">
-    <input class="q-label" type="text" placeholder="Etiket" value="${q.label || ''}">
-    <label class="q-req"><input type="checkbox" ${q.required ? 'checked' : ''}> Zorunlu</label>
-    <input class="q-opts" type="text" placeholder="Seçenekler (virgülle)"
-           value="${(q.options || []).join(', ')}">
-    <button type="button" class="q-del">Sil</button>
-  `;
-  const typeEl = div.querySelector('.q-type');
-  const optsEl = div.querySelector('.q-opts');
-
-  const toggleOpts = () => {
-    const t = typeEl.value;
-    // radio | checkbox | select -> seçenek alanı göster
-    const needs = /^(radio|checkbox|select)$/i.test(t);
-    optsEl.style.display = needs ? '' : 'none';
-  };
-  typeEl.addEventListener('change', toggleOpts);
-  toggleOpts();
-
-  div.querySelector('.q-del').addEventListener('click', () => div.remove());
-  qsEl.appendChild(div);
-}
-
-function sanitizeName(s) {
-  return String(s || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9_]+/g, '_')
-    .replace(/^_+|_+$/g, '');
-}
-function collectQuestions() {
-  const rows = [...qsEl.querySelectorAll('.qrow')];
-  return rows.map((r, idx) => {
-    const type = r.querySelector('.q-type').value;
-    let name = sanitizeName(r.querySelector('.q-name').value.trim());
-    const label = r.querySelector('.q-label').value.trim() || `Soru ${idx + 1}`;
-    const required = r.querySelector('.q-req input').checked;
-
-    if (!name) name = `q${idx + 1}`;
-    const q = { type, name, label, required };
-
-    if (/^(radio|checkbox|select)$/i.test(type)) {
-      const opts = r
-        .querySelector('.q-opts')
-        .value.split(',')
-        .map(s => s.trim())
-        .filter(Boolean);
-      q.options = opts;
+  // ---- auth
+  function getToken() {
+    var t = localStorage.getItem(LS_KEY);
+    if (!t) {
+      t = prompt('Yönetici anahtarı (X-Admin-Token):');
+      if (t) localStorage.setItem(LS_KEY, t);
     }
-    return q;
-  });
-}
+    return t;
+  }
+  function authHeaders() {
+    var t = getToken();
+    if (!t) {
+      toast('Admin anahtarı gerekli.', 'err');
+      throw new Error('no-token');
+    }
+    return { 'Content-Type': 'application/json', 'X-Admin-Token': t };
+  }
 
-// --- Data I/O ---
-async function loadForm() {
-  const slug = $('#inSlug').value.trim();
-  if (!slug) return toast('Önce slug gir.', 'err');
+  // ---- form temizle
+  function clearForm() {
+    var slug = $('#inSlug'); if (slug) slug.value = '';
+    var title = $('#inTitle'); if (title) title.value = '';
+    var desc = $('#inDesc'); if (desc) desc.value = '';
+    var status = $('#selStatus'); if (status) status.value = 'true';
+    if (qsEl) qsEl.innerHTML = '';
+  }
 
-  const r = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`);
-  const j = await r.json().catch(()=>({}));
-  if (!r.ok || !j.ok || !j.schema) return toast(j.error || `Bulunamadı (HTTP ${r.status})`, 'err');
+  // ---- soru satırı ekle
+  function addQuestion(q) {
+    q = q || { type: 'text', name: '', label: '', required: false, options: [] };
 
-  const s = j.schema;
-  $('#inTitle').value = s.title || '';
-  $('#inDesc').value = s.description || '';
-  $('#selStatus').value = (s.active === false ? 'false' : 'true');
-  qsEl.innerHTML = '';
-  (s.questions || s.fields || []).forEach(addQuestion);
-  toast('Form yüklendi.');
-}
+    var div = document.createElement('div');
+    div.className = 'qrow';
+    div.innerHTML =
+      '<select class="q-type">' +
+        '<option value="text"'     + (q.type === 'text'     ? ' selected' : '') + '>Metin</option>' +
+        '<option value="email"'    + (q.type === 'email'    ? ' selected' : '') + '>E-posta</option>' +
+        '<option value="textarea"' + (q.type === 'textarea' ? ' selected' : '') + '>Metin alanı</option>' +
+        '<option value="radio"'    + (q.type === 'radio'    ? ' selected' : '') + '>Tek seçim</option>' +
+        '<option value="checkbox"' + (q.type === 'checkbox' ? ' selected' : '') + '>Çoklu seçim</option>' +
+        '<option value="select"'   + (q.type === 'select'   ? ' selected' : '') + '>Açılır menü</option>' +
+      '</select>' +
+      '<input class="q-name"  type="text" placeholder="alan adı (boşsa q1,q2…)" value="' + (q.name  || '') + '">' +
+      '<input class="q-label" type="text" placeholder="Etiket" value="' + (q.label || '') + '">' +
+      '<label class="q-req"><input type="checkbox"' + (q.required ? ' checked' : '') + '> Zorunlu</label>' +
+      '<input class="q-opts" type="text" placeholder="Seçenekler (virgül ile)" value="' + ((q.options || []).join(', ')) + '">' +
+      '<button type="button" class="q-del">Sil</button>';
 
-async function saveForm() {
-  try {
-    const slug = $('#inSlug').value.trim();
-    if (!slug) return toast('Slug zorunlu.', 'err');
+    // select/checkbox/radio/select harici tiplerde opsiyon alanını gizle
+    function updateOptsVisibility() {
+      var t = div.querySelector('.q-type').value;
+      var show = (t === 'radio' || t === 'checkbox' || t === 'select');
+      div.querySelector('.q-opts').style.display = show ? '' : 'none';
+    }
+    div.querySelector('.q-type').addEventListener('change', updateOptsVisibility);
+    div.querySelector('.q-del').addEventListener('click', function () { div.remove(); });
+    qsEl.appendChild(div);
+    updateOptsVisibility();
+  }
 
-    const body = {
-      slug,
-      title: $('#inTitle').value.trim(),
-      description: $('#inDesc').value.trim(),
-      active: $('#selStatus').value === 'true',
-      schema: { questions: collectQuestions() }
-    };
+  // ---- soruları topla
+  function sanitizeName(s) {
+    s = String(s || '');
+    s = s.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+    return s;
+  }
+  function collectQuestions() {
+    var rows = qsEl ? qsEl.querySelectorAll('.qrow') : [];
+    var out = [];
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      var type = r.querySelector('.q-type').value;
+      var name = sanitizeName(r.querySelector('.q-name').value);
+      if (!name) name = 'q' + (i + 1);
+      var label = r.querySelector('.q-label').value || ('Soru ' + (i + 1));
+      var required = r.querySelector('.q-req input').checked;
+      var optsRaw = r.querySelector('.q-opts').value;
+      var opts = [];
+      if (optsRaw && (type === 'radio' || type === 'checkbox' || type === 'select')) {
+        var parts = optsRaw.split(',');
+        for (var k = 0; k < parts.length; k++) {
+          var v = parts[k].trim();
+          if (v) opts.push(v);
+        }
+      }
+      var q = { type: type, name: name, label: label, required: required };
+      if (opts.length && (type === 'radio' || type === 'checkbox' || type === 'select')) q.options = opts;
+      out.push(q);
+    }
+    return out;
+  }
 
-    const r = await fetch(`/api/forms-admin`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify(body)
+  // ---- form yükle
+  function loadForm() {
+    var slug = $('#inSlug').value.trim();
+    if (!slug) return toast('Önce slug gir.', 'err');
+
+    fetch(API + '/forms?slug=' + encodeURIComponent(slug))
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, body: j }; }); })
+      .then(function (res) {
+        if (!res.ok || !res.body || !res.body.ok || !res.body.schema) {
+          toast((res.body && res.body.error) || ('Bulunamadı (HTTP ' + res.status + ')'), 'err');
+          return;
+        }
+        var s = res.body.schema;
+        $('#inTitle').value = s.title || '';
+        $('#inDesc').value = s.description || '';
+        $('#selStatus').value = (s.active === false ? 'false' : 'true');
+
+        var list = s.questions ? s.questions : (s.fields ? s.fields : []);
+        qsEl.innerHTML = '';
+        for (var i = 0; i < list.length; i++) addQuestion(list[i]);
+        toast('Form yüklendi.', 'ok');
+      })
+      .catch(function (e) { toast(e.message || 'Yüklenemedi', 'err'); });
+  }
+
+  // ---- form kaydet
+  function saveForm() {
+    try {
+      var slug = $('#inSlug').value.trim();
+      if (!slug) { toast('Slug zorunlu.', 'err'); return; }
+
+      var body = {
+        slug: slug,
+        title: $('#inTitle').value.trim(),
+        description: $('#inDesc').value.trim(),
+        active: ($('#selStatus').value === 'true'),
+        schema: { questions: collectQuestions() }
+      };
+
+      fetch(API + '/forms-admin', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(body)
+      })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, body: j }; }); })
+        .then(function (res) {
+          if (!res.ok || !res.body || !res.body.ok) {
+            throw new Error((res.body && res.body.error) || ('HTTP ' + res.status));
+          }
+          var arr = [];
+          if (res.body.schema && res.body.schema.questions) arr = res.body.schema.questions;
+          else if (res.body.schema && res.body.schema.fields) arr = res.body.schema.fields;
+
+          if (!arr || !arr.length) {
+            toast('Kaydedildi ama alan sayısı 0 görünüyor. Yenileyip tekrar deneyin.', 'err');
+          } else {
+            toast('Kaydedildi ✅', 'ok');
+          }
+        })
+        .catch(function (e) { toast(e.message || 'Kaydedilemedi', 'err'); });
+    } catch (e) {
+      toast(e.message || 'Kaydedilemedi', 'err');
+    }
+  }
+
+  // ---- bağla
+  function bind() {
+    var bAdd = $('#btnAddQ'); if (bAdd)  bAdd.addEventListener('click', function(){ addQuestion(); });
+    var bLoad = $('#btnLoad'); if (bLoad) bLoad.addEventListener('click', loadForm);
+    var bSave = $('#btnSave'); if (bSave) bSave.addEventListener('click', saveForm);
+    var bNew  = $('#btnNew');  if (bNew)  bNew.addEventListener('click', clearForm);
+    var bTok  = $('#btnToken');if (bTok)  bTok.addEventListener('click', function () {
+      localStorage.removeItem(LS_KEY); getToken();
     });
-    const j = await r.json().catch(()=>({}));
-    if (!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
-    toast('Kaydedildi ✅', 'ok');
-  } catch (e) {
-    toast(e.message || 'Hata', 'err');
   }
-}
 
-// --- Robust button binding ---
-function findButtonByText(pattern) {
-  const pats = Array.isArray(pattern) ? pattern : [pattern];
-  const buttons = [...document.querySelectorAll('button, a')];
-  return buttons.find(b => {
-    const t = (b.textContent || '').trim().toLowerCase();
-    return pats.some(p => t === p || t.includes(p));
-  });
-}
-function bindButtons() {
-  // Önce id ile dene; yoksa yazıya göre bul
-  const btnAddQ = $('#btnAddQ') || findButtonByText(['soru ekle','soru&nbsp;ekle']);
-  const btnLoad = $('#btnLoad') || findButtonByText(['yükle','formu yükle']);
-  const btnNew  = $('#btnNew')  || findButtonByText(['yeni']);
-  const btnSave = $('#btnSave') || findButtonByText(['kaydet']);
-  const btnToken= $('#btnToken')|| $('[data-admin-token]') || findButtonByText(['anahtar']);
-
-  btnAddQ?.addEventListener('click', () => addQuestion());
-  btnLoad?.addEventListener('click', () => loadForm());
-  btnNew ?.addEventListener('click', () => clearForm());
-  btnSave?.addEventListener('click', () => saveForm());
-  btnToken?.addEventListener('click', () => { localStorage.removeItem(LS_KEY); getToken(); });
-
-  // Kullanıcıya görsel bir işaret de verelim
-  if (!btnAddQ || !btnLoad || !btnSave) {
-    console.warn('Butonların bazıları id ile bulunamadı, metne göre bağlandı.');
+  // defer ile geliyor ama garanti olsun
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function(){ bind(); clearForm(); });
+  } else {
+    bind(); clearForm();
   }
-}
-
-// --- Init ---
-document.addEventListener('DOMContentLoaded', () => {
-  qsEl    = $('#qs') || document.querySelector('#questions') || document.body.querySelector('.questions') || document.createElement('div');
-  alertEl = $('#alert') || document.querySelector('.note');
-
-  // Eğer #qs yoksa (HTML’de unutulduysa) oluşturalım ki çalışsın:
-  if (!qsEl.id) { qsEl.id = 'qs'; if (!document.getElementById('qs')) document.body.appendChild(qsEl); }
-
-  bindButtons();
-  clearForm();
-});
+})();
