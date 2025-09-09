@@ -26,6 +26,33 @@
   </style>
 </head>
 <body>
+  <!-- KİLİT OVERLAY -->
+<style>
+  #lock {
+    position: fixed; inset: 0; display: none;
+    align-items: center; justify-content: center;
+    background: rgba(246,247,248,.96); z-index: 9999;
+  }
+  #lock .card{
+    background:#fff; border:1px solid #ccd; border-radius:12px;
+    padding:22px 24px; box-shadow: 0 8px 40px rgba(0,0,0,.08);
+    max-width: 420px; width: 92%;
+    text-align: center; font: inherit;
+  }
+  #lock h3{ margin:0 0 8px; font-size:20px; }
+  #lock p{ margin:0 0 16px; color:#444; }
+  #unlockBtn{ padding:10px 14px; border-radius:10px;
+    border:1px solid #2d6ef7; background:#2d6ef7; color:#fff; cursor:pointer;
+  }
+</style>
+
+<div id="lock" role="dialog" aria-modal="true">
+  <div class="card">
+    <h3>Yönetici anahtarı gerekli</h3>
+    <p>Devam etmek için X-Admin-Token anahtarını girin.</p>
+    <button id="unlockBtn">Anahtar Gir</button>
+  </div>
+</div>
   <main>
     <h1>Anket Oluştur / Düzenle</h1>
 
