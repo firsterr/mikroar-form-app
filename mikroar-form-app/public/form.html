@@ -54,7 +54,10 @@
   const pickBtn  = $('#pickBtn');
   const listWarn = $('#listWarn');
 
-  const slug = new URLSearchParams(location.search).get('slug') || location.pathname.replace(/^\/+|\/+$/g,'');
+ // SLUG tespiti: path'te .html varsa slug DEĞİLDİR
+const rawPath  = location.pathname.replace(/^\/+|\/+$/g, '');
+const pathSlug = rawPath && !/\.html$/i.test(rawPath) ? rawPath : '';
+const slug     = new URLSearchParams(location.search).get('slug') || pathSlug;
   const API = '/api';
 
   function showErr(msg){ alertEl.textContent = msg; alertEl.className='note err'; alertEl.style.display='block'; }
@@ -73,7 +76,9 @@
     try{
       const r = await fetch(`${API}/forms-list`);
       const j = await r.json().catch(()=>({}));
-      const items = (j && j.ok && Array.isArray(j.items)) ? j.items : [];
+     const items = (j && j.ok && (Array.isArray(j.items) || Array.isArray(j.forms)))
+  ? (j.items || j.forms)
+  : [];
 
       pickSel.innerHTML = '<option value="">— Form (slug) seçin —</option>';
 
