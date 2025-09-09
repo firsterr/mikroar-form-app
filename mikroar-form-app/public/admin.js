@@ -1,10 +1,9 @@
-// ---- Admin Panel (final) ----
+// ---- Admin Panel (robust binding) ----
 const API = '/api';
 const LS_KEY = 'ADMIN_TOKEN';
 
 const $ = (s) => document.querySelector(s);
-const qsEl = $('#qs');
-const alertEl = $('#alert');
+let qsEl, alertEl;
 
 function toast(msg, type = 'ok') {
   if (!alertEl) { console.log(type.toUpperCase()+':', msg); return; }
@@ -60,7 +59,7 @@ function addQuestion(q = { type: 'text', name: '', label: '', required: false, o
 
   const toggleOpts = () => {
     const t = typeEl.value;
-    // ❗ select da opsiyon ister
+    // radio | checkbox | select -> seçenek alanı göster
     const needs = /^(radio|checkbox|select)$/i.test(t);
     optsEl.style.display = needs ? '' : 'none';
   };
@@ -86,10 +85,8 @@ function collectQuestions() {
     const required = r.querySelector('.q-req input').checked;
 
     if (!name) name = `q${idx + 1}`;
-
     const q = { type, name, label, required };
 
-    // ❗ select için de options kaydet
     if (/^(radio|checkbox|select)$/i.test(type)) {
       const opts = r
         .querySelector('.q-opts')
@@ -102,12 +99,12 @@ function collectQuestions() {
   });
 }
 
-// Load
+// --- Data I/O ---
 async function loadForm() {
   const slug = $('#inSlug').value.trim();
   if (!slug) return toast('Önce slug gir.', 'err');
 
-  const r = await fetch(`${API}/forms?slug=${encodeURIComponent(slug)}`);
+  const r = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`);
   const j = await r.json().catch(()=>({}));
   if (!r.ok || !j.ok || !j.schema) return toast(j.error || `Bulunamadı (HTTP ${r.status})`, 'err');
 
@@ -116,12 +113,10 @@ async function loadForm() {
   $('#inDesc').value = s.description || '';
   $('#selStatus').value = (s.active === false ? 'false' : 'true');
   qsEl.innerHTML = '';
-  const qs = s.questions || s.fields || [];
-  qs.forEach(addQuestion);
+  (s.questions || s.fields || []).forEach(addQuestion);
   toast('Form yüklendi.');
 }
 
-// Save
 async function saveForm() {
   try {
     const slug = $('#inSlug').value.trim();
@@ -135,27 +130,56 @@ async function saveForm() {
       schema: { questions: collectQuestions() }
     };
 
-    const r = await fetch(`${API}/forms-admin`, {
+    const r = await fetch(`/api/forms-admin`, {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify(body)
     });
     const j = await r.json().catch(()=>({}));
     if (!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
-
     toast('Kaydedildi ✅', 'ok');
   } catch (e) {
     toast(e.message || 'Hata', 'err');
   }
 }
 
-// ---- UI bindings (buton id'leri) ----
-// NOT: admin.html’de bu id’lerin olduğundan emin olun:
-// #btnAddQ, #btnLoad, #btnSave, #btnNew, #btnToken
-$('#btnAddQ')?.addEventListener('click', () => addQuestion());
-$('#btnLoad')?.addEventListener('click', loadForm);
-$('#btnSave')?.addEventListener('click', saveForm);
-$('#btnNew')?.addEventListener('click', clearForm);
-$('#btnToken')?.addEventListener('click', () => { localStorage.removeItem(LS_KEY); getToken(); });
+// --- Robust button binding ---
+function findButtonByText(pattern) {
+  const pats = Array.isArray(pattern) ? pattern : [pattern];
+  const buttons = [...document.querySelectorAll('button, a')];
+  return buttons.find(b => {
+    const t = (b.textContent || '').trim().toLowerCase();
+    return pats.some(p => t === p || t.includes(p));
+  });
+}
+function bindButtons() {
+  // Önce id ile dene; yoksa yazıya göre bul
+  const btnAddQ = $('#btnAddQ') || findButtonByText(['soru ekle','soru&nbsp;ekle']);
+  const btnLoad = $('#btnLoad') || findButtonByText(['yükle','formu yükle']);
+  const btnNew  = $('#btnNew')  || findButtonByText(['yeni']);
+  const btnSave = $('#btnSave') || findButtonByText(['kaydet']);
+  const btnToken= $('#btnToken')|| $('[data-admin-token]') || findButtonByText(['anahtar']);
 
-clearForm();
+  btnAddQ?.addEventListener('click', () => addQuestion());
+  btnLoad?.addEventListener('click', () => loadForm());
+  btnNew ?.addEventListener('click', () => clearForm());
+  btnSave?.addEventListener('click', () => saveForm());
+  btnToken?.addEventListener('click', () => { localStorage.removeItem(LS_KEY); getToken(); });
+
+  // Kullanıcıya görsel bir işaret de verelim
+  if (!btnAddQ || !btnLoad || !btnSave) {
+    console.warn('Butonların bazıları id ile bulunamadı, metne göre bağlandı.');
+  }
+}
+
+// --- Init ---
+document.addEventListener('DOMContentLoaded', () => {
+  qsEl    = $('#qs') || document.querySelector('#questions') || document.body.querySelector('.questions') || document.createElement('div');
+  alertEl = $('#alert') || document.querySelector('.note');
+
+  // Eğer #qs yoksa (HTML’de unutulduysa) oluşturalım ki çalışsın:
+  if (!qsEl.id) { qsEl.id = 'qs'; if (!document.getElementById('qs')) document.body.appendChild(qsEl); }
+
+  bindButtons();
+  clearForm();
+});
