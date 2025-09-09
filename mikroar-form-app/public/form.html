@@ -64,8 +64,10 @@
   const btnOpen  = $('#btnOpen');
 
   const API = '/api';
-  const slug = new URLSearchParams(location.search).get('slug')
-            || location.pathname.replace(/^\/+|\/+$/g,'');
+  // --- SLUG tespiti (path'te .html varsa slug DEĞİLDİR) ---
+const rawPath  = location.pathname.replace(/^\/+|\/+$/g, ''); // ör: "form.html" ya da "ASD"
+const pathSlug = rawPath && !/\.html$/i.test(rawPath) ? rawPath : '';
+const slug     = new URLSearchParams(location.search).get('slug') || pathSlug;
 
   function showErr(msg){ alertEl.textContent = msg; alertEl.className='note err'; alertEl.style.display='block'; }
   function showWarn(msg){ alertEl.textContent = msg; alertEl.className='note warn'; alertEl.style.display='block'; }
