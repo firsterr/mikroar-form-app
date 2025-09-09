@@ -315,18 +315,37 @@ const slug     = new URLSearchParams(location.search).get('slug') || pathSlug;
     });
 
     try{
-      const r = await fetch(`${API}/submit-form?slug=${encodeURIComponent(slug)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept':'application/json' },
-        body: JSON.stringify({ answers })
-      });
-      const j = await r.json().catch(()=>({}));
-      if (r.ok && j.ok){
-        showOk('Gönderildi, teşekkürler!');
-        formEl.reset();
-      }else{
-        showErr(j?.data?.message || j?.error || `Hata: ${r.status}`);
-      }
+        const r = await fetch(`${API}/submit-form?slug=${encodeURIComponent(slug)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept':'application/json' },
+    body: JSON.stringify({ answers })
+  });
+
+  // JSON gelmeyebilir: güvenli parse
+  let j = null;
+  try { j = await r.json(); } catch(_) {}
+
+  // 409 = aynı IP / tekrar gönderim => HATA DEĞİL, UYARI GÖSTER
+  if (r.status === 409) {
+    alertEl.className = 'note warn';
+    alertEl.textContent =
+      (j && (j.data?.message || j.message || j.error)) ||
+      'Bu anketi daha önce doldurmuşsunuz.';
+    alertEl.style.display = 'block';
+    return;  // buton re-enable "finally"de olacak
+  }
+
+  if (r.ok && (j?.ok ?? true)) {
+    alertEl.className = 'note ok';
+    alertEl.textContent = 'Gönderildi, teşekkürler!';
+    alertEl.style.display = 'block';
+    formEl.reset();
+  } else {
+    showErr(
+      (j && (j.data?.message || j.message || j.error)) ||
+      `Hata: ${r.status}`
+    );
+  }
     }catch(err){
       showErr('Bağlantı hatası: ' + err.message);
     }finally{
