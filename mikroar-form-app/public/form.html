@@ -52,7 +52,7 @@
     titleEl.textContent = schema.title || "";
     if (schema.description) { descEl.textContent = schema.description; descEl.style.display = "block"; }
 
-    const qs = schema.questions || schema.fields || [];
+   for (const q of (schema.questions || schema.fields || [])) {
     if (!qs.length){ info("Bu formda soru tanımı bulunamadı."); return; }
 
     qs.forEach((q, i) => {
