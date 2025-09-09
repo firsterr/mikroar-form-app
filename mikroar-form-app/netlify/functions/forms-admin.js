@@ -1,82 +1,97 @@
 // netlify/functions/forms-admin.js
-// Basit admin API: form oluştur / güncelle (UPSERT) ve sil
-// Güvenlik: X-Admin-Token header'ı ADMIN_TOKEN ile eşleşmeli
-
-const json = (s, d) => ({
-  statusCode: s,
-  headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-  body: JSON.stringify(d)
-});
-
 export async function handler(event) {
-  // CORS preflight
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 204,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Token',
-        'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS'
-      }
-    };
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, headers: { 'Allow': 'POST' }, body: 'Method Not Allowed' };
   }
 
-  const token = event.headers['x-admin-token'];
-  if (token !== process.env.ADMIN_TOKEN) {
-    return json(401, { ok: false, message: 'Unauthorized' });
+  const { SUPABASE_URL, SUPABASE_ANON_KEY, ADMIN_TOKEN } = process.env;
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return jerr(500, 'Missing Supabase env vars');
   }
 
-  const { SUPABASE_URL, SUPABASE_SERVICE_ROLE } = process.env;
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE) {
-    return json(500, { ok: false, message: 'Missing Supabase server envs' });
+  // admin auth (header is case-insensitive)
+  const got = event.headers['x-admin-token'] || event.headers['X-Admin-Token'];
+  if (!ADMIN_TOKEN || got !== ADMIN_TOKEN) {
+    return jerr(401, 'Unauthorized');
   }
 
-  const TABLE = `${SUPABASE_URL}/rest/v1/forms`;
-  const HEADERS = {
-    apikey: SUPABASE_SERVICE_ROLE,
-    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE}`,
-    'Content-Type': 'application/json',
-    // return=representation: dönen kaydı geri ver
-    // resolution=merge-duplicates + on_conflict=slug ile UPSERT yap
-    Prefer: 'return=representation,resolution=merge-duplicates'
+  let body = {};
+  try { body = JSON.parse(event.body || '{}'); }
+  catch { return jerr(400, 'Invalid JSON'); }
+
+  const slug = String(body.slug || '').trim();
+  if (!slug) return jerr(400, 'slug required');
+
+  // normalize questions  (accept "schema.questions" OR legacy "schema.fields")
+  const schemaIn = body.schema || {};
+  const inArr = Array.isArray(schemaIn.questions)
+    ? schemaIn.questions
+    : Array.isArray(schemaIn.fields) ? schemaIn.fields : [];
+
+  const questions = inArr.map((q, i) => normalizeQ(q, i));
+  const schemaOut = { questions }; // <-- DB'ye HER ZAMAN questions olarak yaz
+
+  const row = {
+    slug,
+    title: body.title ?? null,
+    description: body.description ?? null,
+    active: body.active !== false,
+    schema: schemaOut
   };
 
-  if (event.httpMethod === 'POST') {
-    // Body: { slug, title?, description?, fields: [...] }
-    const body = JSON.parse(event.body || '{}');
-    if (!body.slug) return json(400, { ok: false, message: 'slug gerekli' });
-
-    // forms tablosunda JSON kolonun adı sende “schema” ise bu şekliyle bırak.
-    // Eğer kolonun adı “fields” ise aşağıdaki satırı:
-    //   const row = { slug: body.slug, title: ..., description: ..., fields: body.fields || [] };
-    // şeklinde değiştir.
-    const row = {
-      slug: body.slug,
-      title: body.title || body.slug,
-      description: body.description || '',
-      schema: { fields: body.fields || [] }   // <<< burada “schema” kolonu varsayımı
-    };
-
-    const r = await fetch(`${TABLE}?on_conflict=slug`, {
+  try {
+    const resp = await fetch(`${SUPABASE_URL}/rest/v1/forms?on_conflict=slug`, {
       method: 'POST',
-      headers: HEADERS,
-      body: JSON.stringify([row])
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+        // upsert + dönen kaydı istiyoruz
+        Prefer: 'resolution=merge-duplicates,return=representation'
+      },
+      body: JSON.stringify(row)
     });
 
-    const j = await r.json().catch(() => ({}));
-    return json(r.status, { ok: r.ok, ...j, message: r.ok ? 'Kaydedildi' : 'Hata' });
+    const data = await resp.json().catch(() => null);
+    const saved = Array.isArray(data) ? data[0] : data;
+
+    return jok(resp.ok, {
+      id: saved?.id,
+      slug: saved?.slug,
+      schema: saved?.schema   // { questions:[...] } olarak dönsün
+    }, resp.status);
+  } catch (e) {
+    return jerr(500, String(e));
+  }
+}
+
+function normalizeQ(q = {}, idx = 0) {
+  const type = String(q.type || 'text');
+  const name = String(q.name || '').trim() || `q${idx + 1}`;
+  const label = String(q.label || `Soru ${idx + 1}`).trim();
+  const required = !!q.required;
+  let options = [];
+
+  if (type === 'radio' || type === 'checkbox') {
+    if (Array.isArray(q.options)) options = q.options.map(s => String(s));
   }
 
-  if (event.httpMethod === 'DELETE') {
-    const slug = (event.queryStringParameters || {}).slug;
-    if (!slug) return json(400, { ok: false, message: 'slug gerekli' });
+  const out = { type, name, label, required };
+  if (options.length) out.options = options;
+  return out;
+}
 
-    const r = await fetch(`${TABLE}?slug=eq.${encodeURIComponent(slug)}`, {
-      method: 'DELETE',
-      headers: HEADERS
-    });
-    return json(r.status, { ok: r.ok, message: r.ok ? 'Silindi' : 'Hata' });
-  }
-
-  return json(405, { ok: false, message: 'Method Not Allowed' });
+function jok(ok, data, statusCode = 200) {
+  return {
+    statusCode,
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    body: JSON.stringify({ ok, ...data })
+  };
+}
+function jerr(code, msg) {
+  return {
+    statusCode: code,
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    body: JSON.stringify({ ok: false, error: msg })
+  };
 }
