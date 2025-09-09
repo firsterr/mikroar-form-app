@@ -13,42 +13,31 @@
   .row{margin:18px 0}
   label{display:block;font-weight:600;margin-bottom:8px}
   .muted{color:#666;font-size:.95rem}
-  .hidden{display:none}
-  .fade{opacity:0; transition:opacity .18s ease}
-  .fade.show{opacity:1}
-
-  /* Slug seçici */
-  .picker{display:none;margin:18px 0;padding:16px;border:1px dashed #cfd6dd;border-radius:12px;background:#f8fafc}
-  .picker .controls{display:flex;gap:10px;align-items:center}
-  .picker select{flex:1;min-width:240px;padding:10px;border:1px solid #ccd;border-radius:10px}
-  .picker button{padding:10px 14px;border-radius:10px;border:1px solid #2d6ef7;background:#2d6ef7;color:#fff;cursor:pointer}
+  .inline{display:flex;gap:8px;align-items:center}
+  select.inline-input{flex:1;padding:10px;border:1px solid #ccd;border-radius:8px}
+  button.primary{padding:10px 14px;border-radius:10px;border:1px solid #2d6ef7;background:#2d6ef7;color:#fff;cursor:pointer}
 </style>
 </head>
 <body>
 <main class="wrap">
-  <!-- Başlık sadece veri geldiğinde gösterilecek -->
-  <h1 id="title" class="hidden"></h1>
+  <h1 id="title">Yükleniyor…</h1>
   <p id="desc" class="muted" style="display:none"></p>
+  <p id="alert" class="note err" style="display:none"></p>
 
-  <!-- Not/uyarı bandı -->
-  <p id="alert" class="note"></p>
-
-  <!-- Slug seçici (slug param yoksa görünür) -->
-  <div id="picker" class="picker">
-    <div class="row">
-      <strong>Bir anket seçin</strong>
-      <p class="muted" style="margin:6px 0 0">Aşağıdan bir form (slug) seçtiğinizde ilgili anket sayfasına yönlendirilirsiniz.</p>
-    </div>
-    <div class="controls">
-      <select id="slugSel" aria-label="Anket seç">
-        <option value="" selected disabled>— Form (slug) seçin —</option>
+  <!-- SLUG YOKKEN LISTE -->
+  <section id="pickWrap" style="display:none">
+    <p id="listWarn" class="note warn" style="display:none">Listelenecek form bulunamadı.</p>
+    <div class="inline">
+      <label for="pickSelect" style="margin:0;min-width:140px">Bir anket seçin</label>
+      <select id="pickSelect" class="inline-input">
+        <option value="">— Form (slug) seçin —</option>
       </select>
-      <button id="btnOpen" type="button">Formu Aç</button>
+      <button id="pickBtn" type="button" class="primary">Formu Aç</button>
     </div>
-  </div>
+  </section>
 
-  <!-- Form gövdesi -->
-  <form id="form" method="POST" action="#" class="fade" style="display:none"></form>
+  <!-- SLUG VARSA FORM -->
+  <form id="form" method="POST" action="#" style="display:none"></form>
 </main>
 
 <script>
@@ -59,22 +48,72 @@
   const alertEl = $('#alert');
   const formEl  = $('#form');
 
-  const pickerEl = $('#picker');
-  const slugSel  = $('#slugSel');
-  const btnOpen  = $('#btnOpen');
+  // Liste elemanları
+  const pickWrap = $('#pickWrap');
+  const pickSel  = $('#pickSelect');
+  const pickBtn  = $('#pickBtn');
+  const listWarn = $('#listWarn');
 
+  const slug = new URLSearchParams(location.search).get('slug') || location.pathname.replace(/^\/+|\/+$/g,'');
   const API = '/api';
-  // --- SLUG tespiti (path'te .html varsa slug DEĞİLDİR) ---
-const rawPath  = location.pathname.replace(/^\/+|\/+$/g, ''); // ör: "form.html" ya da "ASD"
-const pathSlug = rawPath && !/\.html$/i.test(rawPath) ? rawPath : '';
-const slug     = new URLSearchParams(location.search).get('slug') || pathSlug;
 
   function showErr(msg){ alertEl.textContent = msg; alertEl.className='note err'; alertEl.style.display='block'; }
   function showWarn(msg){ alertEl.textContent = msg; alertEl.className='note warn'; alertEl.style.display='block'; }
   function showOk(msg){ alertEl.textContent = msg; alertEl.className='note ok'; alertEl.style.display='block'; }
-  function hideNote(){ alertEl.style.display='none'; alertEl.className='note'; alertEl.textContent=''; }
+  function hideNote(){ alertEl.style.display='none'; }
 
-  // Basit element üretici
+  // --- SLUG YOKSA LİSTEYİ GETİR ---
+  async function loadList(){
+    hideNote();
+    titleEl.textContent = 'Bir anket seçin';
+    descEl.style.display = 'none';
+    pickWrap.style.display = 'block';
+    pickSel.disabled = true; pickBtn.disabled = true;
+
+    try{
+      const r = await fetch(`${API}/forms-list`);
+      const j = await r.json().catch(()=>({}));
+      const items = (j && j.ok && Array.isArray(j.items)) ? j.items : [];
+
+      pickSel.innerHTML = '<option value="">— Form (slug) seçin —</option>';
+
+      if (items.length === 0){
+        listWarn.textContent = 'Listelenecek form bulunamadı.';
+        listWarn.style.display = 'block';
+      } else {
+        listWarn.style.display = 'none';
+        items.forEach(it => {
+          const o = document.createElement('option');
+          o.value = it.slug;
+          o.textContent = `${it.title || it.slug} — ${it.slug}`;
+          pickSel.appendChild(o);
+        });
+      }
+    } catch(e){
+      listWarn.textContent = 'Liste alınamadı: ' + e.message;
+      listWarn.style.display = 'block';
+    } finally {
+      pickSel.disabled = false; pickBtn.disabled = false;
+    }
+  }
+
+  pickBtn?.addEventListener('click', () => {
+    const v = pickSel.value;
+    if (!v) { pickSel.focus(); return; }
+    location.href = `${location.pathname}?slug=${encodeURIComponent(v)}`;
+  });
+  pickSel?.addEventListener('change', () => {
+    if (pickSel.value) pickBtn.click();
+  });
+
+  // SLUG VARSA FORMU YÜKLE; YOKSA LİSTEYİ AÇ
+  if (!slug) { loadList(); return; }
+
+  // Fallback action
+  formEl.action = `/api/submit-form?slug=${encodeURIComponent(slug)}`;
+  formEl.method = 'POST';
+
+  // Helpers
   function mk(name, attrs={}, html=''){
     const el = document.createElement(name);
     for (const [k,v] of Object.entries(attrs)) el.setAttribute(k, v);
@@ -82,7 +121,6 @@ const slug     = new URLSearchParams(location.search).get('slug') || pathSlug;
     return el;
   }
 
-  // Soru çizer
   function drawQuestion(q, idx){
     const type = (q.type || 'text').toLowerCase();
     const name = q.name || `q${idx+1}`;
@@ -93,13 +131,14 @@ const slug     = new URLSearchParams(location.search).get('slug') || pathSlug;
     row.appendChild(mk('label', { for:`f_${name}` }, label + (q.required ? ' *' : '')));
 
     if (type === 'radio' || type === 'checkbox') {
+      if (!opts.length){ row.appendChild(mk('div',{},'<div class="muted">Bu soru için seçenek tanımlı değil.</div>')); return row; }
       const g = mk('div');
       opts.forEach((opt,i) => {
         const id = `f_${name}_${i}`;
         const w = mk('div');
-        const input = mk('input', { type, id, name, value:opt, ...(q.required && type==='radio' ? {required:''}: {}) });
+        const input = mk('input', { type, id, name, value:String(opt), ...(q.required && type==='radio' ? {required:''}: {}) });
         if (type === 'checkbox') input.name = name + '[]';
-        const lab = mk('label', { for:id }, opt);
+        const lab = mk('label', { for:id }, String(opt));
         w.appendChild(input); w.appendChild(lab);
         g.appendChild(w);
       });
@@ -110,7 +149,11 @@ const slug     = new URLSearchParams(location.search).get('slug') || pathSlug;
     if (type === 'select') {
       const select = mk('select', { id:`f_${name}`, name, ...(q.required ? {required:''} : {}) });
       select.appendChild(mk('option', { value:'', disabled:'', selected:'' }, 'Seçiniz'));
-      opts.forEach(v => select.appendChild(mk('option',{value:v}, v)));
+      if (!opts.length){
+        row.appendChild(mk('div', { class:'note warn' }, 'Bu soru için seçenek tanımlı değil.'));
+      } else {
+        opts.forEach(v => select.appendChild(mk('option',{value:String(v)}, String(v))));
+      }
       row.appendChild(select);
       return row;
     }
@@ -125,93 +168,40 @@ const slug     = new URLSearchParams(location.search).get('slug') || pathSlug;
     return row;
   }
 
-  // ----- SLUG YOKSA: liste getir + yönlendirici -----
-  if (!slug) {
-    // Seçici görünür olsun
-    pickerEl.style.display = 'block';
-
-    // Listeyi çek
-    fetch(`${API}/forms-list`)
-      .then(r => r.json())
-      .then(j => {
-        if (!j.ok) throw new Error(j.error || `HTTP ${r.status}`);
-        const items = (j.forms || []);
-        // boşsa bilgi göster
-        if (!items.length) {
-          showWarn('Listelenecek form bulunamadı.');
-          return;
-        }
-        // seçenekleri doldur
-        items.forEach(f => {
-          const s = f.slug;
-          const t = f.title || (f.schema && f.schema.title) || s;
-          const opt = document.createElement('option');
-          opt.value = s;
-          opt.textContent = `${t} — ${s}`;
-          slugSel.appendChild(opt);
-        });
-      })
-      .catch(e => showErr(e.message || 'Liste alınamadı'));
-
-    // Aç butonu → /form.html?slug=SELECTED
-    btnOpen.addEventListener('click', () => {
-      const s = slugSel.value;
-      if (!s) { showWarn('Lütfen bir form seçin.'); return; }
-      location.href = `/form.html?slug=${encodeURIComponent(s)}`;
-    });
-
-    // Slug yoksa bu noktada form çizimi yapılmaz; return.
-    return;
-  }
-
-  // ----- SLUG VARSA: formu yükle -----
-
-  // Fallback (JS kapalıysa bile çalışsın)
-  formEl.action = `${API}/submit-form?slug=${encodeURIComponent(slug)}`;
-  formEl.method = 'POST';
-
-  // Şemayı yükle
+  // ŞEMA YÜKLE
   fetch(`${API}/forms?slug=${encodeURIComponent(slug)}`)
     .then(r => r.json())
     .then(j => {
       if (!j.ok || !j.schema) throw new Error(j.error || 'Form bulunamadı');
       const s = j.schema;
 
-      // Başlık sadece başarıyla doldur
       titleEl.textContent = s.title || slug;
-      titleEl.classList.remove('hidden');
-
       if (s.description){ descEl.textContent = s.description; descEl.style.display = 'block'; }
 
       const qs = s.questions || s.fields || [];
       formEl.innerHTML = '';
       if (!qs.length){
-        showWarn('Bu formda soru tanımı bulunamadı.');
+        showErr('Bu formda soru tanımı bulunamadı.');
       } else {
         hideNote();
         qs.forEach((q,i) => formEl.appendChild(drawQuestion(q,i)));
-        const btn = mk('button', { type:'submit' }, 'Gönder');
+        const btn = mk('button', { type:'submit', class:'primary' }, 'Gönder');
         formEl.appendChild(btn);
-
-        // yumuşak açılış
         formEl.style.display = 'block';
-        requestAnimationFrame(() => formEl.classList.add('show'));
       }
     })
     .catch(e => {
       titleEl.textContent = 'Form yüklenemedi';
-      titleEl.classList.remove('hidden');
       showErr(e.message || 'Hata');
     });
 
-  // Submit (Madde #2: 409 için IP uyarısı)
+  // GÖNDER
   formEl.addEventListener('submit', async (e) => {
     e.preventDefault();
     hideNote();
     const btn = formEl.querySelector('button[type="submit"]');
     if (btn) btn.disabled = true;
 
-    // answers
     const answers = {};
     [...formEl.elements].forEach(el => {
       if (!el.name) return;
@@ -233,14 +223,6 @@ const slug     = new URLSearchParams(location.search).get('slug') || pathSlug;
         body: JSON.stringify({ answers })
       });
       const j = await r.json().catch(()=>({}));
-
-      if (r.status === 409 || j.alreadySubmitted) {
-        const when = j.at ? ` (${new Date(j.at).toLocaleString()})` : '';
-        showWarn('Bu IP ile zaten yanıt gönderilmiş.' + when);
-        if (btn) btn.disabled = false;
-        return;
-      }
-
       if (r.ok && j.ok){
         showOk('Gönderildi, teşekkürler!');
         formEl.reset();
