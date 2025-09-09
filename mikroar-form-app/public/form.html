@@ -13,16 +13,22 @@
   .row{margin:18px 0}
   label{display:block;font-weight:600;margin-bottom:8px}
   .muted{color:#666;font-size:.95rem}
+  /* >>> yeni: ilk başlık gizli, form fade-in */
+  .hidden{display:none}
+  .fade{opacity:0; transition:opacity .18s ease}
+  .fade.show{opacity:1}
 </style>
 </head>
 <body>
 <main class="wrap">
-  <h1 id="title">Yükleniyor…</h1>
+  <!-- >>> başlık ilk anda gizli -->
+  <h1 id="title" class="hidden"></h1>
   <p id="desc" class="muted" style="display:none"></p>
-  <!-- Başlangıçta görünmesin -->
+  <!-- uyarı ilk anda görünmesin -->
   <p id="alert" class="note"></p>
 
-  <form id="form" method="POST" action="#" style="display:none"></form>
+  <!-- >>> fade sınıfı eklendi -->
+  <form id="form" method="POST" action="#" class="fade" style="display:none"></form>
 </main>
 
 <script>
@@ -66,10 +72,6 @@
     row.appendChild(mk('label', { for:`f_${name}` }, label + (q.required ? ' *' : '')));
 
     if (type === 'radio' || type === 'checkbox') {
-      if (!opts.length){
-        row.appendChild(mk('div',{},'<div class="muted">Bu soru için seçenek tanımlı değil.</div>'));
-        return row;
-      }
       const g = mk('div');
       opts.forEach((opt,i) => {
         const id = `f_${name}_${i}`;
@@ -86,12 +88,9 @@
 
     if (type === 'select') {
       const select = mk('select', { id:`f_${name}`, name, ...(q.required ? {required:''} : {}) });
+      // >>> uyarı yok; seçenek yoksa sadece placeholder dursun
       select.appendChild(mk('option', { value:'', disabled:'', selected:'' }, 'Seçiniz'));
-      if (!opts.length){
-        row.appendChild(mk('div', { class:'note warn' }, 'Bu soru için seçenek tanımlı değil.'));
-      } else {
-        opts.forEach(v => select.appendChild(mk('option',{value:v}, v)));
-      }
+      opts.forEach(v => select.appendChild(mk('option',{value:v}, v)));
       row.appendChild(select);
       return row;
     }
@@ -113,7 +112,10 @@
       if (!j.ok || !j.schema) throw new Error(j.error || 'Form bulunamadı');
       const s = j.schema;
 
+      // >>> başlığı sadece başarıyla doldur
       titleEl.textContent = s.title || slug;
+      titleEl.classList.remove('hidden');
+
       if (s.description){ descEl.textContent = s.description; descEl.style.display = 'block'; }
 
       const qs = s.questions || s.fields || [];
@@ -125,11 +127,15 @@
         qs.forEach((q,i) => formEl.appendChild(drawQuestion(q,i)));
         const btn = mk('button', { type:'submit' }, 'Gönder');
         formEl.appendChild(btn);
+
+        // >>> yumuşak açılış
         formEl.style.display = 'block';
+        requestAnimationFrame(() => formEl.classList.add('show'));
       }
     })
     .catch(e => {
       titleEl.textContent = 'Form yüklenemedi';
+      titleEl.classList.remove('hidden');
       showErr(e.message || 'Hata');
     });
 
@@ -163,7 +169,6 @@
       });
       const j = await r.json().catch(()=>({}));
 
-      // <<< YENİ: ikinci gönderimde anlamlı uyarı
       if (r.status === 409 || j.alreadySubmitted) {
         const when = j.at ? ` (${new Date(j.at).toLocaleString()})` : '';
         showWarn('Bu IP ile zaten yanıt gönderilmiş.' + when);
