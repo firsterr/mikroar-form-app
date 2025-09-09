@@ -2,285 +2,177 @@
 <html lang="tr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Anket</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Form</title>
 <link rel="stylesheet" href="/form.css">
 <style>
   .note{display:none;margin:16px 0;padding:12px;border-radius:8px}
-  .note.ok{display:block;background:#eaf7ee;color:#11611f}
-  .note.err{display:block;background:#fde8e8;color:#9b1c1c}
-  .warn{background:#fff3cd;color:#664d03;padding:10px;border-radius:8px;margin-top:6px}
-  .row{margin:14px 0}
-  fieldset{border:0;padding:0;margin:0}
-  legend{font-weight:600;margin-bottom:8px}
-  button{padding:.6rem 1rem;border-radius:10px;border:0;background:#2563eb;color:#fff}
-  #loading{font-size:28px;margin:24px 0}
+  .note.err{display:block;background:#ffe8e8;color:#b00020;border:1px solid #f3c5c5}
+  .note.warn{display:block;background:#fff5da;color:#6b5100;border:1px solid #f1e2b3}
+  .ok{display:block;background:#e7fff1;color:#0a7d3b;border:1px solid #bdf0cf}
+  .row{margin:18px 0}
+  label{display:block;font-weight:600;margin-bottom:8px}
+  .muted{color:#666;font-size:.95rem}
 </style>
 </head>
 <body>
-<main class="container" style="max-width:900px;margin:32px auto;padding:0 16px">
-  <h1 id="title">Anket</h1>
-  <p id="desc" style="display:none"></p>
+<main class="wrap">
+  <h1 id="title">Yükleniyor…</h1>
+  <p id="desc" class="muted" style="display:none"></p>
+  <p id="alert" class="note err"></p>
 
-  <div id="loading">Yükleniyor...</div>
-  <div id="alert" class="note"></div>
-
-  <form id="form" method="POST" action="#">
-    <!-- JS ile doldurulacak -->
-  </form>
+  <form id="form" method="POST" action="#" style="display:none"></form>
 </main>
 
 <script>
-// ---- Form (final) ----
-const API = "/api";
-const $ = (s) => document.querySelector(s);
-const formEl  = $("#form");
-const titleEl = $("#title");
-const descEl  = $("#desc");
-const alertEl = $("#alert");
-const loadingEl = $("#loading");
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const titleEl = $('#title');
+  const descEl  = $('#desc');
+  const alertEl = $('#alert');
+  const formEl  = $('#form');
 
-let SCHEMA = null;
+  const slug = new URLSearchParams(location.search).get('slug') || location.pathname.replace(/^\/+|\/+$/g,'');
+  const API = '/api';
 
-function showNote(msg, type="ok"){
-  alertEl.textContent = msg;
-  alertEl.className = "note " + type;
-  alertEl.style.display = "block";
-}
-function hideNote(){ alertEl.style.display = "none"; }
+  function showErr(msg){ alertEl.textContent = msg; alertEl.className='note err'; alertEl.style.display='block'; }
+  function showWarn(msg){ alertEl.textContent = msg; alertEl.className='note warn'; alertEl.style.display='block'; }
+  function hideNote(){ alertEl.style.display='none'; }
 
-function splitOptions(v){
-  return String(v || "")
-    .split(",")
-    .map(s => s.trim())
-    .filter(Boolean);
-}
+  if (!slug) { showErr('URL’de slug yok.'); return; }
 
-function getSlug(){
-  const u = new URL(location.href);
-  const qSlug = u.searchParams.get("slug");
-  if (qSlug) return qSlug;
-  const path = location.pathname.replace(/^\/+|\/+$/g,"");
-  if (path && path !== "form.html") return path;
-  return "";
-}
+  // Fallback action
+  formEl.action = `/api/submit-form?slug=${encodeURIComponent(slug)}`;
+  formEl.method = 'POST';
 
-function inputRow(html){
-  const div = document.createElement("div");
-  div.className = "row";
-  div.innerHTML = html;
-  formEl.appendChild(div);
-}
-
-function drawForm(schema){
-  formEl.innerHTML = "";
-
-  const questions = schema.questions || schema.fields || [];
-  if (!questions.length){
-    showNote("Bu formda soru tanımı bulunamadı.", "err");
-    return;
+  // Helpers
+  function mk(name, attrs={}, html=''){
+    const el = document.createElement(name);
+    for (const [k,v] of Object.entries(attrs)) el.setAttribute(k, v);
+    if (html) el.innerHTML = html;
+    return el;
   }
 
-  for (const q of questions){
-    const reqStar = q.required ? " *" : "";
-    const name = q.name;
+  function drawQuestion(q, idx){
+    // normalize
+    const type = (q.type || 'text').toLowerCase();
+    const name = q.name || `q${idx+1}`;
+    const label = q.label || `Soru ${idx+1}`;
+    const opts = Array.isArray(q.options) ? q.options : [];
 
-    if (q.type === "text" || q.type === "email"){
-      inputRow(`
-        <label><strong>${q.label || name}${reqStar}</strong></label>
-        <input type="${q.type}" name="${name}" ${q.required ? "required" : ""} />
-      `);
-      continue;
+    const row = mk('div', { class:'row' });
+    row.appendChild(mk('label', { for:`f_${name}` }, label + (q.required ? ' *' : '')));
+
+    if (type === 'radio' || type === 'checkbox') {
+      if (!opts.length){ row.appendChild(mk('div',{},'<div class="muted">Bu soru için seçenek tanımlı değil.</div>')); return row; }
+      const g = mk('div');
+      opts.forEach((opt,i) => {
+        const id = `f_${name}_${i}`;
+        const w = mk('div');
+        const input = mk('input', { type, id, name, value:opt, ...(q.required && type==='radio' ? {required:''}: {}) });
+        if (type === 'checkbox') input.name = name + '[]';
+        const lab = mk('label', { for:id }, opt);
+        w.appendChild(input); w.appendChild(lab);
+        g.appendChild(w);
+      });
+      row.appendChild(g);
+      return row;
     }
 
-    if (q.type === "textarea"){
-      inputRow(`
-        <label><strong>${q.label || name}${reqStar}</strong></label>
-        <textarea name="${name}" ${q.required ? "required" : ""}></textarea>
-      `);
-      continue;
-    }
-
-    if (q.type === "select"){
-      const opts = Array.isArray(q.options) ? q.options : splitOptions(q.options);
+    if (type === 'select') {
+      const select = mk('select', { id:`f_${name}`, name, ...(q.required ? {required:''} : {}) });
+      select.appendChild(mk('option', { value:'', disabled:'', selected:'' }, 'Seçiniz'));
       if (!opts.length){
-        inputRow(`
-          <label><strong>${q.label || name}${reqStar}</strong></label>
-          <div class="warn">Bu soru için seçenek tanımlı değil.</div>
-          <select name="${name}" ${q.required ? "required" : ""}>
-            <option value="">Seçiniz</option>
-          </select>
-        `);
+        row.appendChild(mk('div', { class:'note warn' }, 'Bu soru için seçenek tanımlı değil.'));
       } else {
-        const optionsHtml = opts.map(o => `<option value="${o}">${o}</option>`).join("");
-        inputRow(`
-          <label><strong>${q.label || name}${reqStar}</strong></label>
-          <select name="${name}" ${q.required ? "required" : ""}>
-            <option value="">Seçiniz</option>
-            ${optionsHtml}
-          </select>
-        `);
+        opts.forEach(v => select.appendChild(mk('option',{value:v}, v)));
       }
-      continue;
+      row.appendChild(select);
+      return row;
     }
 
-    if (q.type === "radio"){
-      const opts = Array.isArray(q.options) ? q.options : splitOptions(q.options);
-      if (!opts.length){
-        inputRow(`
-          <fieldset>
-            <legend>${q.label || name}${reqStar}</legend>
-            <div class="warn">Bu soru için seçenek tanımlı değil.</div>
-          </fieldset>
-        `);
-      } else {
-        const radios = opts.map((o,i)=>`
-          <label style="display:flex;align-items:center;gap:8px;margin:6px 0">
-            <input type="radio" name="${name}" value="${o}" ${q.required && i===0 ? "required" : ""} />
-            <span>${o}</span>
-          </label>
-        `).join("");
-        inputRow(`
-          <fieldset>
-            <legend>${q.label || name}${reqStar}</legend>
-            ${radios}
-          </fieldset>
-        `);
-      }
-      continue;
+    if (type === 'textarea') {
+      row.appendChild(mk('textarea', { id:`f_${name}`, name, ...(q.required?{required:''}:{}) }));
+      return row;
     }
 
-    if (q.type === "checkbox"){
-      const opts = Array.isArray(q.options) ? q.options : splitOptions(q.options);
-      if (!opts.length){
-        inputRow(`
-          <fieldset>
-            <legend>${q.label || name}${reqStar}</legend>
-            <div class="warn">Bu soru için seçenek tanımlı değil.</div>
-          </fieldset>
-        `);
-      } else {
-        const checks = opts.map(o=>`
-          <label style="display:flex;align-items:center;gap:8px;margin:6px 0">
-            <input type="checkbox" name="${name}" value="${o}" />
-            <span>${o}</span>
-          </label>
-        `).join("");
-        inputRow(`
-          <fieldset>
-            <legend>${q.label || name}${reqStar}</legend>
-            ${checks}
-          </fieldset>
-        `);
-      }
-      continue;
-    }
-
-    // bilinmeyen tip -> metin
-    inputRow(`
-      <label><strong>${q.label || name}${reqStar}</strong></label>
-      <input type="text" name="${name}" ${q.required ? "required" : ""} />
-    `);
+    // text/email/others
+    const itype = (type === 'email') ? 'email' : 'text';
+    row.appendChild(mk('input', { type:itype, id:`f_${name}`, name, ...(q.required?{required:''}:{}) }));
+    return row;
   }
 
-  // submit butonu
-  const btn = document.createElement("button");
-  btn.type = "submit";
-  btn.textContent = "Gönder";
-  formEl.appendChild(btn);
-}
+  // Load schema
+  fetch(`${API}/forms?slug=${encodeURIComponent(slug)}`)
+    .then(r => r.json())
+    .then(j => {
+      if (!j.ok || !j.schema) throw new Error(j.error || 'Form bulunamadı');
+      const s = j.schema;
 
-function collectAnswers(schema){
-  const out = {};
-  const questions = schema.questions || schema.fields || [];
+      titleEl.textContent = s.title || slug;
+      if (s.description){ descEl.textContent = s.description; descEl.style.display = 'block'; }
 
-  for (const q of questions){
-    if (q.type === "checkbox"){
-      const els = [...formEl.querySelectorAll(`input[type="checkbox"][name="${q.name}"]`)];
-      out[q.name] = els.filter(e => e.checked).map(e => e.value);
-    } else if (q.type === "radio"){
-      const el = formEl.querySelector(`input[type="radio"][name="${q.name}"]:checked`);
-      out[q.name] = el ? el.value : "";
-    } else if (q.type === "select"){
-      const el = formEl.querySelector(`select[name="${q.name}"]`);
-      out[q.name] = el ? el.value : "";
-    } else if (q.type === "textarea"){
-      const el = formEl.querySelector(`textarea[name="${q.name}"]`);
-      out[q.name] = el ? el.value.trim() : "";
-    } else {
-      const el = formEl.querySelector(`input[name="${q.name}"]`);
-      out[q.name] = el ? el.value.trim() : "";
-    }
-  }
-  return out;
-}
-
-(async function init(){
-  try{
-    const slug = getSlug();
-    if (!slug){
-      showNote("Form yüklenemedi. URL’de ?slug=… yok.", "err");
-      loadingEl.style.display = "none";
-      return;
-    }
-
-    // progressive enhancement / fallback
-    formEl.action = `/api/submit-form?slug=${encodeURIComponent(slug)}`;
-    formEl.method = "POST";
-
-    const r = await fetch(`${API}/forms?slug=${encodeURIComponent(slug)}`);
-    const j = await r.json().catch(()=> ({}));
-    if (!r.ok || !j.ok || !j.schema) throw new Error(j.error || "Şema alınamadı");
-
-    SCHEMA = j.schema;
-
-    titleEl.textContent = SCHEMA.title || "Anket";
-    if (SCHEMA.description){
-      descEl.textContent = SCHEMA.description;
-      descEl.style.display = "block";
-    }
-
-    drawForm(SCHEMA);
-    hideNote();
-  }catch(err){
-    showNote(err.message || "Form yüklenemedi.", "err");
-  }finally{
-    loadingEl.style.display = "none";
-  }
-})();
-
-// submit
-formEl.addEventListener("submit", async (e)=>{
-  e.preventDefault();
-  if (!SCHEMA) return;
-
-  const btn = formEl.querySelector('button[type="submit"]');
-  btn.disabled = true;
-  hideNote();
-
-  try{
-    const slug = getSlug();
-    const answers = collectAnswers(SCHEMA);
-
-    const res = await fetch(`${API}/submit-form?slug=${encodeURIComponent(slug)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify({ answers })
+      const qs = s.questions || s.fields || [];
+      formEl.innerHTML = '';
+      if (!qs.length){
+        showErr('Bu formda soru tanımı bulunamadı.');
+      } else {
+        hideNote();
+        qs.forEach((q,i) => formEl.appendChild(drawQuestion(q,i)));
+        const btn = mk('button', { type:'submit' }, 'Gönder');
+        formEl.appendChild(btn);
+        formEl.style.display = 'block';
+      }
+    })
+    .catch(e => {
+      titleEl.textContent = 'Form yüklenemedi';
+      showErr(e.message || 'Hata');
     });
 
-    const j = await res.json().catch(()=> ({}));
-    if (res.ok && j.ok){
-      showNote("Gönderildi, teşekkürler!", "ok");
-      formEl.reset();
-    }else{
-      showNote(j?.data?.message || j?.error || `Hata: ${res.status}`, "err");
+  // Submit
+  formEl.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    hideNote();
+    const btn = formEl.querySelector('button[type="submit"]');
+    if (btn) btn.disabled = true;
+
+    // answers
+    const answers = {};
+    [...formEl.elements].forEach(el => {
+      if (!el.name) return;
+      if (el.type === 'radio'){
+        if (el.checked) answers[el.name] = el.value;
+      } else if (el.type === 'checkbox'){
+        const base = el.name.replace(/\[\]$/, '');
+        answers[base] = answers[base] || [];
+        if (el.checked) answers[base].push(el.value);
+      } else if (el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || el.type === 'text' || el.type === 'email'){
+        answers[el.name] = el.value;
+      }
+    });
+
+    try{
+      const r = await fetch(`${API}/submit-form?slug=${encodeURIComponent(slug)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept':'application/json' },
+        body: JSON.stringify({ answers })
+      });
+      const j = await r.json().catch(()=>({}));
+      if (r.ok && j.ok){
+        alertEl.className = 'note ok';
+        alertEl.textContent = 'Gönderildi, teşekkürler!';
+        alertEl.style.display = 'block';
+        formEl.reset();
+      }else{
+        showErr(j?.data?.message || j?.error || `Hata: ${r.status}`);
+      }
+    }catch(err){
+      showErr('Bağlantı hatası: ' + err.message);
+    }finally{
+      if (btn) btn.disabled = false;
     }
-  }catch(err){
-    showNote("Bağlantı hatası: " + err.message, "err");
-  }finally{
-    btn.disabled = false;
-  }
-});
+  });
+})();
 </script>
 </body>
 </html>
