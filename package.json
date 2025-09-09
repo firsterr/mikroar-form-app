@@ -1,9 +1,11 @@
 {
-  "dependencies": {
-    "json2csv": "^6.0.0-alpha.2"
-  }
-}
-{
+  "name": "mikroar-form-app",
+  "version": "1.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "echo \"no build step\""
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
     "@mui/material": "^5.15.20",
