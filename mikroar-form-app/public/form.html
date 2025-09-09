@@ -7,22 +7,21 @@
   <link rel="stylesheet" href="/form.css" />
   <style>
     main{max-width:860px;margin:40px auto;padding:0 16px}
-    .row{margin:16px 0}
-    label{display:block;font-weight:600;margin-bottom:6px}
-    input,textarea,select{width:100%;padding:12px;border:1px solid #ccd;border-radius:8px;font:inherit}
-    fieldset{border:0;padding:0;margin:0}
-    .opts label{display:flex;gap:10px;align-items:center;font-weight:500;margin:6px 0}
-    button{padding:12px 18px;border:0;border-radius:10px;font-weight:700;cursor:pointer}
-    .err{background:#fee;border:1px solid #f99;color:#900;padding:12px;border-radius:8px;margin:16px 0}
-    .ok{background:#eefbea;border:1px solid #9f9;color:#064;padding:12px;border-radius:8px;margin:16px 0}
-    small.muted{color:#6b7280}
+    .row{margin:18px 0}
+    label{display:block;font-weight:700;margin-bottom:8px}
+    input,textarea,select{width:100%;padding:12px;border:1px solid #ccd;border-radius:10px;font:inherit}
+    .note{padding:12px;border-radius:10px;margin:12px 0}
+    .err{background:#fee;border:1px solid #f99;color:#900}
+    .ok{background:#eefbea;border:1px solid #9f9;color:#064}
+    button{padding:12px 18px;border:0;border-radius:12px;font-weight:700;cursor:pointer}
   </style>
 </head>
 <body>
   <main>
-    <h1 id="title">Yükleniyor...</h1>
+    <h1 id="title">Yükleniyor…</h1>
     <p id="desc" style="display:none"></p>
     <div id="alert" style="display:none"></div>
+
     <form id="form" novalidate></form>
   </main>
 
@@ -32,124 +31,197 @@
   const formEl = $("#form");
   const alertEl = $("#alert");
 
-  // slug: ?slug=... yoksa /slug
-  const slug = new URLSearchParams(location.search).get("slug")
-            || location.pathname.replace(/^\/+|\/+$/g,"");
+  // slug: ?slug=... (path fallback'ı istersen: const pathSlug = location.pathname.replace(/^\/+|\/+$/g,"");)
+  const slug = new URLSearchParams(location.search).get("slug");
+
   if (!slug) {
     $("#title").textContent = "Form yüklenemedi.";
-    alertEl.className = "err"; alertEl.textContent = "URL’de ?slug=... yok."; alertEl.style.display = "block";
+    alertEl.style.display = "block";
+    alertEl.className = "note err";
+    alertEl.textContent = "URL’de ?slug=… bulunamadı.";
     return;
   }
 
-  // Fallback (JS kapalıyken de çalışsın)
+  // JS kapalı olsa bile çalışsın (progressive enhancement)
   formEl.action = `/api/submit-form?slug=${encodeURIComponent(slug)}`;
   formEl.method = "POST";
 
   // Şemayı al
-  const r = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`);
-  const j = await r.json().catch(()=>({}));
-  if (!r.ok || !j.ok || !j.schema) {
+  const res = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`);
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || !j.ok || !j.schema) {
     $("#title").textContent = "Form yüklenemedi.";
-    alertEl.className = "err"; alertEl.textContent = j.error || `Hata: ${r.status}`; alertEl.style.display = "block";
+    alertEl.style.display = "block";
+    alertEl.className = "note err";
+    alertEl.textContent = j?.error || ("Hata: " + res.status);
     return;
   }
 
   const schema = j.schema;
-  const questions = schema.questions || schema.fields || [];
-
-  // Başlık + açıklama
   $("#title").textContent = schema.title || slug;
-  if (schema.description) { $("#desc").textContent = schema.description; $("#desc").style.display = "block"; }
-
-  // Çiz
-  formEl.innerHTML = "";
-  if (!questions.length) {
-    const w = document.createElement('div');
-    w.className = 'err'; w.textContent = 'Bu formda soru tanımı bulunamadı.';
-    formEl.appendChild(w);
-  } else {
-    questions.forEach((q, i) => {
-      const wrap = document.createElement('div'); wrap.className = 'row';
-      const name = q.name || `q_${i+1}`;
-      const req  = q.required ? 'required' : '';
-      const label = q.label || `Soru ${i+1}`;
-
-      if (q.type === 'textarea') {
-        wrap.innerHTML = `<label for="${name}">${label}${q.required?' *':''}</label>
-                          <textarea id="${name}" name="${name}" ${req}></textarea>`;
-      } else if (q.type === 'text' || q.type === 'email') {
-        wrap.innerHTML = `<label for="${name}">${label}${q.required?' *':''}</label>
-                          <input id="${name}" type="${q.type}" name="${name}" ${req} />`;
-      } else if (q.type === 'select') {
-        const opts = Array.isArray(q.options)?q.options:[];
-        wrap.innerHTML = `<label for="${name}">${label}${q.required?' *':''}</label>
-                          <select id="${name}" name="${name}" ${req}>
-                            <option value="" disabled selected>Seçiniz</option>
-                            ${opts.map(v=>`<option value="${encodeHTML(v)}">${encodeHTML(v)}</option>`).join('')}
-                          </select>
-                          ${!opts.length?`<small class="muted">Bu soru için seçenek tanımlı değil.</small>`:''}`;
-      } else if (q.type === 'radio' || q.type === 'checkbox') {
-        const opts = Array.isArray(q.options)?q.options:[];
-        const type = q.type;
-        wrap.innerHTML = `<fieldset><legend>${encodeHTML(label)}${q.required?' *':''}</legend>
-            <div class="opts">
-              ${opts.map((v,idx)=>`
-                <label><input type="${type}" name="${name}" value="${encodeHTML(v)}" ${type==='radio' && idx===0 && q.required?'required':''}> ${encodeHTML(v)}</label>`).join('')}
-            </div>
-          </fieldset>
-          ${!opts.length?`<small class="muted">Bu soru için seçenek tanımlı değil.</small>`:''}`;
-      } else {
-        // bilinmeyen tip → text
-        wrap.innerHTML = `<label for="${name}">${label}${q.required?' *':''}</label>
-                          <input id="${name}" type="text" name="${name}" ${req} />`;
-      }
-      formEl.appendChild(wrap);
-    });
-
-    const btn = document.createElement('button');
-    btn.type = 'submit'; btn.textContent = 'Gönder';
-    formEl.appendChild(btn);
+  if (schema.description && String(schema.description).trim()) {
+    $("#desc").textContent = schema.description;
+    $("#desc").style.display = "block";
   }
 
+  const questions = Array.isArray(schema.questions) ? schema.questions
+                   : (Array.isArray(schema.fields) ? schema.fields : []);
+
+  // Alanları çiz
+  formEl.innerHTML = "";
+  if (!questions.length) {
+    const row = document.createElement("div");
+    row.className = "note err";
+    row.textContent = "Bu formda soru tanımı bulunamadı.";
+    formEl.appendChild(row);
+  }
+
+  questions.forEach((q, i) => {
+    const row = document.createElement("div");
+    row.className = "row";
+    const name = q.name || ("q" + (i+1));
+    const id   = "fld_" + name;
+    const req  = q.required ? "required" : "";
+
+    const label = document.createElement("label");
+    label.setAttribute("for", id);
+    label.innerHTML = (q.label || name) + (q.required ? " *" : "");
+    row.appendChild(label);
+
+    const type = (q.type || "text").toLowerCase();
+    const opts = Array.isArray(q.options) ? q.options : [];
+
+    if (type === "textarea") {
+      row.insertAdjacentHTML("beforeend",
+        `<textarea id="${id}" name="${name}" ${req}></textarea>`);
+    } else if (type === "email" || type === "text") {
+      row.insertAdjacentHTML("beforeend",
+        `<input id="${id}" type="${type}" name="${name}" ${req}>`);
+    } else if (type === "radio") {
+      if (!opts.length) {
+        row.insertAdjacentHTML("beforeend",
+          `<div class="note err">Bu soru için seçenek tanımlı değil.</div>`);
+      } else {
+        const wrap = document.createElement("div");
+        opts.forEach((opt, jdx) => {
+          const oid = `${id}_${jdx}`;
+          wrap.insertAdjacentHTML("beforeend",
+            `<label style="display:block;font-weight:400;margin:6px 0">
+               <input type="radio" id="${oid}" name="${name}" value="${opt}" ${req}>
+               ${opt}
+             </label>`);
+        });
+        row.appendChild(wrap);
+      }
+    } else if (type === "checkbox") {
+      if (!opts.length) {
+        row.insertAdjacentHTML("beforeend",
+          `<div class="note err">Bu soru için seçenek tanımlı değil.</div>`);
+      } else {
+        const wrap = document.createElement("div");
+        opts.forEach((opt, jdx) => {
+          const oid = `${id}_${jdx}`;
+          wrap.insertAdjacentHTML("beforeend",
+            `<label style="display:block;font-weight:400;margin:6px 0">
+               <input type="checkbox" id="${oid}" name="${name}" value="${opt}">
+               ${opt}
+             </label>`);
+        });
+        // checkbox'ta required: en az bir seçim kontrolünü submit'te yapacağız
+        row.appendChild(wrap);
+      }
+    } else if (type === "select") {
+      if (!opts.length) {
+        row.insertAdjacentHTML("beforeend",
+          `<div class="note err">Bu soru için seçenek tanımlı değil.</div>`);
+      } else {
+        const sel = document.createElement("select");
+        sel.id = id;
+        sel.name = name;
+        if (q.required) sel.setAttribute("required", "");
+        sel.insertAdjacentHTML("beforeend", `<option value="">Seçiniz</option>`);
+        opts.forEach((opt) => {
+          sel.insertAdjacentHTML("beforeend", `<option value="${opt}">${opt}</option>`);
+        });
+        row.appendChild(sel);
+      }
+    } else {
+      // bilinmeyen tür -> text
+      row.insertAdjacentHTML("beforeend",
+        `<input id="${id}" type="text" name="${name}" ${req}>`);
+    }
+
+    formEl.appendChild(row);
+  });
+
   // Gönder
-  formEl.addEventListener('submit', async (e)=>{
+  const btn = document.createElement("button");
+  btn.type = "submit";
+  btn.textContent = "Gönder";
+  formEl.appendChild(btn);
+
+  formEl.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const btn = formEl.querySelector('button[type="submit"]'); if (btn) btn.disabled = true;
-    alertEl.style.display = 'none';
+    btn.disabled = true;
+    alertEl.style.display = "none";
+
+    // required checkbox'lar için basit kontrol: en az bir seçim
+    let invalid = false;
+    questions.forEach((q, i) => {
+      if (q.type === "checkbox" && q.required) {
+        const name = q.name || ("q" + (i+1));
+        const any = formEl.querySelectorAll(`[name="${name}"]:checked`).length > 0;
+        if (!any) invalid = true;
+      }
+    });
+    if (invalid) {
+      alertEl.className = "note err";
+      alertEl.textContent = "Lütfen tüm zorunlu soruları yanıtlayın.";
+      alertEl.style.display = "block";
+      btn.disabled = false;
+      return;
+    }
 
     // cevapları topla
     const answers = {};
-    (schema.questions || schema.fields || []).forEach((q,i)=>{
-      const name = q.name || `q_${i+1}`;
-      if (q.type === 'checkbox') {
-        answers[name] = Array.from(document.querySelectorAll(`[name="${CSS.escape(name)}"]:checked`)).map(el=>el.value);
-      } else if (q.type === 'radio') {
-        const c = document.querySelector(`[name="${CSS.escape(name)}"]:checked`);
-        answers[name] = c ? c.value : '';
+    questions.forEach((q, i) => {
+      const name = q.name || ("q" + (i+1));
+      if (q.type === "checkbox") {
+        answers[name] = Array.from(formEl.querySelectorAll(`[name="${name}"]:checked`)).map(el => el.value);
+      } else if (q.type === "radio") {
+        const sel = formEl.querySelector(`[name="${name}"]:checked`);
+        answers[name] = sel ? sel.value : "";
       } else {
-        const v = new FormData(formEl).get(name);
-        answers[name] = v == null ? '' : v;
+        const val = new FormData(formEl).get(name);
+        answers[name] = val;
       }
     });
 
-    try{
-      const res = await fetch(`/api/submit-form?slug=${encodeURIComponent(slug)}`, {
-        method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'},
+    try {
+      const r = await fetch(`/api/submit-form?slug=${encodeURIComponent(slug)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
         body: JSON.stringify({ answers })
       });
-      const jr = await res.json().catch(()=>({}));
-      if (res.ok && jr.ok) {
-        alertEl.className = 'ok'; alertEl.textContent = 'Gönderildi, teşekkürler!'; alertEl.style.display = 'block';
+      const jr = await r.json().catch(() => ({}));
+      if (r.ok && jr.ok) {
+        alertEl.className = "note ok";
+        alertEl.textContent = "Gönderildi, teşekkürler!";
+        alertEl.style.display = "block";
         formEl.reset();
       } else {
-        alertEl.className = 'err'; alertEl.textContent = jr?.error || `Hata: ${res.status}`; alertEl.style.display = 'block';
+        alertEl.className = "note err";
+        alertEl.textContent = jr?.data?.message || jr?.error || `Hata: ${r.status}`;
+        alertEl.style.display = "block";
       }
-    }catch(err){
-      alertEl.className = 'err'; alertEl.textContent = 'Bağlantı hatası: ' + err.message; alertEl.style.display='block';
-    }finally{ if (btn) btn.disabled = false; }
+    } catch (err) {
+      alertEl.className = "note err";
+      alertEl.textContent = "Bağlantı hatası: " + err.message;
+      alertEl.style.display = "block";
+    } finally {
+      btn.disabled = false;
+    }
   });
-
-  function encodeHTML(s){ return String(s).replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
 })();
 </script>
 </body>
