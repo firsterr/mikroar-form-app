@@ -1,45 +1,47 @@
-export async function handler() {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_ANON_KEY;
+// Public: aktif formları listele (slug + title)
+// NOT: admin anahtarı gerektirmez.
+const { createClient } = require('@supabase/supabase-js');
 
-  if (!url || !key) {
-    return {
-      statusCode: 500,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ok: false, error: 'Missing SUPABASE_URL or SUPABASE_ANON_KEY' }),
-    };
-  }
-
-  // Tablo adını kendi şemanına göre değiştir:
-  const table = 'forms'; // Örn: 'forms', 'anketler' vs.
-  const endpoint = `${url}/rest/v1/${table}?select=*&order=created_at.desc`;
-
+exports.handler = async () => {
   try {
-    const resp = await fetch(endpoint, {
-      headers: {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-        Accept: 'application/json',
-        Prefer: 'return=representation',
-        'Content-Profile': 'public', // şeman farklıysa değiştir
-      },
-    });
+    const supabase = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_ANON_KEY,
+      { auth: { persistSession: false } }
+    );
 
-    const data = await resp.json().catch(() => null);
+    // En hafif select: slug, title, active ve schema (sorusu var mı bakacağız)
+    const { data, error } = await supabase
+      .from('forms')
+      .select('slug,title,active,schema')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const items = (data || [])
+      // aktif: active null ise aktif sayıyoruz, false ise dışarıda
+      .filter(r => r && r.slug && r.active !== false)
+      // sorusu var mı? (questions ya da fields)
+      .filter(r => {
+        const s = r.schema || {};
+        const qs = Array.isArray(s.questions) ? s.questions : Array.isArray(s.fields) ? s.fields : [];
+        return qs.length > 0;
+      })
+      .map(r => ({ slug: r.slug, title: r.title || r.slug }));
 
     return {
-      statusCode: resp.ok ? 200 : resp.status,
+      statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*', // tarayıcıdan çağıracaksan rahat et
+        'Cache-Control': 'public, max-age=30, s-maxage=60'
       },
-      body: JSON.stringify({ ok: resp.ok, data }),
+      body: JSON.stringify({ ok: true, items })
     };
-  } catch (err) {
+  } catch (e) {
     return {
-      statusCode: 500,
+      statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ok: false, error: String(err) }),
+      body: JSON.stringify({ ok: false, error: e.message })
     };
   }
-}
+};
