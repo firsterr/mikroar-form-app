@@ -181,6 +181,7 @@ const slug     = new URLSearchParams(location.search).get('slug') || pathSlug;
       const s = j.schema;
 
       titleEl.textContent = s.title || slug;
+      titleEl.style.display = 'block';
       if (s.description){ descEl.textContent = s.description; descEl.style.display = 'block'; }
 
       const qs = s.questions || s.fields || [];
