@@ -1,197 +1,81 @@
-/* Google Forms benzeri sade tema */
 :root{
-  --bg: #f1f3f5;
-  --card: #ffffff;
-  --text: #111827;
-  --muted: #4b5563;
-  --border: #e5e7eb;
-  --shadow: 0 2px 6px rgba(0,0,0,.06);
-  --brand: #673ab7; /* Mor – Google Forms hissi */
-  --btn: #1a73e8;
-  --btn-hover: #1669c1;
+  --g-primary:#673ab7;         /* Google Forms mor tonu */
+  --g-primary-600:#5e35b1;
+  --g-text:#202124;
+  --g-muted:#5f6368;
+  --g-bg:#f1f3f4;
+  --g-card:#fff;
+  --g-border:#dadce0;
+  --g-ok:#1e8e3e;
+  --g-err:#d93025;
 }
 
-html,body{
-  background: var(--bg);
-  color: var(--text);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
+html,body{height:100%}
 body{
-  max-width: 900px;
-  margin: 24px auto;
-  padding: 0 16px;
+  margin:0;
+  background:var(--g-bg);
+  color:var(--g-text);
+  font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";
 }
 
-/* Başlık + açıklama */
-h1{ margin: 0 0 6px; font-weight: 800; letter-spacing: -.02em; }
-.form-desc{
-  margin: 0 0 16px;
-  color: var(--muted);
-  font-size: 15px;
+main.wrap{max-width:760px;margin:32px auto;padding:0 16px}
+
+/* ---- Genel not/uyarı bantları ---- */
+.note{margin:16px 0;padding:12px 14px;border-radius:8px;border:1px solid var(--g-border);background:#fff}
+.note.ok{border-color:#b7e0c2;background:#eaf6ee;color:var(--g-ok)}
+.note.err{border-color:#f1b7b7;background:#fdeaea;color:var(--g-err)}
+.note.warn{border-color:#ffe9a7;background:#fff8e1;color:#6b5100}
+
+.muted{color:var(--g-muted);font-size:.95rem}
+
+/* ---- Form gövdesi (Google Forms benzeri) ---- */
+.gform{display:block;background:var(--g-card);padding:8px 24px 24px;border-radius:12px;
+  box-shadow:0 1px 3px rgba(60,64,67,.3),0 4px 8px rgba(60,64,67,.15)}
+.gform .row{padding:18px 0;border-bottom:1px solid var(--g-border)}
+.gform .row:last-child{border-bottom:0}
+
+.gform label{display:block;font-weight:600;margin:0 0 6px}
+.gform .req{color:var(--g-err);font-weight:700}
+
+.gform input[type="text"],
+.gform input[type="email"],
+.gform textarea,
+.gform select{
+  width:100%;
+  border:0;
+  border-bottom:2px solid var(--g-border);
+  padding:10px 4px;
+  outline:0;
+  background:#fff;
+  border-radius:0;
+  transition:border-color .15s ease, box-shadow .15s ease
+}
+.gform textarea{min-height:120px;resize:vertical}
+.gform select{padding:10px 6px 8px}
+
+.gform input:focus,
+.gform textarea:focus,
+.gform select:focus{
+  border-bottom-color:var(--g-primary);
+  box-shadow:0 2px 0 0 var(--g-primary)
 }
 
-/* Soru kartı */
-.q{
-  margin: 14px 0;
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--card);
-  box-shadow: var(--shadow);
-}
-.q > label{
-  display: block;
-  font-weight: 600;
-  margin-bottom: 10px;
-}
+/* Çoktan seçmeli görünümler */
+.gform .choice{display:flex;gap:14px;flex-wrap:wrap}
+.gform .choice>div{display:flex;align-items:center;gap:8px}
 
-/* Seçenek satırı */
-.opt{
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 6px;
-  margin: 6px 0;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background .12s ease;
+/* ---- Butonlar ---- */
+button,
+button.primary{
+  padding:10px 18px;
+  border-radius:8px;
+  border:1px solid var(--g-primary);
+  background:var(--g-primary);
+  color:#fff;
+  font-weight:600;
+  cursor:pointer
 }
-.opt:hover{
-  background: #f8f9fa;
-}
+button.primary:hover{background:var(--g-primary-600);border-color:var(--g-primary-600)}
 
-/* Input’lar */
-.opt input[type="radio"],
-.opt input[type="checkbox"]{
-  accent-color: var(--brand);
-  transform: scale(1.12);
-}
-
-/* Seçildiğinde hafif vurgulu arka plan */
-.opt input:checked ~ *{
-  /* input sibling: label text node – hover kadar değil, hafif vurgu */
-}
-.opt:has(input:checked){
-  background: #f3edff; /* morun çok açık tonu */
-}
-
-/* Metin/textarea alanları */
-.q input[type="text"],
-.q textarea{
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 12px;
-  background: #fff;
-  outline: none;
-  transition: box-shadow .12s ease, border-color .12s ease;
-}
-.q textarea{ min-height: 96px; resize: vertical; }
-.q input[type="text"]:focus,
-.q textarea:focus{
-  border-color: #c7d2fe;
-  box-shadow: 0 0 0 3px rgba(99,102,241,.15);
-}
-
-/* Gönder butonu */
-#btnSend{
-  background: var(--btn);
-  color: #fff;
-  border: none;
-  border-radius: 10px;
-  padding: 10px 18px;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-}
-#btnSend:hover{ background: var(--btn-hover); }
-#btnSend:disabled{ opacity: .6; cursor: default; }
-
-/* Alt bilgi + sabit gönder barı (form.js bunu DOM’a koyuyor) */
-.sticky-submit{
-  margin-top: 28px;
-  padding: 14px;
-  border-top: 1px solid var(--border);
-  background: #fff;
-  border-radius: 12px 12px 0 0;
-  box-shadow: 0 -2px 6px rgba(0,0,0,.04);
-  display: flex;
-  flex-direction: column; /* buton üstte, yazı altta */
-  align-items: center;
-  gap: 10px;
-}
-
-.sticky-submit .note{
-  text-align: center;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.sticky-submit .note a{
-  color: #2563eb;
-  text-decoration: underline;
-}
-
-.sticky-submit .note strong{
-  display: block;
-  margin-top: 4px;
-  font-size: 15px;
-  color: var(--text);
-}
-/* Mobil */
-@media (max-width: 640px){
-  .form-desc{ font-size: 14px; }
-  .q{ padding: 14px; }
-}
-/* form.css’e eklenebilir */
-.noopt {
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: #fff4f4;
-  color: #a40000;
-  font-size: .95rem;
-}
-/* --- Auto-advance görsel destek --- */
-.q{ scroll-margin-top: 16px; }              /* kaydırınca üstte nefes alanı */
-.q.active{
-  outline: 2px solid #c7d2fe;
-  box-shadow: 0 0 0 4px rgba(99,102,241,.12) inset;
-  transition: outline .12s ease, box-shadow .12s ease;
-}
-.q.answered{
-  border-color: #d1fae5;
-  background: #f0fdf4;
-}
-#btnSend.pulse{ animation: pulse 1s ease 1; }
-@keyframes pulse{
-  0%{transform:scale(1)} 50%{transform:scale(1.06)} 100%{transform:scale(1)}
-}
-/* --- Validasyon ve odak stilleri --- */
-.q{ scroll-margin-top: 16px; }
-.q.active{
-  outline: 2px solid #c7d2fe;
-  box-shadow: 0 0 0 4px rgba(99,102,241,.12) inset;
-  transition: outline .12s ease, box-shadow .12s ease;
-}
-.q.answered{
-  border-color: #d1fae5;
-  background: #f0fdf4;
-}
-.q.error{
-  border-color: #fecaca;
-  background: #fff1f2;
-  outline: 2px solid #fecaca;
-  box-shadow: 0 0 0 4px rgba(239,68,68,.12) inset;
-}
-.q .err-msg{
-  margin-top: 8px;
-  color: #b91c1c;
-  font-size: 13px;
-}
-#btnSend.pulse{ animation: pulse 1s ease 1; }
-@keyframes pulse{
-  0%{transform:scale(1)} 50%{transform:scale(1.06)} 100%{transform:scale(1)}
-}
+.inline{display:flex;gap:8px;align-items:center}
+select.inline-input{flex:1;padding:10px;border:1px solid var(--g-border);border-radius:8px}
