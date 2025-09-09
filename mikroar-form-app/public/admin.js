@@ -67,7 +67,7 @@ function addQuestion(q = { type: 'text', name: '', label: '', required: false, o
   });
   div.querySelector('.q-del').addEventListener('click', () => div.remove());
   qsEl.appendChild(div);
-  // ilk render'da type'a göre opsiyon alanını doğru göster
+  // ilk render’da type’a göre opsiyon alanını doğru göster
   div.querySelector('.q-type').dispatchEvent(new Event('change'));
 }
 
