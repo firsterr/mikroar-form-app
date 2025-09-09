@@ -1,80 +1,107 @@
-// mikroar-form-app/netlify/functions/submit-form.js
-// Robust: CORS + OPTIONS + güvenli JSON parse + ayrıntılı hata çıkarımı
-exports.handler = async (event) => {
-  const CORS = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
-  };
+// Netlify Function: /api/submit-form  (REST ile Supabase, duplicate IP kontrolü)
+const SUPABASE_URL =
+  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE ||
+  process.env.SUPABASE_SERVICE_KEY ||
+  process.env.SUPABASE_ANON_KEY;
 
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Content-Type': 'application/json'
+};
+
+const norm = (v) => (v ?? '').toString().trim();
+
+function getIp(headers = {}) {
+  const h = Object.fromEntries(Object.entries(headers).map(([k,v]) => [k.toLowerCase(), v]));
+  return (
+    (h['x-nf-client-connection-ip'] || h['client-ip'] || h['x-real-ip'] ||
+     (h['x-forwarded-for'] ? h['x-forwarded-for'].split(',')[0] : '') || '').trim()
+  ) || null;
+}
+
+exports.handler = async (event) => {
   try {
-    // Preflight
     if (event.httpMethod === 'OPTIONS') {
       return { statusCode: 204, headers: CORS, body: '' };
     }
     if (event.httpMethod !== 'POST') {
-      return { statusCode: 405, headers: { ...CORS, Allow: 'POST, OPTIONS' }, body: 'Method Not Allowed' };
+      return { statusCode: 405, headers: { ...CORS, 'Allow':'POST, OPTIONS' }, body: 'Method Not Allowed' };
+    }
+    if (!SUPABASE_URL || !SUPABASE_KEY) {
+      return { statusCode: 500, headers: CORS, body: JSON.stringify({ ok:false, error:'supabase-env-missing' }) };
     }
 
-    const SUPABASE_URL = process.env.SUPABASE_URL;
-    const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      return j(500, { ok: false, error: 'Missing Supabase env vars' }, CORS);
-    }
+    const qs = event.queryStringParameters || {};
+    const slugFromQuery = norm(qs.slug);
 
-    // Body & slug
     let body = {};
-    try { body = event.body ? JSON.parse(event.body) : {}; } catch { body = {}; }
+    try { body = JSON.parse(event.body || '{}'); } catch {}
+    const slugFromBody = norm(body.form_slug);
+    const answers = (body.answers && typeof body.answers === 'object') ? body.answers : body;
 
-    const q = event.queryStringParameters || {};
-    const slug = q.slug || body.form_slug || '';
-    if (!slug) return j(400, { ok: false, error: 'form_slug (slug) gerekli' }, CORS);
+    const form_slug = slugFromBody || slugFromQuery;
+    if (!form_slug) {
+      return { statusCode: 400, headers: CORS, body: JSON.stringify({ ok:false, error:'form_slug-required' }) };
+    }
 
-    // Answers objesi garanti
-    const answers = (body && typeof body.answers === 'object' && body.answers !== null) ? body.answers : {};
+    const ip = getIp(event.headers);
 
-    // IP tespiti (çeşitli header’lardan)
-    const H = lower(event.headers || {});
-    const ip =
-      H['x-nf-client-connection-ip'] ||
-      (H['x-forwarded-for'] ? H['x-forwarded-for'].split(',')[0].trim() : '') ||
-      H['x-real-ip'] ||
-      H['client-ip'] ||
-      null;
+    // 1) Duplicate check (aynı IP + aynı form)
+    if (ip) {
+      const chk = await fetch(
+        `${SUPABASE_URL}/rest/v1/responses?select=created_at&form_slug=eq.${encodeURIComponent(form_slug)}&ip=eq.${encodeURIComponent(ip)}&limit=1`,
+        { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+      );
+      const existed = await chk.json().catch(() => []);
+      if (Array.isArray(existed) && existed.length > 0) {
+        return {
+          statusCode: 409,
+          headers: CORS,
+          body: JSON.stringify({ ok:false, alreadySubmitted:true, at: existed[0].created_at })
+        };
+      }
+    }
 
-    // INSERT -> Supabase REST
-    const resp = await fetch(`${SUPABASE_URL}/rest/v1/responses`, {
+    // 2) Insert
+    const ins = await fetch(`${SUPABASE_URL}/rest/v1/responses`, {
       method: 'POST',
       headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
         'Content-Type': 'application/json',
-        Prefer: 'return=representation',
-        Accept: 'application/json'
+        Prefer: 'return=representation'
       },
-      body: JSON.stringify({ form_slug: slug, ip, answers })
+      body: JSON.stringify({ form_slug, ip, answers })
     });
 
-    // Başarısızsa mümkün olan en okunur hatayı çıkar
-    const text = await resp.text();
-    let data = null;
-    try { data = JSON.parse(text); } catch { data = { raw: text }; }
+    const data = await ins.json().catch(() => null);
 
-    // Duplicate (unique) kontrolünü kullanıcıya anlamlı ver
-    if (resp.status === 409) {
-      return j(409, { ok: false, already: true, message: 'Bu form bu IP ile zaten yanıtlanmış.' }, CORS);
+    // Unique constraint durumunu yakala (ör. uniq_response_per_ip_per_form)
+    if (ins.status === 409) {
+      return {
+        statusCode: 409,
+        headers: CORS,
+        body: JSON.stringify({
+          ok:false,
+          alreadySubmitted:true,
+          at: null,
+          detail: data
+        })
+      };
     }
 
-    return j(resp.status, { ok: resp.ok, data }, CORS);
+    // FK/slug yoksa vb. hataları anlaşılır döndür
+    if (!ins.ok) {
+      const msg = (data && (data.message || data.error)) || `supabase-${ins.status}`;
+      return { statusCode: ins.status, headers: CORS, body: JSON.stringify({ ok:false, error: msg, data }) };
+    }
 
+    return { statusCode: 200, headers: CORS, body: JSON.stringify({ ok:true, data }) };
   } catch (err) {
-    // Netlify 502 yerine burada 500 + mesaj döner
-    return j(500, { ok: false, error: String(err && err.stack ? err.stack : err) }, CORS);
+    return { statusCode: 500, headers: CORS, body: JSON.stringify({ ok:false, error: String(err) }) };
   }
 };
-
-/* helpers */
-function j(status, obj, headers = {}) {
-  return { statusCode: status, headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(obj) };
-}
-function lower(h) { const o = {}; for (const k in h) o[k.toLowerCase()] = h[k]; return o; }
