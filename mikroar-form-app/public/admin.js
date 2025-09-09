@@ -49,21 +49,24 @@ function addQuestion(q = { type: 'text', name: '', label: '', required: false, o
       <option value="textarea" ${q.type === 'textarea' ? 'selected' : ''}>Metin alanı</option>
       <option value="radio" ${q.type === 'radio' ? 'selected' : ''}>Tek seçim</option>
       <option value="checkbox" ${q.type === 'checkbox' ? 'selected' : ''}>Çoklu seçim</option>
+      <option value="select" ${q.type === 'select' ? 'selected' : ''}>Açılır menü</option>
     </select>
     <input class="q-name" type="text" placeholder="alan adı (boş bırakılırsa q1,q2…)" value="${q.name || ''}">
     <input class="q-label" type="text" placeholder="Etiket" value="${q.label || ''}">
     <label class="q-req"><input type="checkbox" ${q.required ? 'checked' : ''}> Zorunlu</label>
-    <input class="q-opts" type="text" placeholder="Seçenekler (virgül ile)"
-      value="${(q.options || []).join(', ')}" style="${/(radio|checkbox)/.test(q.type) ? '' : 'display:none'}">
+    <input class="q-opts" type="text" placeholder="Seçenekler (virgülle): Örn. Evet, Hayır"
+      value="${Array.isArray(q.options) ? q.options.join(', ') : ''}">
     <button type="button" class="q-del">Sil</button>
   `;
-  row.querySelector('.q-type').addEventListener('change', (e) => {
-    const show = /(radio|checkbox)/.test(e.target.value);
-    row.querySelector('.q-opts').style.display = show ? '' : 'none';
-  });
+  // Tip radio/checkbox/select ise seçenek kutusu görünür; değilse gizle
+  const updateOptsVisibility = () => {
+    const t = row.querySelector('.q-type').value;
+    row.querySelector('.q-opts').style.display = /radio|checkbox|select/.test(t) ? '' : 'none';
+  };
+  row.querySelector('.q-type').addEventListener('change', updateOptsVisibility);
   row.querySelector('.q-del').addEventListener('click', () => row.remove());
   qsEl.appendChild(row);
-  row.querySelector('.q-type').dispatchEvent(new Event('change'));
+  updateOptsVisibility();
 }
 
 function sanitizeName(s) {
@@ -80,30 +83,28 @@ function collectQuestions() {
     let name = sanitizeName(r.querySelector('.q-name').value.trim());
     const label = r.querySelector('.q-label').value.trim() || `Soru ${idx + 1}`;
     const required = r.querySelector('.q-req input').checked;
-    const opts =
-      r.querySelector('.q-opts').value
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
+    const raw = r.querySelector('.q-opts').value || '';
+    const options = raw
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
 
     if (!name) name = `q${idx + 1}`;
 
     const q = { type, name, label, required };
-    if (/(radio|checkbox)/.test(type)) q.options = opts;
+    if (/radio|checkbox|select/.test(type)) q.options = options;   // <-- KRİTİK: options kaydediliyor
     return q;
   });
 }
 
-// ---- LOAD (slug -> formu getir)
+// ---- LOAD
 async function loadForm() {
   const slug = $('#inSlug').value.trim();
   if (!slug) return toast('Önce slug gir.', 'err');
 
   const r = await fetch(`${API}/forms?slug=${encodeURIComponent(slug)}`);
   const j = await r.json().catch(() => ({}));
-  if (!r.ok || !j.ok || !j.schema) {
-    return toast(j.error || `Bulunamadı (HTTP ${r.status})`, 'err');
-  }
+  if (!r.ok || !j.ok || !j.schema) return toast(j.error || `Bulunamadı (HTTP ${r.status})`, 'err');
 
   const s = j.schema;
   $('#inTitle').value = s.title || '';
@@ -117,7 +118,7 @@ async function loadForm() {
   toast('Form yüklendi.');
 }
 
-// ---- SAVE (schema.questions olarak yaz)
+// ---- SAVE
 async function saveForm() {
   try {
     const slug = $('#inSlug').value.trim();
@@ -139,13 +140,8 @@ async function saveForm() {
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
 
-    // Görsel uyarı
     const savedLen = (j.schema?.questions || j.schema?.fields || []).length ?? 0;
-    if (!savedLen) {
-      toast('Kaydedildi ama alan sayısı 0 görünüyor. Yenileyip tekrar deneyin.', 'err');
-    } else {
-      toast('Kaydedildi ✅', 'ok');
-    }
+    toast(savedLen ? `Kaydedildi ✅ (soru: ${savedLen})` : 'Kaydedildi ama 0 soru görünüyor.', savedLen ? 'ok' : 'err');
   } catch (e) {
     toast(e.message, 'err');
   }
