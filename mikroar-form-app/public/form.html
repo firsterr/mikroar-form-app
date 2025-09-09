@@ -9,7 +9,7 @@
   .note{display:none;margin:16px 0;padding:12px;border-radius:8px}
   .note.err{display:block;background:#ffe8e8;color:#b00020;border:1px solid #f3c5c5}
   .note.warn{display:block;background:#fff5da;color:#6b5100;border:1px solid #f1e2b3}
-  .ok{display:block;background:#e7fff1;color:#0a7d3b;border:1px solid #bdf0cf}
+  .note.ok{display:block;background:#e7fff1;color:#0a7d3b;border:1px solid #bdf0cf}
   .row{margin:18px 0}
   label{display:block;font-weight:600;margin-bottom:8px}
   .muted{color:#666;font-size:.95rem}
@@ -19,7 +19,8 @@
 <main class="wrap">
   <h1 id="title">Yükleniyor…</h1>
   <p id="desc" class="muted" style="display:none"></p>
-  <p id="alert" class="note err"></p>
+  <!-- Başlangıçta görünmesin -->
+  <p id="alert" class="note"></p>
 
   <form id="form" method="POST" action="#" style="display:none"></form>
 </main>
@@ -32,17 +33,19 @@
   const alertEl = $('#alert');
   const formEl  = $('#form');
 
-  const slug = new URLSearchParams(location.search).get('slug') || location.pathname.replace(/^\/+|\/+$/g,'');
+  const slug = new URLSearchParams(location.search).get('slug')
+            || location.pathname.replace(/^\/+|\/+$/g,'');
   const API = '/api';
 
   function showErr(msg){ alertEl.textContent = msg; alertEl.className='note err'; alertEl.style.display='block'; }
   function showWarn(msg){ alertEl.textContent = msg; alertEl.className='note warn'; alertEl.style.display='block'; }
-  function hideNote(){ alertEl.style.display='none'; }
+  function showOk(msg){ alertEl.textContent = msg; alertEl.className='note ok'; alertEl.style.display='block'; }
+  function hideNote(){ alertEl.style.display='none'; alertEl.className='note'; alertEl.textContent=''; }
 
   if (!slug) { showErr('URL’de slug yok.'); return; }
 
-  // Fallback action
-  formEl.action = `/api/submit-form?slug=${encodeURIComponent(slug)}`;
+  // Fallback: JS kapalıysa bile çalışsın
+  formEl.action = `${API}/submit-form?slug=${encodeURIComponent(slug)}`;
   formEl.method = 'POST';
 
   // Helpers
@@ -54,7 +57,6 @@
   }
 
   function drawQuestion(q, idx){
-    // normalize
     const type = (q.type || 'text').toLowerCase();
     const name = q.name || `q${idx+1}`;
     const label = q.label || `Soru ${idx+1}`;
@@ -64,7 +66,10 @@
     row.appendChild(mk('label', { for:`f_${name}` }, label + (q.required ? ' *' : '')));
 
     if (type === 'radio' || type === 'checkbox') {
-      if (!opts.length){ row.appendChild(mk('div',{},'<div class="muted">Bu soru için seçenek tanımlı değil.</div>')); return row; }
+      if (!opts.length){
+        row.appendChild(mk('div',{},'<div class="muted">Bu soru için seçenek tanımlı değil.</div>'));
+        return row;
+      }
       const g = mk('div');
       opts.forEach((opt,i) => {
         const id = `f_${name}_${i}`;
@@ -96,13 +101,12 @@
       return row;
     }
 
-    // text/email/others
     const itype = (type === 'email') ? 'email' : 'text';
     row.appendChild(mk('input', { type:itype, id:`f_${name}`, name, ...(q.required?{required:''}:{}) }));
     return row;
   }
 
-  // Load schema
+  // Şemayı yükle
   fetch(`${API}/forms?slug=${encodeURIComponent(slug)}`)
     .then(r => r.json())
     .then(j => {
@@ -129,7 +133,7 @@
       showErr(e.message || 'Hata');
     });
 
-  // Submit
+  // Submit (Madde #2: 409 için IP uyarısı)
   formEl.addEventListener('submit', async (e) => {
     e.preventDefault();
     hideNote();
@@ -158,10 +162,17 @@
         body: JSON.stringify({ answers })
       });
       const j = await r.json().catch(()=>({}));
+
+      // <<< YENİ: ikinci gönderimde anlamlı uyarı
+      if (r.status === 409 || j.alreadySubmitted) {
+        const when = j.at ? ` (${new Date(j.at).toLocaleString()})` : '';
+        showWarn('Bu IP ile zaten yanıt gönderilmiş.' + when);
+        if (btn) btn.disabled = false;
+        return;
+      }
+
       if (r.ok && j.ok){
-        alertEl.className = 'note ok';
-        alertEl.textContent = 'Gönderildi, teşekkürler!';
-        alertEl.style.display = 'block';
+        showOk('Gönderildi, teşekkürler!');
         formEl.reset();
       }else{
         showErr(j?.data?.message || j?.error || `Hata: ${r.status}`);
