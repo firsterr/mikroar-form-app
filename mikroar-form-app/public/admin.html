@@ -13,8 +13,6 @@
     textarea{min-height:140px}
     h1{font-size:32px;margin:0 0 16px}
     .bar{display:flex;gap:10px;align-items:center;margin:8px 0 20px}
-    .bar .tab{padding:10px 14px;border-radius:10px;border:1px solid #ccd;background:#f6f7f8;cursor:pointer}
-    .bar .tab.active{background:#e8f0ff;border-color:#9bb7ff}
     .bar .token{margin-left:auto;padding:8px 10px;border-radius:8px;border:1px solid #ccd;background:#fff;cursor:pointer}
     h2{margin:28px 0 8px}
     #qs .qrow{display:grid;grid-template-columns:130px 1fr 1fr 130px 1fr 90px;gap:10px;align-items:center;margin:10px 0;padding:10px;border:1px dashed #d9dee3;border-radius:12px}
@@ -32,8 +30,7 @@
     <h1>Anket Oluştur / Düzenle</h1>
 
     <div class="bar">
-      
-      <button class="token" id="btnToken" title="Yönetici anahtarı">🔑 Anahtar</button>
+      <button id="btnToken" class="token" type="button" title="Yönetici anahtarı">🔑 Anahtar</button>
     </div>
 
     <div class="row">
@@ -55,19 +52,21 @@
     </div>
 
     <h2>Sorular</h2>
+    <!-- Soruların çizileceği kap -->
     <div id="qs"></div>
 
     <div class="bar">
-      <button id="btnAddQ">Soru Ekle</button>
-      <button id="btnLoad">Yükle</button>
-      <button id="btnNew">Yeni</button>
-      <button id="btnSave" class="primary">Kaydet</button>
+      <button id="btnAddQ" type="button">Soru Ekle</button>
+      <button id="btnLoad" type="button">Yükle</button>
+      <button id="btnNew"  type="button">Yeni</button>
+      <button id="btnSave" type="button" class="primary">Kaydet</button>
     </div>
 
+    <!-- Uyarı alanı -->
     <div id="alert" class="note" style="display:none"></div>
   </main>
 
-  <!-- en alttaki script -->
-<script src="/admin.js" defer></script>
+  <!-- JS: kökten servis edilir; DOM yüklendikten sonra çalışsın -->
+  <script src="/admin.js" defer></script>
 </body>
 </html>
