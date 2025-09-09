@@ -28,7 +28,7 @@
 
 <script>
 (() => {
-  const VERSION = 'FORM LOADER V7';
+  const VERSION = 'FORM LOADER V8';
   console.log(VERSION);
 
   const API = '/api';
@@ -58,21 +58,18 @@
 
   // ---------- yardımcılar ----------
   const tryParse = (x) => {
-    if (typeof x === 'string') {
-      try { return JSON.parse(x); } catch { return x; }
-    }
+    if (typeof x === 'string') { try { return JSON.parse(x); } catch { return x; } }
     return x;
   };
 
-  const pick = (obj, paths) => {
+  const get = (obj, paths) => {
     for (const p of paths) {
       const parts = p.split('.');
-      let cur = obj;
-      let ok  = true;
+      let cur = obj, ok = true;
       for (const k of parts) {
-        if (cur && Object.prototype.hasOwnProperty.call(cur, k)) {
-          cur = cur[k];
-        } else { ok = false; break; }
+        if (Array.isArray(cur)) cur = cur[0];             // kökte dizi ise ilkini al
+        if (cur && Object.prototype.hasOwnProperty.call(cur, k)) cur = cur[k];
+        else { ok = false; break; }
       }
       if (ok && cur != null) return cur;
     }
@@ -104,17 +101,10 @@
   const mapField = (q, i) => {
     q = tryParse(q) || {};
     const name =
-      q.name ||
-      q.key  ||
-      q.id   ||
-      `q_${i}`;
+      q.name || q.key || q.id || `q_${i}`;
 
     const label =
-      q.label ||
-      q.title ||
-      q.question ||
-      q.text  ||
-      `Soru ${i+1}`;
+      q.label || q.title || q.question || q.text || `Soru ${i+1}`;
 
     const required = !!(q.required || q.required_flag);
 
@@ -127,62 +117,61 @@
     return { name, label, required, type, options };
   };
 
-  function normalizeFields(j) {
-    // olası yollar: schema.*, form.schema.*, questions, fields, items...
+  function normalize(j) {
+    // kökte dizi geldiyse ilk elemanı kök kabul et
+    const root = Array.isArray(j) ? j[0] : j;
+
+    // muhtemel schema konumları
     let schema =
-      pick(j, ['schema']) ??
-      pick(j, ['form.schema']) ??
-      pick(j, ['data.schema']);
+      get(root, ['schema', 'form.schema', 'data.schema']) ??
+      tryParse(get(root, ['row.schema', 'record.schema']));
 
     schema = tryParse(schema);
 
-    // meta başlık/açıklama
-    const meta = tryParse(schema && (schema.meta || schema));
+    // meta
     const title =
-      pick(j, ['title']) ||
-      pick(j, ['form.title']) ||
-      pick(meta, ['title']);
+      get(root, ['title','form.title']) ??
+      get(schema || {}, ['title','meta.title']);
+
     const description =
-      pick(j, ['description']) ||
-      pick(j, ['form.description']) ||
-      pick(meta, ['description']);
+      get(root, ['description','form.description']) ??
+      get(schema || {}, ['description','meta.description']);
 
-    // alanları dene
+    // alan listesi muhtemel yollar
     let fields =
-      pick(schema, ['fields']) ??
-      pick(schema, ['questions']) ??
-      pick(schema, ['items']) ??
-      pick(j, ['questions']) ??
-      pick(j, ['fields']) ??
-      pick(j, ['items']);
+      get(schema || {}, ['fields','questions','items']) ??
+      get(root,   ['fields','questions','items']);
 
-    if (!fields) {
-      // kökte q_0, q_1 ...
-      const qKeys = Object.keys(tryParse(schema) || {}).filter(k => /^q[_-]?\d+/i.test(k));
-      if (qKeys.length) fields = qKeys.sort().map(k => schema[k]);
+    if (!fields && schema) {
+      // q_0, q_1 ... biçimi
+      const keys = Object.keys(tryParse(schema) || {}).filter(k => /^q[_-]?\d+/i.test(k));
+      if (keys.length) fields = keys.sort().map(k => schema[k]);
+    }
+
+    if (!fields && root) {
+      const keys = Object.keys(root || {}).filter(k => /^q[_-]?\d+/i.test(k));
+      if (keys.length) fields = keys.sort().map(k => root[k]);
     }
 
     fields = ensureArray(fields).map(mapField);
 
-    return { title, description, fields, raw: j, schema };
+    return { title, description, fields, raw: root, full: j };
   }
   // ---------- /yardımcılar ----------
 
   fetch(`${API}/forms?slug=${encodeURIComponent(slug)}`)
     .then(r => r.json())
     .then(j => {
-      if (!j || j.ok === false) throw new Error(j?.error || 'Şema alınamadı');
+      window.__FORM_DEBUG__ = j;               // teşhis için
+      const n = normalize(j);
 
-      const { title, description, fields } = normalizeFields(j);
-      window.__FORM_DEBUG__ = j; // ihtiyacımız olursa
-
-      titleEl.textContent = title || `Form: ${slug}`;
-      if (description) { descEl.textContent = description; descEl.style.display = 'block'; }
+      titleEl.textContent = n.title || `Form: ${slug}`;
+      if (n.description) { descEl.textContent = n.description; descEl.style.display = 'block'; }
 
       formEl.innerHTML = '';
       let inputCount = 0;
 
-      fields.forEach((f, idx) => {
+      n.fields.forEach((f, idx) => {
         const id  = `fld_${f.name || ('q_'+idx)}`;
         const req = f.required ? 'required' : '';
         const row = document.createElement('div');
@@ -193,11 +182,10 @@
           control = `<textarea id="${id}" name="${f.name}" ${req}></textarea>`;
           inputCount++;
         } else if (f.type === 'radio' || f.type === 'checkbox') {
-          const type = f.type;
           const opts = (f.options || []).map((opt, i) => {
             const oid = `${id}_${i}`;
             return `<label style="display:flex;gap:8px;align-items:center;margin:4px 0">
-                      <input id="${oid}" type="${type}" name="${f.name}" value="${opt}">
+                      <input id="${oid}" type="${f.type}" name="${f.name}" value="${opt}">
                       <span>${opt}</span>
                     </label>`;
           }).join('');
@@ -216,6 +204,8 @@
         alertEl.className = 'err';
         alertEl.textContent = 'Bu formda soru tanımı bulunamadı.';
         alertEl.style.display = 'block';
+        // gözle teşhis kolay olsun diye ilk 1-2 anahtar adı yaz
+        console.warn('FORM DEBUG KEYS:', Object.keys(Array.isArray(j)?j[0]:j));
         return;
       }
 
