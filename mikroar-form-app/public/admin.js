@@ -94,7 +94,45 @@ function collectQuestions() {
     return q;
   });
 }
+// --- mevcut sabitlerinizin altına ekleyin ---
+function ensureAuthOverlay() {
+  const lock = document.getElementById('lock');
+  const hasToken = !!localStorage.getItem(LS_KEY);
+  if (lock) lock.style.display = hasToken ? 'none' : 'flex';
+  // token yoksa, ekranda başka bir şeyle etkileşime izin vermeyelim
+  document.body.style.overflow = hasToken ? '' : 'hidden';
+}
 
+// Sayfa ilk yüklenirken anahtar iste
+document.addEventListener('DOMContentLoaded', () => {
+  // localStorage'ta yoksa prompt açılır (getToken zaten bunu yapıyor)
+  if (!localStorage.getItem(LS_KEY)) {
+    // kullanıcı Cancel derse, overlay açık kalır ve butondan tekrar deneyebilir
+    try { getToken(); } catch(_) {}
+  }
+  ensureAuthOverlay();
+});
+
+// Kilit ekranı butonu
+document.addEventListener('click', (e) => {
+  if (e.target && e.target.id === 'unlockBtn') {
+    // Eski/değişmiş anahtar ihtimali için önce temizleyelim
+    localStorage.removeItem(LS_KEY);
+    try { getToken(); } catch(_) {}
+    ensureAuthOverlay();
+  }
+});
+
+// Mevcut "🔑 Anahtar" butonunuz zaten vardı; onu da bu davranışa bağlayın:
+document.getElementById('btnToken')?.addEventListener('click', () => {
+  localStorage.removeItem(LS_KEY);
+  try { getToken(); } catch(_) {}
+  ensureAuthOverlay();
+});
+
+// --- mevcut authHeaders() KULLANIMLARI aynı kalabilir ---
+// Her POST/PUT’ta zaten X-Admin-Token header’ını gönderiyorsunuz.
+// Bu overlay sayfa içi etkileşimi anahtarsız engelliyor.
 // ---- LOAD
 async function loadForm() {
   const slug = $('#inSlug').value.trim();
