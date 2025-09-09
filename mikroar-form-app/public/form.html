@@ -124,6 +124,22 @@ if (q.type === "text") {
     );
   });
 }
+    function isAnswered(q, idx) {
+  const key = "q_" + idx;
+  if (q.type === "checkbox") {
+    return document.querySelectorAll(`[name="${key}"]:checked`).length > 0;
+  }
+  if (q.type === "radio") {
+    return !!document.querySelector(`[name="${key}"]:checked`);
+  }
+  if (q.type === "select") {
+    const el = document.querySelector(`[name="${key}"]`);
+    return !!(el && el.value && el.value.trim().length);
+  }
+  const el = document.querySelector(`[name="${key}"]`);
+  const v = (el && el.value) ? el.value.trim() : "";
+  return v.length > 0;
+}
     // submit butonu
     const btn = document.createElement('button');
     btn.type = 'submit'; btn.textContent = 'Gönder'; btn.id='btnSend';
