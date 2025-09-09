@@ -13,21 +13,41 @@
   .row{margin:18px 0}
   label{display:block;font-weight:600;margin-bottom:8px}
   .muted{color:#666;font-size:.95rem}
-  /* >>> yeni: ilk başlık gizli, form fade-in */
   .hidden{display:none}
   .fade{opacity:0; transition:opacity .18s ease}
   .fade.show{opacity:1}
+
+  /* Slug seçici */
+  .picker{display:none;margin:18px 0;padding:16px;border:1px dashed #cfd6dd;border-radius:12px;background:#f8fafc}
+  .picker .controls{display:flex;gap:10px;align-items:center}
+  .picker select{flex:1;min-width:240px;padding:10px;border:1px solid #ccd;border-radius:10px}
+  .picker button{padding:10px 14px;border-radius:10px;border:1px solid #2d6ef7;background:#2d6ef7;color:#fff;cursor:pointer}
 </style>
 </head>
 <body>
 <main class="wrap">
-  <!-- >>> başlık ilk anda gizli -->
+  <!-- Başlık sadece veri geldiğinde gösterilecek -->
   <h1 id="title" class="hidden"></h1>
   <p id="desc" class="muted" style="display:none"></p>
-  <!-- uyarı ilk anda görünmesin -->
+
+  <!-- Not/uyarı bandı -->
   <p id="alert" class="note"></p>
 
-  <!-- >>> fade sınıfı eklendi -->
+  <!-- Slug seçici (slug param yoksa görünür) -->
+  <div id="picker" class="picker">
+    <div class="row">
+      <strong>Bir anket seçin</strong>
+      <p class="muted" style="margin:6px 0 0">Aşağıdan bir form (slug) seçtiğinizde ilgili anket sayfasına yönlendirilirsiniz.</p>
+    </div>
+    <div class="controls">
+      <select id="slugSel" aria-label="Anket seç">
+        <option value="" selected disabled>— Form (slug) seçin —</option>
+      </select>
+      <button id="btnOpen" type="button">Formu Aç</button>
+    </div>
+  </div>
+
+  <!-- Form gövdesi -->
   <form id="form" method="POST" action="#" class="fade" style="display:none"></form>
 </main>
 
@@ -39,22 +59,20 @@
   const alertEl = $('#alert');
   const formEl  = $('#form');
 
+  const pickerEl = $('#picker');
+  const slugSel  = $('#slugSel');
+  const btnOpen  = $('#btnOpen');
+
+  const API = '/api';
   const slug = new URLSearchParams(location.search).get('slug')
             || location.pathname.replace(/^\/+|\/+$/g,'');
-  const API = '/api';
 
   function showErr(msg){ alertEl.textContent = msg; alertEl.className='note err'; alertEl.style.display='block'; }
   function showWarn(msg){ alertEl.textContent = msg; alertEl.className='note warn'; alertEl.style.display='block'; }
   function showOk(msg){ alertEl.textContent = msg; alertEl.className='note ok'; alertEl.style.display='block'; }
   function hideNote(){ alertEl.style.display='none'; alertEl.className='note'; alertEl.textContent=''; }
 
-  if (!slug) { showErr('URL’de slug yok.'); return; }
-
-  // Fallback: JS kapalıysa bile çalışsın
-  formEl.action = `${API}/submit-form?slug=${encodeURIComponent(slug)}`;
-  formEl.method = 'POST';
-
-  // Helpers
+  // Basit element üretici
   function mk(name, attrs={}, html=''){
     const el = document.createElement(name);
     for (const [k,v] of Object.entries(attrs)) el.setAttribute(k, v);
@@ -62,6 +80,7 @@
     return el;
   }
 
+  // Soru çizer
   function drawQuestion(q, idx){
     const type = (q.type || 'text').toLowerCase();
     const name = q.name || `q${idx+1}`;
@@ -88,7 +107,6 @@
 
     if (type === 'select') {
       const select = mk('select', { id:`f_${name}`, name, ...(q.required ? {required:''} : {}) });
-      // >>> uyarı yok; seçenek yoksa sadece placeholder dursun
       select.appendChild(mk('option', { value:'', disabled:'', selected:'' }, 'Seçiniz'));
       opts.forEach(v => select.appendChild(mk('option',{value:v}, v)));
       row.appendChild(select);
@@ -105,6 +123,51 @@
     return row;
   }
 
+  // ----- SLUG YOKSA: liste getir + yönlendirici -----
+  if (!slug) {
+    // Seçici görünür olsun
+    pickerEl.style.display = 'block';
+
+    // Listeyi çek
+    fetch(`${API}/forms-list`)
+      .then(r => r.json())
+      .then(j => {
+        if (!j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+        const items = (j.forms || []);
+        // boşsa bilgi göster
+        if (!items.length) {
+          showWarn('Listelenecek form bulunamadı.');
+          return;
+        }
+        // seçenekleri doldur
+        items.forEach(f => {
+          const s = f.slug;
+          const t = f.title || (f.schema && f.schema.title) || s;
+          const opt = document.createElement('option');
+          opt.value = s;
+          opt.textContent = `${t} — ${s}`;
+          slugSel.appendChild(opt);
+        });
+      })
+      .catch(e => showErr(e.message || 'Liste alınamadı'));
+
+    // Aç butonu → /form.html?slug=SELECTED
+    btnOpen.addEventListener('click', () => {
+      const s = slugSel.value;
+      if (!s) { showWarn('Lütfen bir form seçin.'); return; }
+      location.href = `/form.html?slug=${encodeURIComponent(s)}`;
+    });
+
+    // Slug yoksa bu noktada form çizimi yapılmaz; return.
+    return;
+  }
+
+  // ----- SLUG VARSA: formu yükle -----
+
+  // Fallback (JS kapalıysa bile çalışsın)
+  formEl.action = `${API}/submit-form?slug=${encodeURIComponent(slug)}`;
+  formEl.method = 'POST';
+
   // Şemayı yükle
   fetch(`${API}/forms?slug=${encodeURIComponent(slug)}`)
     .then(r => r.json())
@@ -112,7 +175,7 @@
       if (!j.ok || !j.schema) throw new Error(j.error || 'Form bulunamadı');
       const s = j.schema;
 
-      // >>> başlığı sadece başarıyla doldur
+      // Başlık sadece başarıyla doldur
       titleEl.textContent = s.title || slug;
       titleEl.classList.remove('hidden');
 
@@ -121,14 +184,14 @@
       const qs = s.questions || s.fields || [];
       formEl.innerHTML = '';
       if (!qs.length){
-        showErr('Bu formda soru tanımı bulunamadı.');
+        showWarn('Bu formda soru tanımı bulunamadı.');
       } else {
         hideNote();
         qs.forEach((q,i) => formEl.appendChild(drawQuestion(q,i)));
         const btn = mk('button', { type:'submit' }, 'Gönder');
         formEl.appendChild(btn);
 
-        // >>> yumuşak açılış
+        // yumuşak açılış
         formEl.style.display = 'block';
         requestAnimationFrame(() => formEl.classList.add('show'));
       }
