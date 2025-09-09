@@ -1,3 +1,4 @@
+
 // netlify/functions/forms.js
 export async function handler(event) {
   if (event.httpMethod !== 'GET') {
