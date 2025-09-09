@@ -1,4 +1,4 @@
-// ---- Basit Admin Panel JS (final, select fix) ----
+// ---- Admin JS (final, select fix) ----
 const API = '/api';
 const LS_KEY = 'ADMIN_TOKEN';
 
@@ -6,7 +6,6 @@ const $ = (s) => document.querySelector(s);
 const qsEl = $('#qs');
 const alertEl = $('#alert');
 
-// ---- Yardımcılar
 function toast(msg, type = 'ok') {
   alertEl.textContent = msg;
   alertEl.className = 'note ' + type;
@@ -90,7 +89,7 @@ function collectQuestions() {
     if (!name) name = `q${idx + 1}`;
 
     const q = { type, name, label, required };
-    // >>> ÖNEMLİ: select dahil edildi
+    // select dahil: options yaz
     if (/(radio|checkbox|select)/.test(type)) q.options = opts;
     return q;
   });
@@ -142,11 +141,7 @@ async function saveForm() {
     if (!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
 
     const savedLen = (j.schema?.questions || j.schema?.fields || []).length ?? 0;
-    if (!savedLen) {
-      toast('Kaydedildi ama alan sayısı 0 görünüyor. Yenileyip tekrar deneyin.', 'err');
-    } else {
-      toast('Kaydedildi ✅', 'ok');
-    }
+    toast(savedLen ? 'Kaydedildi ✅' : 'Kaydedildi ama alan sayısı 0 görünüyor.', savedLen ? 'ok' : 'err');
   } catch (e) {
     toast(e.message, 'err');
   }
