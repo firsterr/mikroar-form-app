@@ -28,6 +28,9 @@
 
 <script>
 (() => {
+  const VERSION = 'FORM LOADER V7';
+  console.log(VERSION);
+
   const API = '/api';
   const $   = (s) => document.querySelector(s);
 
@@ -49,31 +52,38 @@
     return;
   }
 
-  // JS kapalıyken de çalışsın
+  // JS kapalıyken de POST çalışsın
   formEl.action = `${API}/submit-form?slug=${encodeURIComponent(slug)}`;
   formEl.method = "POST";
 
-  // ---------- ŞEMA NORMALİZASYONU ----------
-  function optType(t){
-    const x = String(t||'text').toLowerCase();
-    return ['text','email','textarea','radio','checkbox'].includes(x) ? x : 'text';
-  }
-  function mapQ(q, i){
-    const type = optType(q.type);
-    return {
-      name    : q.name || `q_${i}`,
-      label   : q.label || `Soru ${i+1}`,
-      required: !!q.required,
-      type,
-      options : (type==='radio' || type==='checkbox') ? (q.options||[]).map(String) : undefined
-    };
-  }
-  function asArray(x){
-    // dizi ise direkt
+  // ---------- yardımcılar ----------
+  const tryParse = (x) => {
+    if (typeof x === 'string') {
+      try { return JSON.parse(x); } catch { return x; }
+    }
+    return x;
+  };
+
+  const pick = (obj, paths) => {
+    for (const p of paths) {
+      const parts = p.split('.');
+      let cur = obj;
+      let ok  = true;
+      for (const k of parts) {
+        if (cur && Object.prototype.hasOwnProperty.call(cur, k)) {
+          cur = cur[k];
+        } else { ok = false; break; }
+      }
+      if (ok && cur != null) return cur;
+    }
+    return undefined;
+  };
+
+  const ensureArray = (x) => {
+    x = tryParse(x);
     if (Array.isArray(x)) return x;
-    // {q_0:{…}, q_1:{…}} benzeri nesne ise anahtarlarına göre sırala
     if (x && typeof x === 'object') {
-      const keys = Object.keys(x).sort((a,b)=> {
+      const keys = Object.keys(x).sort((a,b) => {
         const na = (a.match(/\d+/)||[0])[0]|0;
         const nb = (b.match(/\d+/)||[0])[0]|0;
         return na-nb || a.localeCompare(b);
@@ -81,66 +91,102 @@
       return keys.map(k => x[k]);
     }
     return [];
+  };
+
+  const normType = (t) => {
+    const s = String(t || 'text').toLowerCase();
+    if (['text','email','textarea','radio','checkbox'].includes(s)) return s;
+    if (['select','dropdown','choice'].includes(s)) return 'radio';
+    if (['longtext','paragraph'].includes(s)) return 'textarea';
+    return 'text';
+  };
+
+  const mapField = (q, i) => {
+    q = tryParse(q) || {};
+    const name =
+      q.name ||
+      q.key  ||
+      q.id   ||
+      `q_${i}`;
+
+    const label =
+      q.label ||
+      q.title ||
+      q.question ||
+      q.text  ||
+      `Soru ${i+1}`;
+
+    const required = !!(q.required || q.required_flag);
+
+    let options = q.options || q.choices || q.items;
+    options = Array.isArray(options) ? options.map(String)
+             : (options ? ensureArray(options).map(String) : undefined);
+
+    const type = normType(q.type);
+
+    return { name, label, required, type, options };
+  };
+
+  function normalizeFields(j) {
+    // olası yollar: schema.*, form.schema.*, questions, fields, items...
+    let schema =
+      pick(j, ['schema']) ??
+      pick(j, ['form.schema']) ??
+      pick(j, ['data.schema']);
+
+    schema = tryParse(schema);
+
+    // meta başlık/açıklama
+    const meta = tryParse(schema && (schema.meta || schema));
+    const title =
+      pick(j, ['title']) ||
+      pick(j, ['form.title']) ||
+      pick(meta, ['title']);
+    const description =
+      pick(j, ['description']) ||
+      pick(j, ['form.description']) ||
+      pick(meta, ['description']);
+
+    // alanları dene
+    let fields =
+      pick(schema, ['fields']) ??
+      pick(schema, ['questions']) ??
+      pick(schema, ['items']) ??
+      pick(j, ['questions']) ??
+      pick(j, ['fields']) ??
+      pick(j, ['items']);
+
+    if (!fields) {
+      // kökte q_0, q_1 ...
+      const qKeys = Object.keys(tryParse(schema) || {}).filter(k => /^q[_-]?\d+/i.test(k));
+      if (qKeys.length) fields = qKeys.sort().map(k => schema[k]);
+    }
+
+    fields = ensureArray(fields).map(mapField);
+
+    return { title, description, fields, raw: j, schema };
   }
-  function normalizeFields(schema) {
-    if (!schema) return [];
+  // ---------- /yardımcılar ----------
 
-    // 1) fields
-    if (Array.isArray(schema.fields)) {
-      return schema.fields.map(mapQ);
-    }
-
-    // 2) questions (array veya q_ map)
-    if (schema.questions) {
-      return asArray(schema.questions).map(mapQ);
-    }
-
-    // 3) items dizisi
-    if (Array.isArray(schema.items)) {
-      return schema.items.map(mapQ);
-    }
-
-    // 4) schema doğrudan dizi ise
-    if (Array.isArray(schema)) {
-      return schema.map(mapQ);
-    }
-
-    // 5) root’ta q_… anahtarları varsa
-    const qKeys = Object.keys(schema||{}).filter(k => /^q[_-]?\d+/i.test(k));
-    if (qKeys.length) {
-      const arr = asArray(schema);
-      return arr.map(mapQ);
-    }
-
-    // 6) fallback: yok
-    return [];
-  }
-  // -----------------------------------------
-
-  // Şemayı getir ve çiz
   fetch(`${API}/forms?slug=${encodeURIComponent(slug)}`)
     .then(r => r.json())
     .then(j => {
-      if (!j.ok || !j.schema) throw new Error(j.error || "Şema alınamadı");
-      const schema = j.schema;
-      const fields = normalizeFields(schema);
-      console.debug('Form schema (raw):', schema);
-      console.debug('Normalized fields:', fields);
+      if (!j || j.ok === false) throw new Error(j?.error || 'Şema alınamadı');
 
-      titleEl.textContent = schema.title || `Form: ${slug}`;
-      if (schema.description) {
-        descEl.textContent = schema.description;
-        descEl.style.display = "block";
-      }
+      const { title, description, fields } = normalizeFields(j);
+      window.__FORM_DEBUG__ = j; // ihtiyacımız olursa
 
-      formEl.innerHTML = "";
+      titleEl.textContent = title || `Form: ${slug}`;
+      if (description) { descEl.textContent = description; descEl.style.display = 'block'; }
+
+      formEl.innerHTML = '';
       let inputCount = 0;
 
       fields.forEach((f, idx) => {
-        const row = document.createElement("div");
-        row.className = "row";
         const id  = `fld_${f.name || ('q_'+idx)}`;
-        const req = f.required ? "required" : "";
+        const req = f.required ? 'required' : '';
+        const row = document.createElement('div');
+        row.className = 'row';
 
         let control = '';
         if (f.type === 'textarea') {
@@ -148,86 +194,85 @@
           inputCount++;
         } else if (f.type === 'radio' || f.type === 'checkbox') {
           const type = f.type;
-          const group = (f.options || []).map((opt, i) => {
+          const opts = (f.options || []).map((opt, i) => {
             const oid = `${id}_${i}`;
             return `<label style="display:flex;gap:8px;align-items:center;margin:4px 0">
                       <input id="${oid}" type="${type}" name="${f.name}" value="${opt}">
                       <span>${opt}</span>
                     </label>`;
           }).join('');
-          control = group || `<em>Seçenek bulunmuyor</em>`;
-          if (group) inputCount++;
+          control = opts || `<em>Seçenek yok</em>`;
+          if (opts) inputCount++;
         } else {
           control = `<input id="${id}" type="${f.type || 'text'}" name="${f.name}" ${req} />`;
           inputCount++;
         }
 
-        row.innerHTML = `<label for="${id}">${f.label || f.name}${f.required ? " *" : ""}</label>${control}`;
+        row.innerHTML = `<label for="${id}">${f.label}${f.required ? ' *' : ''}</label>${control}`;
         formEl.appendChild(row);
       });
 
       if (!inputCount) {
-        const msg = "Bu formda soru tanımı bulunamadı.";
-        alertEl.className = "err";
-        alertEl.textContent = msg;
-        alertEl.style.display = "block";
-        throw new Error(msg);
+        alertEl.className = 'err';
+        alertEl.textContent = 'Bu formda soru tanımı bulunamadı.';
+        alertEl.style.display = 'block';
+        return;
       }
 
-      const btn = document.createElement("button");
-      btn.type = "submit";
-      btn.textContent = "Gönder";
+      const btn = document.createElement('button');
+      btn.type = 'submit';
+      btn.textContent = 'Gönder';
       formEl.appendChild(btn);
     })
     .catch(e => {
-      if (!titleEl.textContent) titleEl.textContent = "Form yüklenemedi.";
-      alertEl.className = "err";
-      alertEl.textContent = e.message || "Hata";
-      alertEl.style.display = "block";
+      if (!titleEl.textContent) titleEl.textContent = 'Form yüklenemedi.';
+      alertEl.className = 'err';
+      alertEl.textContent = e.message || 'Hata';
+      alertEl.style.display = 'block';
     });
 
   // Submit
-  formEl.addEventListener("submit", async (e) => {
+  formEl.addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = formEl.querySelector('button[type="submit"]');
     if (btn) btn.disabled = true;
-    alertEl.style.display = "none";
+    alertEl.style.display = 'none';
 
     const answers = Object.fromEntries(new FormData(formEl).entries());
     if (!Object.keys(answers).length) {
-      alertEl.className = "err";
-      alertEl.textContent = "Gönderilecek cevap bulunamadı (soru yok).";
-      alertEl.style.display = "block";
+      alertEl.className = 'err';
+      alertEl.textContent = 'Gönderilecek cevap bulunamadı (soru yok).';
+      alertEl.style.display = 'block';
       if (btn) btn.disabled = false;
       return;
     }
 
     try {
       const res = await fetch(`${API}/submit-form?slug=${encodeURIComponent(slug)}`, {
-        method : "POST",
-        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        method : 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body   : JSON.stringify({ answers })
       });
-      const j = await res.json().catch(() => ({}));
+      const j = await res.json().catch(()=> ({}));
 
       if (res.status === 409 || j.code === '23505' || j.alreadySubmitted) {
-        alertEl.className = "err";
-        alertEl.textContent = "Bu formu zaten doldurmuş görünüyorsunuz.";
-        alertEl.style.display = "block";
+        alertEl.className = 'err';
+        alertEl.textContent = 'Bu formu zaten doldurmuş görünüyorsunuz.';
+        alertEl.style.display = 'block';
       } else if (res.ok && j.ok) {
-        alertEl.className = "ok";
-        alertEl.textContent = "Gönderildi, teşekkürler!";
-        alertEl.style.display = "block";
+        alertEl.className = 'ok';
+        alertEl.textContent = 'Gönderildi, teşekkürler!';
+        alertEl.style.display = 'block';
         formEl.reset();
       } else {
-        alertEl.className = "err";
+        alertEl.className = 'err';
         alertEl.textContent = j?.data?.message || j?.error || `Hata: ${res.status}`;
-        alertEl.style.display = "block";
+        alertEl.style.display = 'block';
       }
     } catch (err) {
-      alertEl.className = "err";
-      alertEl.textContent = "Bağlantı hatası: " + err.message;
-      alertEl.style.display = "block";
+      alertEl.className = 'err';
+      alertEl.textContent = 'Bağlantı hatası: ' + err.message;
+      alertEl.style.display = 'block';
     } finally {
       if (btn) btn.disabled = false;
     }
