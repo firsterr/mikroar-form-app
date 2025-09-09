@@ -69,75 +69,55 @@
   }
 
   const fields = s.questions || s.fields || [];
-  formEl.innerHTML = "";
+  // ... şema çekildi ve const schema = j.schema; var:
+formEl.innerHTML = "";
+(schema.questions || schema.fields || []).forEach((q, i) => {
+  const row = document.createElement("div");
+  row.className = "row";
+  const name = q.name || `q_${i}`;
+  const idBase = `fld_${name}_${i}`;
 
-  if (!fields.length) {
-    const warn = document.createElement('div');
-    warn.className = 'err';
-    warn.textContent = 'Bu formda soru tanımı bulunamadı.';
-    formEl.appendChild(warn);
+  let control = "";
+
+  if (q.type === "radio" && Array.isArray(q.options)) {
+    control = q.options.map((opt, k) => {
+      const id = `${idBase}_${k}`;
+      return `
+        <label style="display:block;margin:.25rem 0">
+          <input type="radio" name="${name}" id="${id}" value="${opt}" ${q.required ? "required" : ""}>
+          <span>${opt}</span>
+        </label>`;
+    }).join("");
+  } else if (q.type === "checkbox" && Array.isArray(q.options)) {
+    control = q.options.map((opt, k) => {
+      const id = `${idBase}_${k}`;
+      return `
+        <label style="display:block;margin:.25rem 0">
+          <input type="checkbox" name="${name}" id="${id}" value="${opt}" ${q.required ? "required" : ""}>
+          <span>${opt}</span>
+        </label>`;
+    }).join("");
+  } else if (q.type === "select" && Array.isArray(q.options)) {
+    control = `
+      <select name="${name}" id="${idBase}" ${q.required ? "required" : ""}>
+        <option value="" disabled selected>Seçiniz</option>
+        ${q.options.map(opt => `<option value="${opt}">${opt}</option>`).join("")}
+      </select>`;
+  } else if (q.type === "textarea") {
+    control = `<textarea name="${name}" id="${idBase}" ${q.required ? "required" : ""}></textarea>`;
+  } else if (q.type === "email") {
+    control = `<input type="email" name="${name}" id="${idBase}" ${q.required ? "required" : ""} />`;
+  } else {
+    // default text
+    control = `<input type="text" name="${name}" id="${idBase}" ${q.required ? "required" : ""} />`;
   }
 
-  // === ÇİZ ===
-  fields.forEach((q, idx) => {
-    const idBase = (q.name || `q${idx+1}`).replace(/[^a-z0-9_]/gi, '_');
-    const row = document.createElement('div');
-    row.className = 'row';
-
-    const label = document.createElement('label');
-    label.setAttribute('for', `${idBase}`);
-    label.textContent = q.label || (q.name || `Soru ${idx+1}`) + (q.required ? ' *' : '');
-    row.appendChild(label);
-
-    const t = (q.type || 'text').toLowerCase();
-    const requiredAttr = q.required ? 'required' : '';
-
-    if (t === 'textarea') {
-      row.insertAdjacentHTML('beforeend',
-        `<textarea id="${idBase}" name="${q.name || idBase}" ${requiredAttr}></textarea>`
-      );
-    } else if (t === 'radio' || t === 'checkbox') {
-      const opts = Array.isArray(q.options) ? q.options : [];
-      if (!opts.length) {
-        row.insertAdjacentHTML('beforeend',
-          `<div class="muted">Bu soru için seçenek tanımlı değil.</div>`
-        );
-      } else {
-        const box = document.createElement('div');
-        box.className = 'opts';
-        opts.forEach((opt, k) => {
-          const optId = `${idBase}_${k}`;
-          const input = document.createElement('input');
-          input.type = t;
-          input.id = optId;
-          input.name = q.name || idBase; // checkbox çoklu için name aynı kalır; getAll ile toplayacağız
-          input.value = opt;
-          if (q.required && t === 'radio' && k === 0) {
-            // radio grubunda required'ı bir tanesine vermek yeterli (HTML kuralı)
-            input.required = true;
-          }
-          const lab = document.createElement('label');
-          lab.setAttribute('for', optId);
-          lab.textContent = opt;
-          lab.style.fontWeight = '400';
-
-          const wrap = document.createElement('div');
-          wrap.appendChild(input);
-          wrap.appendChild(document.createTextNode(' '));
-          wrap.appendChild(lab);
-          box.appendChild(wrap);
-        });
-        row.appendChild(box);
-      }
-    } else {
-      // text / email / vs.
-      const htmlType = (t === 'email' ? 'email' : 'text');
-      row.insertAdjacentHTML('beforeend',
-        `<input id="${idBase}" type="${htmlType}" name="${q.name || idBase}" ${requiredAttr} />`
-      );
-    }
-
-    formEl.appendChild(row);
+  row.innerHTML = `
+    <label for="${idBase}">${q.label || name}${q.required ? " *" : ""}</label>
+    ${control || `<div class="err">Bu soru için seçenek tanımlı değil.</div>`}
+  `;
+  formEl.appendChild(row);
+});
   });
 
   // Gönder butonu
