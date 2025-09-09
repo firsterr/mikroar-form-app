@@ -80,19 +80,17 @@ exports.handler = async (event) => {
 
     const data = await ins.json().catch(() => null);
 
-    // Unique constraint durumunu yakala (ör. uniq_response_per_ip_per_form)
-    if (ins.status === 409) {
-      return {
-        statusCode: 409,
-        headers: CORS,
-        body: JSON.stringify({
-          ok:false,
-          alreadySubmitted:true,
-          at: null,
-          detail: data
-        })
-      };
+   const json = (obj, status = 200) =>
+  new Response(JSON.stringify(obj), {
+    status,
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'no-store'
     }
+  });
+
+// ... duplicate tespitinde:
+return json({ ok: false, code: 'duplicate', message: 'Bu anketi daha önce doldurdunuz.' }, 409);
 
     // FK/slug yoksa vb. hataları anlaşılır döndür
     if (!ins.ok) {
