@@ -151,17 +151,19 @@ const slug     = new URLSearchParams(location.search).get('slug') || pathSlug;
       return row;
     }
 
-    if (type === 'select') {
-      const select = mk('select', { id:`f_${name}`, name, ...(q.required ? {required:''} : {}) });
-      select.appendChild(mk('option', { value:'', disabled:'', selected:'' }, 'Seçiniz'));
-      if (!opts.length){
-        row.appendChild(mk('div', { class:'note warn' }, 'Bu soru için seçenek tanımlı değil.'));
-      } else {
-        opts.forEach(v => select.appendChild(mk('option',{value:String(v)}, String(v))));
-      }
-      row.appendChild(select);
-      return row;
-    }
+   if (type === 'select') {
+  const select = mk('select', { id:`f_${name}`, name, ...(q.required ? {required:''} : {}) });
+  select.appendChild(mk('option', { value:'', disabled:'', selected:'' }, 'Seçiniz'));
+  if (opts.length) {
+    opts.forEach(v => select.appendChild(mk('option',{value:String(v)}, String(v))));
+  }
+  row.appendChild(select);
+  if (!opts.length) {
+    // global turuncu bant YOK; sadece bu sorunun altında ince bir not
+    row.appendChild(mk('div', { class:'muted' }, 'Bu soru için seçenek tanımlı değil.'));
+  }
+  return row;
+}
 
     if (type === 'textarea') {
       row.appendChild(mk('textarea', { id:`f_${name}`, name, ...(q.required?{required:''}:{}) }));
