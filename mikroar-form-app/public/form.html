@@ -24,88 +24,37 @@
   html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji"}
   .wrap{max-width:860px;margin:48px auto;padding:0 20px}
 
-  /* Başlık & açıklama küçük kart görünümü */
-  #title, #desc, #alert{display:block}
-  #title{
-    font-size:34px;margin:0 0 6px;font-weight:800;letter-spacing:-.01em
-  }
+  #title,#desc,#alert{display:block}
+  #title{font-size:34px;margin:0 0 6px;font-weight:800;letter-spacing:-.01em}
   #desc{color:var(--muted);margin:0 0 14px}
   .note{margin:14px 0;padding:12px 14px;border-radius:12px;border:1px solid var(--border);background:#fff;box-shadow:var(--shadow)}
   .note.err{background:#fef2f2;border-color:#fecaca;color:var(--danger)}
   .note.warn{background:#fff7ed;border-color:#fed7aa;color:var(--warn)}
   .note.ok{background:#ecfdf5;border-color:#bbf7d0;color:#047857}
 
-  /* Soru kartları */
   #form{margin-top:18px;display:flex;flex-direction:column;gap:16px}
-  .row{
-    background:var(--card);
-    border:1px solid var(--border);
-    border-radius:16px;
-    padding:18px 18px 16px;
-    box-shadow:var(--shadow);
-  }
-  .row > label{
-    display:block;
-    font-weight:700;
-    margin:0 0 10px;
-    letter-spacing:.2px;
-  }
+  .row{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px 18px 16px;box-shadow:var(--shadow)}
+  .row>label{display:block;font-weight:700;margin:0 0 10px;letter-spacing:.2px}
 
-  /* Metin / e-posta / select / textarea */
-  input[type=text],
-  input[type=email],
-  select,
-  textarea{
-    width:100%;
-    padding:12px 14px;
-    border:1px solid var(--border);
-    border-radius:12px;
-    background:#fff;
-    font:inherit;
-    outline:none;
-    transition:border-color .15s, box-shadow .15s;
+  input[type=text],input[type=email],select,textarea{
+    width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:#fff;font:inherit;outline:none;transition:border-color .15s,box-shadow .15s
   }
   textarea{min-height:120px;resize:vertical}
-  input[type=text]:focus,
-  input[type=email]:focus,
-  select:focus,
-  textarea:focus{
-    border-color:var(--primary);
-    box-shadow:0 0 0 3px rgba(37,99,235,.12);
-  }
+  input[type=text]:focus,input[type=email]:focus,select:focus,textarea:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
   select:invalid{color:var(--muted)}
   select option[value=""]{color:var(--muted)}
 
-  /* Radio/checkbox satırları */
-  .row > div > div{display:flex;align-items:center;gap:10px;margin:8px 0}
-  input[type=radio], input[type=checkbox]{width:18px;height:18px}
+  .row>div>div{display:flex;align-items:center;gap:10px;margin:8px 0}
+  input[type=radio],input[type=checkbox]{width:18px;height:18px}
 
-  /* Gönder butonu */
-  button[type=submit]{
-    appearance:none;border:0;background:var(--primary);color:#fff;
-    font-weight:700;padding:12px 18px;border-radius:12px;cursor:pointer;
-    margin-top:4px;box-shadow:var(--shadow)
-  }
+  button[type=submit]{appearance:none;border:0;background:var(--primary);color:#fff;font-weight:700;padding:12px 18px;border-radius:12px;cursor:pointer;margin-top:4px;box-shadow:var(--shadow)}
   button[type=submit]:hover{background:var(--primary-600)}
   button[disabled]{opacity:.6;cursor:not-allowed}
 
-  /* Slug seçme ekranı (form.html slug yokken) */
-  .selector{
-    background:var(--card);
-    border:1px solid var(--border);
-    border-radius:16px;
-    padding:18px;
-    box-shadow:var(--shadow);
-    margin-top:18px;
-  }
+  .selector{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;box-shadow:var(--shadow);margin-top:18px}
   .selector h2{margin:0 0 12px}
   .selector .bar{display:flex;gap:10px}
   .selector select{flex:1}
-
-  @media (max-width:640px){
-    .wrap{padding:0 14px}
-    #title{font-size:28px}
-  }
 </style>
 </head>
 <body>
@@ -144,7 +93,7 @@
   const pickBtn  = $('#pickBtn');
   const listWarn = $('#listWarn');
 
-  // SLUG tespiti: path'te .html varsa slug DEĞİLDİR
+  // SLUG tespiti
   const rawPath  = location.pathname.replace(/^\/+|\/+$/g, '');
   const pathSlug = rawPath && !/\.html$/i.test(rawPath) ? rawPath : '';
   const slug     = new URLSearchParams(location.search).get('slug') || pathSlug;
@@ -166,7 +115,7 @@
     return t;
   }
   function authHeaders(){
-    const t = getToken();            // burada prompt açılır
+    const t = getToken();
     if (!t) throw new Error('Anahtar gerekli.');
     return { 'Accept':'application/json', 'X-Admin-Token': t };
   }
@@ -182,7 +131,6 @@
 
     try{
       let r = await fetch(`${API}/forms-list`, { headers: authHeaders() });
-      // Anahtar hatalıysa bir kez daha soralım
       if (r.status === 401 || r.status === 403){
         localStorage.removeItem(LS_KEY);
         alert('Anahtar hatalı veya eksik. Lütfen tekrar girin.');
@@ -277,7 +225,8 @@
     }
 
     if (type === 'textarea') {
-      row.appendChild(mk('textarea', { id:`f_${name}], name, ...(q.required?{required:''}:{}) }));
+      /* <<< HATA DÜZELTİLDİ: id:`f_${name}` >>> */
+      row.appendChild(mk('textarea', { id:`f_${name}`, name, ...(q.required?{required:''}:{}) }));
       return row;
     }
 
@@ -327,7 +276,7 @@
       if (el.type === 'radio'){
         if (el.checked) answers[el.name] = el.value;
       } else if (el.type === 'checkbox'){
-        const base = el.name.replace(/$begin:math:display$$end:math:display$$/, '');
+        const base = el.name.replace(/\[\]$/, '');
         answers[base] = answers[base] || [];
         if (el.checked) answers[base].push(el.value);
       } else if (el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || el.type === 'text' || el.type === 'email'){
