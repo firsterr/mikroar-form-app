@@ -1,97 +1,104 @@
-// netlify/functions/forms-admin.js
-export async function handler(event) {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers: { 'Allow': 'POST' }, body: 'Method Not Allowed' };
-  }
+// Netlify Function: /api/forms-admin
+// CJS yazıldı (Netlify default). ESM kullanıyorsanız export syntax'ını uyarlayın.
+const { createClient } = require('@supabase/supabase-js');
 
-  const { SUPABASE_URL, SUPABASE_ANON_KEY, ADMIN_TOKEN } = process.env;
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    return jerr(500, 'Missing Supabase env vars');
-  }
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN; // aynı token admin arayüzünde sorulan
 
-  // admin auth (header is case-insensitive)
-  const got = event.headers['x-admin-token'] || event.headers['X-Admin-Token'];
-  if (!ADMIN_TOKEN || got !== ADMIN_TOKEN) {
-    return jerr(401, 'Unauthorized');
-  }
+const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  let body = {};
-  try { body = JSON.parse(event.body || '{}'); }
-  catch { return jerr(400, 'Invalid JSON'); }
+const ALLOWED_TYPES = ['text', 'email', 'textarea', 'radio', 'checkbox', 'select'];
 
-  const slug = String(body.slug || '').trim();
-  if (!slug) return jerr(400, 'slug required');
+function normStr(x) {
+  return (x ?? '').toString().trim();
+}
 
-  // normalize questions  (accept "schema.questions" OR legacy "schema.fields")
-  const schemaIn = body.schema || {};
-  const inArr = Array.isArray(schemaIn.questions)
-    ? schemaIn.questions
-    : Array.isArray(schemaIn.fields) ? schemaIn.fields : [];
+function normalizeQuestion(q, idx) {
+  const t = normStr(q.type).toLowerCase();
+  const type = ALLOWED_TYPES.includes(t) ? t : 'text';
 
-  const questions = inArr.map((q, i) => normalizeQ(q, i));
-  const schemaOut = { questions }; // <-- DB'ye HER ZAMAN questions olarak yaz
+  let name = normStr(q.name).toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+  if (!name) name = `q${idx + 1}`;
 
-  const row = {
-    slug,
-    title: body.title ?? null,
-    description: body.description ?? null,
-    active: body.active !== false,
-    schema: schemaOut
+  const base = {
+    type,
+    name,
+    label: normStr(q.label) || `Soru ${idx + 1}`,
+    required: !!q.required,
   };
 
+  // radio | checkbox | select -> options
+  if (['radio', 'checkbox', 'select'].includes(type)) {
+    let opts = [];
+    if (Array.isArray(q.options)) {
+      opts = q.options.map(normStr).filter(Boolean);
+    } else if (q.options != null) {
+      opts = normStr(q.options).split(',').map(s => s.trim()).filter(Boolean);
+    }
+    base.options = Array.from(new Set(opts)); // tekrarı sil
+  }
+
+  return base;
+}
+
+exports.handler = async (event) => {
   try {
-    const resp = await fetch(`${SUPABASE_URL}/rest/v1/forms?on_conflict=slug`, {
-      method: 'POST',
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-        // upsert + dönen kaydı istiyoruz
-        Prefer: 'resolution=merge-duplicates,return=representation'
-      },
-      body: JSON.stringify(row)
-    });
+    if (event.httpMethod !== 'POST') {
+      return { statusCode: 405, body: 'Method Not Allowed' };
+    }
 
-    const data = await resp.json().catch(() => null);
-    const saved = Array.isArray(data) ? data[0] : data;
+    const token = event.headers['x-admin-token'] || event.headers['X-Admin-Token'];
+    if (!token || (ADMIN_TOKEN && token !== ADMIN_TOKEN)) {
+      return { statusCode: 401, body: JSON.stringify({ ok: false, error: 'unauthorized' }) };
+    }
 
-    return jok(resp.ok, {
-      id: saved?.id,
-      slug: saved?.slug,
-      schema: saved?.schema   // { questions:[...] } olarak dönsün
-    }, resp.status);
-  } catch (e) {
-    return jerr(500, String(e));
+    let payload = {};
+    try {
+      payload = JSON.parse(event.body || '{}');
+    } catch (e) {
+      return { statusCode: 400, body: JSON.stringify({ ok: false, error: 'invalid-json' }) };
+    }
+
+    const slug = normStr(payload.slug);
+    if (!slug) return { statusCode: 400, body: JSON.stringify({ ok: false, error: 'slug-required' }) };
+
+    const questionsIn = (payload.schema && Array.isArray(payload.schema.questions))
+      ? payload.schema.questions
+      : (payload.schema && Array.isArray(payload.schema.fields))
+        ? payload.schema.fields
+        : [];
+
+    const questions = questionsIn.map((q, i) => normalizeQuestion(q, i));
+
+    const schema = {
+      title: normStr(payload.title),
+      description: normStr(payload.description),
+      active: !!payload.active,
+      questions
+    };
+
+    // upsert by slug
+    const row = {
+      slug,
+      title: schema.title || slug,
+      text: schema.description || '',
+      active: schema.active,
+      schema
+    };
+
+    const { data, error } = await sb
+      .from('forms')
+      .upsert(row, { onConflict: 'slug' })
+      .select()
+      .single();
+
+    if (error) {
+      return { statusCode: 500, body: JSON.stringify({ ok: false, error: error.message }) };
+    }
+
+    return { statusCode: 200, body: JSON.stringify({ ok: true, schema: data.schema }) };
+  } catch (err) {
+    return { statusCode: 500, body: JSON.stringify({ ok: false, error: err.message }) };
   }
-}
-
-function normalizeQ(q = {}, idx = 0) {
-  const type = String(q.type || 'text');
-  const name = String(q.name || '').trim() || `q${idx + 1}`;
-  const label = String(q.label || `Soru ${idx + 1}`).trim();
-  const required = !!q.required;
-  let options = [];
-
-  if (type === 'radio' || type === 'checkbox') {
-    if (Array.isArray(q.options)) options = q.options.map(s => String(s));
-  }
-
-  const out = { type, name, label, required };
-  if (options.length) out.options = options;
-  return out;
-}
-
-function jok(ok, data, statusCode = 200) {
-  return {
-    statusCode,
-    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-    body: JSON.stringify({ ok, ...data })
-  };
-}
-function jerr(code, msg) {
-  return {
-    statusCode: code,
-    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-    body: JSON.stringify({ ok: false, error: msg })
-  };
-}
+};
