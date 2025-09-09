@@ -1,53 +1,63 @@
-// netlify/functions/forms-list.js
-const { createClient } = require('@supabase/supabase-js');
+// Netlify Function: /api/forms-list  (Supabase REST, admin token opsiyonel)
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE;
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
+const SUPABASE_URL =
+  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE ||
+  process.env.SUPABASE_SERVICE_KEY ||
+  process.env.SUPABASE_ANON_KEY;
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE);
-
-const json = (obj, status = 200) =>
-  new Response(JSON.stringify(obj), {
-    status,
-    headers: {
-      'content-type': 'application/json; charset=utf-8',
-      'cache-control': 'no-store',
-    },
-  });
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Token',
+  'Content-Type': 'application/json'
+};
 
 exports.handler = async (event) => {
   try {
+    if (event.httpMethod === 'OPTIONS') {
+      return { statusCode: 204, headers: CORS, body: '' };
+    }
     if (event.httpMethod !== 'GET') {
-      return json({ ok: false, error: 'method_not_allowed' }, 405);
+      return { statusCode: 405, headers: { ...CORS, Allow: 'GET, OPTIONS' }, body: 'Method Not Allowed' };
+    }
+    if (!SUPABASE_URL || !SUPABASE_KEY) {
+      return { statusCode: 500, headers: CORS, body: JSON.stringify({ ok: false, error: 'supabase-env-missing' }) };
     }
 
-    // 🔒 Anahtar kontrolü (X-Admin-Token)
-    const hdr = event.headers || {};
-    const key =
-      hdr['x-admin-token'] ||
-      hdr['X-Admin-Token'] ||
-      hdr['x-admin-token'.toLowerCase()];
+    // Anahtar zorunluluğunu ENV ile kontrol et
+    const requireAdmin = process.env.REQUIRE_ADMIN_FORMS_LIST === '1';
+    const adminToken =
+      event.headers['x-admin-token'] ||
+      event.headers['X-Admin-Token'] ||
+      event.headers['x-admin_token'];
 
-    if (!ADMIN_TOKEN || key !== ADMIN_TOKEN) {
-      return json({ ok: false, error: 'unauthorized' }, 401);
+    if (requireAdmin) {
+      const expected = process.env.ADMIN_TOKEN || '';
+      if (!adminToken) {
+        return { statusCode: 401, headers: CORS, body: JSON.stringify({ ok: false, message: 'Unauthorized' }) };
+      }
+      if (adminToken !== expected) {
+        return { statusCode: 403, headers: CORS, body: JSON.stringify({ ok: false, message: 'Forbidden' }) };
+      }
     }
 
-    // Aktif formlar
-    const { data, error } = await supabase
-      .from('forms')
-      .select('slug,title,active')
-      .order('slug', { ascending: true });
+    // REST çağrı
+    const url = `${SUPABASE_URL}/rest/v1/forms?select=slug,title,active&order=created_at.desc&limit=200`;
+    const r = await fetch(url, {
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+    });
 
-    if (error) throw error;
+    const data = await r.json().catch(() => []);
+    if (!r.ok) {
+      const msg = (data && (data.message || data.error)) || `supabase-${r.status}`;
+      return { statusCode: r.status, headers: CORS, body: JSON.stringify({ ok: false, error: msg }) };
+    }
 
-    const forms =
-      (data || [])
-        .filter((f) => f.active !== false && f.slug)
-        .map((f) => ({ slug: f.slug, title: f.title || f.slug }));
-
-    return json({ ok: true, forms });
-  } catch (e) {
-    return json({ ok: false, error: e.message || 'unknown' }, 500);
+    const forms = Array.isArray(data) ? data.filter(f => f.active !== false) : [];
+    return { statusCode: 200, headers: CORS, body: JSON.stringify({ ok: true, forms }) };
+  } catch (err) {
+    return { statusCode: 500, headers: CORS, body: JSON.stringify({ ok: false, error: String(err) }) };
   }
 };
