@@ -133,173 +133,25 @@
 <script>
 (() => {
   const $ = (s) => document.querySelector(s);
-  const titleEl = $('#title');
-  const descEl  = $('#desc');
-  const alertEl = $('#alert');
-  const formEl  = $('#form');
-
-  // Liste elemanları
-  const pickWrap = $('#pickWrap');
-  const pickSel  = $('#pickSelect');
-  const pickBtn  = $('#pickBtn');
-  const listWarn = $('#listWarn');
-
- // SLUG tespiti: path'te .html varsa slug DEĞİLDİR
-const rawPath  = location.pathname.replace(/^\/+|\/+$/g, '');
-const pathSlug = rawPath && !/\.html$/i.test(rawPath) ? rawPath : '';
-const slug     = new URLSearchParams(location.search).get('slug') || pathSlug;
+  const alertEl = document.querySelector('#alert');
+  const formEl  = document.querySelector('#form');
+  const slug = new URLSearchParams(location.search).get('slug') || location.pathname.replace(/^\/+|\/+$/g,'');
   const API = '/api';
 
   function showErr(msg){ alertEl.textContent = msg; alertEl.className='note err'; alertEl.style.display='block'; }
   function showWarn(msg){ alertEl.textContent = msg; alertEl.className='note warn'; alertEl.style.display='block'; }
-  function showOk(msg){ alertEl.textContent = msg; alertEl.className='note ok'; alertEl.style.display='block'; }
   function hideNote(){ alertEl.style.display='none'; }
 
-  // --- SLUG YOKSA LİSTEYİ GETİR ---
-  async function loadList(){
-    hideNote();
-    titleEl.textContent = 'Bir anket seçin';
-    descEl.style.display = 'none';
-    pickWrap.style.display = 'block';
-    pickSel.disabled = true; pickBtn.disabled = true;
+  // …(sayfadaki diğer kodlar aynen kalsın)…
 
-    try{
-      const r = await fetch(`${API}/forms-list`);
-      const j = await r.json().catch(()=>({}));
-     const items = (j && j.ok && (Array.isArray(j.items) || Array.isArray(j.forms)))
-  ? (j.items || j.forms)
-  : [];
-
-      pickSel.innerHTML = '<option value="">— Form (slug) seçin —</option>';
-
-      if (items.length === 0){
-        listWarn.textContent = 'Listelenecek form bulunamadı.';
-        listWarn.style.display = 'block';
-      } else {
-        listWarn.style.display = 'none';
-        items.forEach(it => {
-          const o = document.createElement('option');
-          o.value = it.slug;
-          o.textContent = `${it.title || it.slug} — ${it.slug}`;
-          pickSel.appendChild(o);
-        });
-      }
-    } catch(e){
-      listWarn.textContent = 'Liste alınamadı: ' + e.message;
-      listWarn.style.display = 'block';
-    } finally {
-      pickSel.disabled = false; pickBtn.disabled = false;
-    }
-  }
-
-  pickBtn?.addEventListener('click', () => {
-    const v = pickSel.value;
-    if (!v) { pickSel.focus(); return; }
-    location.href = `${location.pathname}?slug=${encodeURIComponent(v)}`;
-  });
-  pickSel?.addEventListener('change', () => {
-    if (pickSel.value) pickBtn.click();
-  });
-
-  // SLUG VARSA FORMU YÜKLE; YOKSA LİSTEYİ AÇ
-  if (!slug) { loadList(); return; }
-
-  // Fallback action
-  formEl.action = `/api/submit-form?slug=${encodeURIComponent(slug)}`;
-  formEl.method = 'POST';
-
-  // Helpers
-  function mk(name, attrs={}, html=''){
-    const el = document.createElement(name);
-    for (const [k,v] of Object.entries(attrs)) el.setAttribute(k, v);
-    if (html) el.innerHTML = html;
-    return el;
-  }
-
-  function drawQuestion(q, idx){
-    const type = (q.type || 'text').toLowerCase();
-    const name = q.name || `q${idx+1}`;
-    const label = q.label || `Soru ${idx+1}`;
-    const opts = Array.isArray(q.options) ? q.options : [];
-
-    const row = mk('div', { class:'row' });
-    row.appendChild(mk('label', { for:`f_${name}` }, label + (q.required ? ' *' : '')));
-
-    if (type === 'radio' || type === 'checkbox') {
-      if (!opts.length){ row.appendChild(mk('div',{},'<div class="muted">Bu soru için seçenek tanımlı değil.</div>')); return row; }
-      const g = mk('div');
-      opts.forEach((opt,i) => {
-        const id = `f_${name}_${i}`;
-        const w = mk('div');
-        const input = mk('input', { type, id, name, value:String(opt), ...(q.required && type==='radio' ? {required:''}: {}) });
-        if (type === 'checkbox') input.name = name + '[]';
-        const lab = mk('label', { for:id }, String(opt));
-        w.appendChild(input); w.appendChild(lab);
-        g.appendChild(w);
-      });
-      row.appendChild(g);
-      return row;
-    }
-
-   if (type === 'select') {
-  const select = mk('select', { id:`f_${name}`, name, ...(q.required ? {required:''} : {}) });
-  select.appendChild(mk('option', { value:'', disabled:'', selected:'' }, 'Seçiniz'));
-  if (opts.length) {
-    opts.forEach(v => select.appendChild(mk('option',{value:String(v)}, String(v))));
-  }
-  row.appendChild(select);
-  if (!opts.length) {
-    // global turuncu bant YOK; sadece bu sorunun altında ince bir not
-    row.appendChild(mk('div', { class:'muted' }, 'Bu soru için seçenek tanımlı değil.'));
-  }
-  return row;
-}
-
-    if (type === 'textarea') {
-      row.appendChild(mk('textarea', { id:`f_${name}`, name, ...(q.required?{required:''}:{}) }));
-      return row;
-    }
-
-    const itype = (type === 'email') ? 'email' : 'text';
-    row.appendChild(mk('input', { type:itype, id:`f_${name}`, name, ...(q.required?{required:''}:{}) }));
-    return row;
-  }
-
-  // ŞEMA YÜKLE
-  fetch(`${API}/forms?slug=${encodeURIComponent(slug)}`)
-    .then(r => r.json())
-    .then(j => {
-      if (!j.ok || !j.schema) throw new Error(j.error || 'Form bulunamadı');
-      const s = j.schema;
-
-      titleEl.textContent = s.title || slug;
-      titleEl.style.display = 'block';
-      if (s.description){ descEl.textContent = s.description; descEl.style.display = 'block'; }
-
-      const qs = s.questions || s.fields || [];
-      formEl.innerHTML = '';
-      if (!qs.length){
-        showErr('Bu formda soru tanımı bulunamadı.');
-      } else {
-        hideNote();
-        qs.forEach((q,i) => formEl.appendChild(drawQuestion(q,i)));
-        const btn = mk('button', { type:'submit', class:'primary' }, 'Gönder');
-        formEl.appendChild(btn);
-        formEl.style.display = 'block';
-      }
-    })
-    .catch(e => {
-      titleEl.textContent = 'Form yüklenemedi';
-      showErr(e.message || 'Hata');
-    });
-
-  // GÖNDER
+  // ▼▼▼ SADECE BU BLOĞU GÜNCELLİYORUZ ▼▼▼
   formEl.addEventListener('submit', async (e) => {
     e.preventDefault();
     hideNote();
     const btn = formEl.querySelector('button[type="submit"]');
     if (btn) btn.disabled = true;
 
+    // Cevapları topla (mevcut mantık)
     const answers = {};
     [...formEl.elements].forEach(el => {
       if (!el.name) return;
@@ -320,11 +172,28 @@ const slug     = new URLSearchParams(location.search).get('slug') || pathSlug;
         headers: { 'Content-Type': 'application/json', 'Accept':'application/json' },
         body: JSON.stringify({ answers })
       });
-      const j = await r.json().catch(()=>({}));
-      if (r.ok && j.ok){
-        showOk('Gönderildi, teşekkürler!');
+
+      let j = null;
+      try { j = await r.json(); } catch { /* düz metin dönerse yoksay */ }
+
+      // 409 (duplicate) durumunu uyarı olarak göster
+      const isDuplicate =
+        r.status === 409 ||
+        j?.code === 'duplicate' ||
+        j?.data?.code === 'duplicate' ||
+        /duplicate|already/i.test(j?.error || '');
+
+      if (isDuplicate) {
+        showWarn('Bu anketi daha önce göndermişsiniz. Aynı IP/cihaz için tekrar yanıt kabul edilmiyor.');
+        return; // hata gibi davranma
+      }
+
+      if (r.ok && j?.ok){
+        alertEl.className = 'note ok';
+        alertEl.textContent = 'Gönderildi, teşekkürler!';
+        alertEl.style.display = 'block';
         formEl.reset();
-      }else{
+      } else {
         showErr(j?.data?.message || j?.error || `Hata: ${r.status}`);
       }
     }catch(err){
@@ -333,6 +202,8 @@ const slug     = new URLSearchParams(location.search).get('slug') || pathSlug;
       if (btn) btn.disabled = false;
     }
   });
+  // ▲▲▲ GÜNCEL BLOK BİTİŞ ▲▲▲
+
 })();
 </script>
 </body>
