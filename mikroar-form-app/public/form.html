@@ -28,7 +28,7 @@
 
 <script>
 (() => {
-  const VERSION = 'FORM LOADER V8';
+  const VERSION = 'FORM LOADER V9';
   console.log(VERSION);
 
   const API = '/api';
@@ -39,11 +39,10 @@
   const descEl  = $("#desc");
   const alertEl = $("#alert");
 
-  // slug: ?slug=… yoksa path ( /formayvalik ) kullan
+  // --- slug tespiti ( ?slug=... yoksa path ) ---
   const rawPath  = location.pathname.replace(/^\/+|\/+$/g, "");
   const pathSlug = rawPath && rawPath !== "form.html" ? rawPath : "";
   const slug = new URLSearchParams(location.search).get("slug") || pathSlug;
-
   if (!slug) {
     titleEl.textContent = "Form yüklenemedi.";
     alertEl.className = "err";
@@ -56,120 +55,104 @@
   formEl.action = `${API}/submit-form?slug=${encodeURIComponent(slug)}`;
   formEl.method = "POST";
 
-  // ---------- yardımcılar ----------
+  // ---------------- yardımcılar ----------------
   const tryParse = (x) => {
     if (typeof x === 'string') { try { return JSON.parse(x); } catch { return x; } }
     return x;
   };
-
-  const get = (obj, paths) => {
-    for (const p of paths) {
-      const parts = p.split('.');
-      let cur = obj, ok = true;
-      for (const k of parts) {
-        if (Array.isArray(cur)) cur = cur[0];             // kökte dizi ise ilkini al
-        if (cur && Object.prototype.hasOwnProperty.call(cur, k)) cur = cur[k];
-        else { ok = false; break; }
-      }
-      if (ok && cur != null) return cur;
-    }
-    return undefined;
-  };
-
-  const ensureArray = (x) => {
-    x = tryParse(x);
-    if (Array.isArray(x)) return x;
-    if (x && typeof x === 'object') {
-      const keys = Object.keys(x).sort((a,b) => {
-        const na = (a.match(/\d+/)||[0])[0]|0;
-        const nb = (b.match(/\d+/)||[0])[0]|0;
-        return na-nb || a.localeCompare(b);
-      });
-      return keys.map(k => x[k]);
-    }
-    return [];
-  };
-
+  const get = (obj, path) => path.split('.').reduce((a,k)=> (Array.isArray(a)?a[0]:a)?.[k], obj);
   const normType = (t) => {
     const s = String(t || 'text').toLowerCase();
     if (['text','email','textarea','radio','checkbox'].includes(s)) return s;
-    if (['select','dropdown','choice'].includes(s)) return 'radio';
+    if (['select','dropdown','choice','choices','option','options'].includes(s)) return 'radio';
     if (['longtext','paragraph'].includes(s)) return 'textarea';
     return 'text';
   };
 
+  // Nesne dizisini "alan"lara çevir
   const mapField = (q, i) => {
     q = tryParse(q) || {};
     const name =
       q.name || q.key || q.id || `q_${i}`;
-
     const label =
       q.label || q.title || q.question || q.text || `Soru ${i+1}`;
-
     const required = !!(q.required || q.required_flag);
 
     let options = q.options || q.choices || q.items;
-    options = Array.isArray(options) ? options.map(String)
-             : (options ? ensureArray(options).map(String) : undefined);
+    if (options && !Array.isArray(options)) {
+      // {0:"A",1:"B"} gibi ise
+      options = Object.keys(options).sort().map(k => String(options[k]));
+    }
+    if (Array.isArray(options)) options = options.map(String);
 
     const type = normType(q.type);
-
     return { name, label, required, type, options };
   };
 
+  // Derin arama: JSON içinde alan dizisi gibi görünen ilk diziyi bul
+  function findFieldArray(x, depth=0, seen=new Set()) {
+    if (x == null || depth > 6) return null;
+    if (seen.has(x)) return null;
+    if (typeof x === 'string') x = tryParse(x);
+
+    if (Array.isArray(x)) {
+      // {name/label/type} içeren bir dizi mi?
+      const score = x.filter(o => o && typeof o === 'object' && (o.name || o.label || o.title || o.question || o.text)).length;
+      if (score >= Math.min(1, x.length)) return x;
+      for (const v of x) {
+        const f = findFieldArray(v, depth+1, seen);
+        if (f) return f;
+      }
+      return null;
+    }
+    if (typeof x === 'object') {
+      seen.add(x);
+      for (const k of Object.keys(x)) {
+        const f = findFieldArray(x[k], depth+1, seen);
+        if (f) return f;
+      }
+    }
+    return null;
+  }
+
   function normalize(j) {
-    // kökte dizi geldiyse ilk elemanı kök kabul et
     const root = Array.isArray(j) ? j[0] : j;
 
-    // muhtemel schema konumları
-    let schema =
-      get(root, ['schema', 'form.schema', 'data.schema']) ??
-      tryParse(get(root, ['row.schema', 'record.schema']));
-
-    schema = tryParse(schema);
-
     // meta
-    const title =
-      get(root, ['title','form.title']) ??
-      get(schema || {}, ['title','meta.title']);
+    const schema = tryParse(root.schema) ?? get(root,'form.schema') ?? get(root,'data.schema');
+    const title  = root.title ?? get(root,'form.title') ?? (schema && schema.title);
+    const description = root.description ?? get(root,'form.description') ?? (schema && schema.description);
 
-    const description =
-      get(root, ['description','form.description']) ??
-      get(schema || {}, ['description','meta.description']);
+    // 1. öncelik: schema.fields / schema.questions / schema.items
+    let fields = (schema && (schema.fields || schema.questions || schema.items));
+    // 2. değilse derin arama
+    if (!fields) fields = findFieldArray(schema) || findFieldArray(root);
 
-    // alan listesi muhtemel yollar
-    let fields =
-      get(schema || {}, ['fields','questions','items']) ??
-      get(root,   ['fields','questions','items']);
-
-    if (!fields && schema) {
-      // q_0, q_1 ... biçimi
-      const keys = Object.keys(tryParse(schema) || {}).filter(k => /^q[_-]?\d+/i.test(k));
-      if (keys.length) fields = keys.sort().map(k => schema[k]);
+    // Eğer {q_0:{}, q_1:{}} gibi anahtarlar varsa diziye çevir
+    if (fields && !Array.isArray(fields) && typeof fields === 'object') {
+      const keys = Object.keys(fields).sort((a,b)=>{
+        const na=(a.match(/\d+/)||[0])[0]|0, nb=(b.match(/\d+/)||[0])[0]|0;
+        return na-nb || a.localeCompare(b);
+      });
+      fields = keys.map(k => fields[k]);
     }
 
-    if (!fields && root) {
-      const keys = Object.keys(root || {}).filter(k => /^q[_-]?\d+/i.test(k));
-      if (keys.length) fields = keys.sort().map(k => root[k]);
-    }
-
-    fields = ensureArray(fields).map(mapField);
-
-    return { title, description, fields, raw: root, full: j };
+    const mapped = Array.isArray(fields) ? fields.map(mapField) : [];
+    return { title, description, fields: mapped, raw: root };
   }
-  // ---------- /yardımcılar ----------
+  // ---------------- /yardımcılar ----------------
 
   fetch(`${API}/forms?slug=${encodeURIComponent(slug)}`)
     .then(r => r.json())
     .then(j => {
-      window.__FORM_DEBUG__ = j;               // teşhis için
+      window.__FORM_DEBUG__ = j; // teşhis için
       const n = normalize(j);
 
       titleEl.textContent = n.title || `Form: ${slug}`;
       if (n.description) { descEl.textContent = n.description; descEl.style.display = 'block'; }
 
       formEl.innerHTML = '';
-      let inputCount = 0;
+      let inputs = 0;
 
       n.fields.forEach((f, idx) => {
         const id  = `fld_${f.name || ('q_'+idx)}`;
@@ -180,7 +163,7 @@
         let control = '';
         if (f.type === 'textarea') {
           control = `<textarea id="${id}" name="${f.name}" ${req}></textarea>`;
-          inputCount++;
+          inputs++;
         } else if (f.type === 'radio' || f.type === 'checkbox') {
           const opts = (f.options || []).map((opt, i) => {
             const oid = `${id}_${i}`;
@@ -190,21 +173,20 @@
                     </label>`;
           }).join('');
           control = opts || `<em>Seçenek yok</em>`;
-          if (opts) inputCount++;
+          if (opts) inputs++;
         } else {
           control = `<input id="${id}" type="${f.type || 'text'}" name="${f.name}" ${req} />`;
-          inputCount++;
+          inputs++;
         }
 
         row.innerHTML = `<label for="${id}">${f.label}${f.required ? ' *' : ''}</label>${control}`;
         formEl.appendChild(row);
       });
 
-      if (!inputCount) {
+      if (!inputs) {
         alertEl.className = 'err';
         alertEl.textContent = 'Bu formda soru tanımı bulunamadı.';
         alertEl.style.display = 'block';
-        // gözle teşhis kolay olsun diye ilk 1-2 anahtar adı yaz
         console.warn('FORM DEBUG KEYS:', Object.keys(Array.isArray(j)?j[0]:j));
         return;
       }
