@@ -3,177 +3,213 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Anket</title>
+  <title>Form</title>
   <link rel="stylesheet" href="/form.css" />
   <style>
     main{max-width:860px;margin:40px auto;padding:0 16px}
-    h1{font-size:40px;margin-bottom:8px}
-    .desc{color:#444;margin:6px 0 18px}
-    .note{display:none;margin:16px 0;padding:12px;border-radius:8px}
-    .note.ok{background:#eefbea;border:1px solid #9f9;color:#064}
-    .note.err{background:#fee;border:1px solid #f99;color:#900}
-    .row{margin:18px 0}
-    label{display:block;font-weight:700;margin-bottom:8px}
-    .hint{color:#666;font-size:14px;margin-top:6px}
+    .row{margin:16px 0}
+    label{display:block;font-weight:600;margin-bottom:6px}
     input,textarea,select{width:100%;padding:12px;border:1px solid #ccd;border-radius:8px;font:inherit}
-    fieldset{border:0;padding:0}
-    .opts label{display:flex;gap:10px;align-items:center;font-weight:400;margin:6px 0}
+    .opt{display:flex;align-items:center;gap:8px;margin:6px 0}
     button{padding:12px 18px;border:0;border-radius:10px;font-weight:700;cursor:pointer}
+    .note{margin:16px 0;padding:12px;border-radius:8px;border:1px solid #ccd;background:#f7f7f9}
+    .err{background:#fee;border:1px solid #f99;color:#900}
+    .ok{background:#eefbea;border:1px solid #9f9;color:#064}
+    .muted{color:#666;font-size:.95rem}
   </style>
 </head>
 <body>
-<main>
-  <h1 id="title">Yükleniyor…</h1>
-  <p id="desc" class="desc" style="display:none"></p>
-  <div id="alert" class="note"></div>
+  <main>
+    <h1 id="title">Yükleniyor…</h1>
+    <p id="desc" class="muted" style="display:none"></p>
+    <div id="alert" style="display:none"></div>
 
-  <form id="form" novalidate></form>
-</main>
+    <form id="form" novalidate></form>
+  </main>
 
 <script>
 (async () => {
   const $ = (s) => document.querySelector(s);
-  const formEl = $("#form");
-  const alertEl = $("#alert");
-  const titleEl = $("#title");
-  const descEl  = $("#desc");
+  const formEl  = $('#form');
+  const alertEl = $('#alert');
+  const titleEl = $('#title');
+  const descEl  = $('#desc');
 
-  function show(msg, type='err'){
-    alertEl.textContent = msg;
-    alertEl.className = 'note ' + type;
+  // slug
+  const slug = new URLSearchParams(location.search).get('slug')
+    || location.pathname.replace(/^\/+|\/+$/g,''); // (opsiyonel fallback)
+  if (!slug) {
+    titleEl.textContent = 'Form yüklenemedi.';
+    alertEl.className = 'note err';
+    alertEl.textContent = 'URL’de ?slug=… yok.';
     alertEl.style.display = 'block';
-  }
-  function hideAlert(){ alertEl.style.display='none'; }
-
-  // slug: ?slug=... yoksa path
-  const pathSlug = location.pathname.replace(/^\/+|\/+$/g, "");
-  const slug = new URLSearchParams(location.search).get("slug") || (pathSlug && pathSlug!=='form.html' ? pathSlug : '');
-  if (!slug){
-    titleEl.textContent = "Form yüklenemedi.";
-    show("URL’de ?slug=... bulunamadı.");
     return;
   }
 
-  // Fallback (JS kapalıysa bile çalışsın)
+  // Fallback (JS kapalıysa)
   formEl.action = `/api/submit-form?slug=${encodeURIComponent(slug)}`;
-  formEl.method = "POST";
+  formEl.method = 'POST';
 
   // Şemayı çek
-  let schema;
-  try{
-    const r = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`, {cache:'no-store'});
-    const j = await r.json().catch(()=> ({}));
-    if (!r.ok || !j.ok || !j.schema) throw new Error(j.error || `HTTP ${r.status}`);
-    schema = j.schema;
-  }catch(e){
-    titleEl.textContent = "Form yüklenemedi.";
-    show(e.message || "Şema alınamadı.");
+  let j;
+  try {
+    const r = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`);
+    j = await r.json();
+    if (!r.ok || !j?.ok || !j?.schema) throw new Error(j?.error || `HTTP ${r.status}`);
+  } catch (e) {
+    titleEl.textContent = 'Form yüklenemedi.';
+    alertEl.className = 'note err';
+    alertEl.textContent = e.message || 'Form alınamadı';
+    alertEl.style.display = 'block';
     return;
   }
 
-  // Başlık/açıklama
-  titleEl.textContent = schema.title || ("Form: " + slug);
-  if (schema.description){
-    descEl.textContent = schema.description;
-    descEl.style.display = 'block';
-  }else{
-    descEl.style.display = 'none';
-  }
+  const schema = j.schema;
+  titleEl.textContent = schema.title || slug;
+  if (schema.description) { descEl.textContent = schema.description; descEl.style.display = 'block'; }
 
   // Alanları çiz
-  formEl.innerHTML = "";
-  const qs = Array.isArray(schema.questions) ? schema.questions : (schema.fields || []);
+  formEl.innerHTML = '';
+  const qs = schema.questions || schema.fields || [];
 
-  if (!qs.length){
-    formEl.innerHTML = `<div class="note err" style="display:block">Bu formda soru tanımı bulunamadı.</div>`;
-  }else{
+  if (!qs.length) {
+    const warn = document.createElement('div');
+    warn.className = 'note err';
+    warn.textContent = 'Bu formda soru tanımı bulunamadı.';
+    formEl.appendChild(warn);
+  } else {
     qs.forEach((q, i) => {
       const row = document.createElement('div');
       row.className = 'row';
-      const key = q.name || ('q_'+i);
-      const req = q.required ? 'required' : '';
+      const name = q.name || `q_${i}`;
+      const labelText = `${q.label || name}${q.required ? ' *' : ''}`;
 
-      let inner = '';
-      if (q.type === 'textarea'){
-        inner = `<textarea name="${key}" ${req}></textarea>`;
-      } else if (q.type === 'email' || q.type === 'text'){
-        inner = `<input type="${q.type}" name="${key}" ${req} />`;
-      } else if (q.type === 'radio'){
-        const opts = (q.options || []);
-        inner = opts.length
-          ? `<fieldset class="opts">` +
-            opts.map((opt, j) => `
-              <label><input type="radio" name="${key}" value="${opt}" ${req}> <span>${opt}</span></label>
-            `).join('') + `</fieldset>`
-          : `<div class="hint">Bu soru için seçenek tanımlı değil.</div>`;
-      } else if (q.type === 'checkbox'){
-        const opts = (q.options || []);
-        inner = opts.length
-          ? `<fieldset class="opts">` +
-            opts.map((opt, j) => `
-              <label><input type="checkbox" name="${key}" value="${opt}"> <span>${opt}</span></label>
-            `).join('') + `</fieldset>`
-          : `<div class="hint">Bu soru için seçenek tanımlı değil.</div>`;
-      } else if (q.type === 'select'){
-        const opts = (q.options || []);
-        inner = opts.length
-          ? `<select name="${key}" ${req}>
-               <option value="" disabled selected>Seçiniz</option>
-               ${opts.map(opt => `<option value="${opt}">${opt}</option>`).join('')}
-             </select>`
-          : `<div class="hint">Bu soru için seçenek tanımlı değil.</div>`;
-      } else {
-        inner = `<input type="text" name="${key}" ${req} />`;
+      const label = document.createElement('label');
+      label.htmlFor = `f_${name}`;
+      label.textContent = labelText;
+      row.appendChild(label);
+
+      // renderer
+      const type = (q.type || 'text').toLowerCase();
+      const opts = Array.isArray(q.options) ? q.options : [];
+
+      function warnNoOptions() {
+        const w = document.createElement('div');
+        w.className = 'note err';
+        w.textContent = 'Bu soru için seçenek tanımlı değil.';
+        row.appendChild(w);
       }
 
-      row.innerHTML = `
-        <label>${(q.label || ('Soru ' + (i+1))) + (q.required ? ' *' : '')}</label>
-        ${inner}
-      `;
+      if (type === 'text' || type === 'email') {
+        const inp = document.createElement('input');
+        inp.type = type;
+        inp.id = `f_${name}`;
+        inp.name = name;
+        if (q.required) inp.required = true;
+        row.appendChild(inp);
+      } else if (type === 'textarea') {
+        const ta = document.createElement('textarea');
+        ta.id = `f_${name}`;
+        ta.name = name;
+        if (q.required) ta.required = true;
+        row.appendChild(ta);
+      } else if (type === 'radio') {
+        if (!opts.length) warnNoOptions();
+        opts.forEach((opt, j) => {
+          const id = `f_${name}_${j}`;
+          const wrap = document.createElement('label');
+          wrap.className = 'opt';
+          wrap.innerHTML = `<input type="radio" id="${id}" name="${name}" value="${opt}"> <span>${opt}</span>`;
+          row.appendChild(wrap);
+        });
+        if (q.required) {
+          // bir tane required hilesi
+          const first = row.querySelector(`input[name="${name}"]`);
+          if (first) first.required = true;
+        }
+      } else if (type === 'checkbox') {
+        if (!opts.length) warnNoOptions();
+        opts.forEach((opt, j) => {
+          const id = `f_${name}_${j}`;
+          const wrap = document.createElement('label');
+          wrap.className = 'opt';
+          wrap.innerHTML = `<input type="checkbox" id="${id}" name="${name}" value="${opt}"> <span>${opt}</span>`;
+          row.appendChild(wrap);
+        });
+      } else if (type === 'select') {
+        if (!opts.length) warnNoOptions();
+        const sel = document.createElement('select');
+        sel.id = `f_${name}`;
+        sel.name = name;
+        if (q.required) sel.required = true;
+        sel.innerHTML = `<option value="">Seçiniz</option>` + opts.map(o => `<option value="${o}">${o}</option>`).join('');
+        row.appendChild(sel);
+      } else {
+        // bilinmeyen -> text
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.id = `f_${name}`;
+        inp.name = name;
+        if (q.required) inp.required = true;
+        row.appendChild(inp);
+      }
+
       formEl.appendChild(row);
     });
 
-    // Gönder butonu
-    const bar = document.createElement('div');
-    bar.className = 'row';
-    bar.innerHTML = `<button type="submit" id="btnSend">Gönder</button>`;
-    formEl.appendChild(bar);
+    // Gönder düğmesi
+    const btn = document.createElement('button');
+    btn.type = 'submit';
+    btn.textContent = 'Gönder';
+    formEl.appendChild(btn);
   }
 
   // Submit
   formEl.addEventListener('submit', async (e) => {
     e.preventDefault();
-    hideAlert();
-    const btn = $("#btnSend"); if (btn) btn.disabled = true;
+    const btn = formEl.querySelector('button[type="submit"]');
+    if (btn) btn.disabled = true;
+    alertEl.style.display = 'none';
 
-    // Cevapları topla
+    // cevapları topla
     const answers = {};
-    (Array.isArray(schema.questions) ? schema.questions : (schema.fields || [])).forEach((q, i)=>{
-      const key = q.name || ('q_'+i);
-      if (q.type === 'checkbox'){
-        answers[key] = Array.from(document.querySelectorAll(`[name="${key}"]:checked`)).map(el => el.value);
+    qs.forEach((q, i) => {
+      const name = q.name || `q_${i}`;
+      const type = (q.type || 'text').toLowerCase();
+      if (type === 'checkbox') {
+        answers[name] = Array.from(document.querySelectorAll(`[name="${name}"]:checked`)).map(el => el.value);
+      } else if (type === 'radio') {
+        const el = document.querySelector(`input[name="${name}"]:checked`);
+        answers[name] = el ? el.value : '';
       } else {
-        const el = document.querySelector(`[name="${key}"]`);
-        answers[key] = el ? el.value : null;
+        const el = document.querySelector(`[name="${name}"]`);
+        answers[name] = el ? (el.value ?? '').trim() : '';
       }
     });
 
-    try{
-      const r = await fetch(`/api/submit-form?slug=${encodeURIComponent(slug)}`, {
-        method:'POST',
-        headers:{'Content-Type':'application/json','Accept':'application/json'},
+    try {
+      const res = await fetch(`/api/submit-form?slug=${encodeURIComponent(slug)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify({ answers })
       });
-      const j = await r.json().catch(()=> ({}));
-      if (r.ok && j.ok){
-        show('Gönderildi, teşekkürler!', 'ok');
+      const jr = await res.json().catch(() => ({}));
+
+      if (res.ok && jr.ok) {
+        alertEl.className = 'note ok';
+        alertEl.textContent = 'Gönderildi, teşekkürler!';
+        alertEl.style.display = 'block';
         formEl.reset();
-      }else{
-        show(j?.error || j?.data?.message || `Hata: ${r.status}`, 'err');
+      } else {
+        alertEl.className = 'note err';
+        alertEl.textContent = jr?.data?.message || jr?.error || `Hata: ${res.status}`;
+        alertEl.style.display = 'block';
       }
-    }catch(err){
-      show('Bağlantı hatası: ' + err.message, 'err');
-    }finally{
+    } catch (err) {
+      alertEl.className = 'note err';
+      alertEl.textContent = 'Bağlantı hatası: ' + err.message;
+      alertEl.style.display = 'block';
+    } finally {
       if (btn) btn.disabled = false;
     }
   });
