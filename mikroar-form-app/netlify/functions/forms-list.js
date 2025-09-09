@@ -1,39 +1,53 @@
-// Basit ve garantili listeleme: aktif tüm formlar (soru sayısına bakmadan)
+// netlify/functions/forms-list.js
 const { createClient } = require('@supabase/supabase-js');
 
-exports.handler = async () => {
-  try {
-    const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE,
-      { auth: { persistSession: false } }
-    );
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE;
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 
-    // Yalnızca aktifleri çek; slug ve title bizim için yeterli
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE);
+
+const json = (obj, status = 200) =>
+  new Response(JSON.stringify(obj), {
+    status,
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'no-store',
+    },
+  });
+
+exports.handler = async (event) => {
+  try {
+    if (event.httpMethod !== 'GET') {
+      return json({ ok: false, error: 'method_not_allowed' }, 405);
+    }
+
+    // 🔒 Anahtar kontrolü (X-Admin-Token)
+    const hdr = event.headers || {};
+    const key =
+      hdr['x-admin-token'] ||
+      hdr['X-Admin-Token'] ||
+      hdr['x-admin-token'.toLowerCase()];
+
+    if (!ADMIN_TOKEN || key !== ADMIN_TOKEN) {
+      return json({ ok: false, error: 'unauthorized' }, 401);
+    }
+
+    // Aktif formlar
     const { data, error } = await supabase
       .from('forms')
-      .select('slug,title,active,schema')
-      .eq('active', true)
-      .order('created_at', { ascending: false });
+      .select('slug,title,active')
+      .order('slug', { ascending: true });
 
     if (error) throw error;
 
-    // Bozuk kayıtlara karşı koruma: başlık boşsa slug göster
-    const items = (data || []).map(r => ({
-      slug: r.slug,
-      title: r.title || r.slug
-    }));
+    const forms =
+      (data || [])
+        .filter((f) => f.active !== false && f.slug)
+        .map((f) => ({ slug: f.slug, title: f.title || f.slug }));
 
-    return {
-      statusCode: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ok: true, items })
-    };
+    return json({ ok: true, forms });
   } catch (e) {
-    return {
-      statusCode: 200, // UI "boş" yerine hata gösterebilsin diye 200 + ok:false dönüyoruz
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ok: false, error: e.message })
-    };
+    return json({ ok: false, error: e.message || 'unknown' }, 500);
   }
 };
