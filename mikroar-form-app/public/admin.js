@@ -1,4 +1,4 @@
-// ---- Basit Admin Panel JS ----
+// ---- Basit Admin Panel JS (final) ----
 // Netlify redirect ile /api/* -> /.netlify/functions/*
 const API = '/api';
 const LS_KEY = 'ADMIN_TOKEN';
@@ -7,7 +7,7 @@ const $ = (s) => document.querySelector(s);
 const qsEl = $('#qs');
 const alertEl = $('#alert');
 
-// ---- Yardımcılar
+// ---------------- Helpers ----------------
 function toast(msg, type = 'ok') {
   alertEl.textContent = msg;
   alertEl.className = 'note ' + type;
@@ -30,7 +30,11 @@ function authHeaders() {
     toast('Admin anahtarı gerekli.', 'err');
     throw new Error('no-token');
   }
-  return { 'Content-Type': 'application/json', 'X-Admin-Token': t };
+  return {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'X-Admin-Token': t,
+  };
 }
 
 function clearForm() {
@@ -46,6 +50,7 @@ function addQuestion(q = { type: 'text', name: '', label: '', required: false, o
   const div = document.createElement('div');
   div.className = 'qrow';
   div.dataset.id = id;
+
   div.innerHTML = `
     <select class="q-type">
       <option value="text" ${q.type === 'text' ? 'selected' : ''}>Metin</option>
@@ -54,61 +59,93 @@ function addQuestion(q = { type: 'text', name: '', label: '', required: false, o
       <option value="radio" ${q.type === 'radio' ? 'selected' : ''}>Tek seçim</option>
       <option value="checkbox" ${q.type === 'checkbox' ? 'selected' : ''}>Çoklu seçim</option>
     </select>
-    <input class="q-name" type="text" placeholder="alan adı" value="${q.name || ''}">
-    <input class="q-label" type="text" placeholder="Etiket" value="${q.label || ''}">
-    <label class="q-req"><input type="checkbox" ${q.required ? 'checked' : ''}> Zorunlu</label>
+
+    <input class="q-name"  type="text" placeholder="alan adı" value="${q.name || ''}">
+    <input class="q-label" type="text" placeholder="Etiket"    value="${q.label || ''}">
+    <label class="q-req">
+      <input type="checkbox" ${q.required ? 'checked' : ''}> Zorunlu
+    </label>
+
     <input class="q-opts" type="text" placeholder="Seçenekler (virgül ile)"
       value="${(q.options || []).join(', ')}" style="${/(radio|checkbox)/.test(q.type) ? '' : 'display:none'}">
-    <button class="q-del">Sil</button>
+
+    <button class="q-del" type="button">Sil</button>
   `;
+
+  // type değişince seçenek alanını göster/gizle
   div.querySelector('.q-type').addEventListener('change', (e) => {
     const show = /(radio|checkbox)/.test(e.target.value);
     div.querySelector('.q-opts').style.display = show ? '' : 'none';
   });
+
   div.querySelector('.q-del').addEventListener('click', () => div.remove());
   qsEl.appendChild(div);
-  // ilk render’da type’a göre opsiyon alanını doğru göster
+
+  // ilk render'da doğru görünüm
   div.querySelector('.q-type').dispatchEvent(new Event('change'));
 }
 
 function collectFields() {
   const rows = [...qsEl.querySelectorAll('.qrow')];
-  return rows.map((r) => {
+  const fields = rows.map((r) => {
     const type = r.querySelector('.q-type').value;
     const name = r.querySelector('.q-name').value.trim();
     const label = r.querySelector('.q-label').value.trim();
     const required = r.querySelector('.q-req input').checked;
-    const opts = r.querySelector('.q-opts').value
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
 
     if (!name) throw new Error('Alan adı boş olamaz');
 
     const f = { type, name, label, required };
-    if (/(radio|checkbox)/.test(type)) f.options = opts;
+    if (/(radio|checkbox)/.test(type)) {
+      const opts = r
+        .querySelector('.q-opts')
+        .value.split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      f.options = opts;
+    }
     return f;
   });
+
+  // benzersiz name kontrolü
+  const dup = fields.map(f => f.name).find((n, i, a) => a.indexOf(n) !== i);
+  if (dup) throw new Error(`Aynı alan adı iki kez kullanılamaz: "${dup}"`);
+
+  return fields;
 }
 
-// ---- Yükle / Kaydet
+// --------------- Load / Save ---------------
 async function loadForm() {
   const slug = $('#inSlug').value.trim();
   if (!slug) return toast('Önce slug gir.', 'err');
 
-  const r = await fetch(`${API}/forms?slug=${encodeURIComponent(slug)}`);
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok || !j.ok || !j.schema) {
-    return toast(j.error || `Bulunamadı (HTTP ${r.status})`, 'err');
+  const res = await fetch(`${API}/forms?slug=${encodeURIComponent(slug)}`);
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || !j.ok || !j.schema) {
+    return toast(j.error || `Bulunamadı (HTTP ${res.status})`, 'err');
   }
 
-  const s = j.schema;
+  const s = j.schema || {};
   $('#inTitle').value = s.title || '';
   $('#inDesc').value = s.description || '';
   $('#selStatus').value = s.active === false ? 'false' : 'true';
 
+  // Eski yapıyla uyum: fields yoksa questions -> fields'e dönüştür
+  const fromQuestions =
+    Array.isArray(s.questions)
+      ? s.questions.map((q, i) => ({
+          type: q.type || 'text',
+          name: q.name || `q_${i}`,
+          label: q.label || '',
+          required: !!q.required,
+          options: Array.isArray(q.options) ? q.options : [],
+        }))
+      : [];
+
+  const fields = Array.isArray(s.fields) ? s.fields : fromQuestions;
+
   qsEl.innerHTML = '';
-  (s.fields || s.questions || []).forEach(addQuestion);
+  fields.forEach(addQuestion);
 
   toast('Form yüklendi.');
 }
@@ -118,21 +155,30 @@ async function saveForm() {
     const slug = $('#inSlug').value.trim();
     if (!slug) return toast('Slug zorunlu.', 'err');
 
+    const fields = collectFields();
+
+    // 🔴 Sunucu bu yapıyı bekliyor (forms.schema → fields[])
     const body = {
       slug,
       title: $('#inTitle').value.trim(),
       description: $('#inDesc').value.trim(),
       active: $('#selStatus').value === 'true',
-      schema: { fields: collectFields() }
+      schema: {
+        title: $('#inTitle').value.trim(),
+        description: $('#inDesc').value.trim(),
+        active: $('#selStatus').value === 'true',
+        fields, // <— önemli: sorular burada
+      },
     };
 
-    const r = await fetch(`${API}/forms-admin`, {
-      method: 'POST',
+    const res = await fetch(`${API}/forms-admin`, {
+      method: 'POST',            // upsert
       headers: authHeaders(),
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
     });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok || !j.ok) throw new Error(j.error || `HTTP ${res.status}`);
 
     toast('Kaydedildi ✅', 'ok');
   } catch (e) {
@@ -140,7 +186,7 @@ async function saveForm() {
   }
 }
 
-// ---- UI bağla
+// ---------------- Wire UI -----------------
 $('#btnAddQ').addEventListener('click', () => addQuestion());
 $('#btnLoad').addEventListener('click', loadForm);
 $('#btnSave').addEventListener('click', saveForm);
@@ -150,7 +196,7 @@ $('#btnToken').addEventListener('click', () => {
   getToken();
 });
 
-// tabs sadece görsel; iki mod da aynı ekranda çalışıyor
+// tabs (görsel)
 $('#tabCreate').addEventListener('click', () => {
   $('#tabCreate').classList.add('active');
   $('#tabEdit').classList.remove('active');
