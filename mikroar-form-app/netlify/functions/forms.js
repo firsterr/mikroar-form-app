@@ -1,75 +1,44 @@
-// mikroar-form-app/netlify/functions/forms.js
+// netlify/functions/forms.js
 export async function handler(event) {
-  const CORS = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-  };
-  if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: CORS, body: '' };
-  if (event.httpMethod !== 'GET')   return { statusCode: 405, headers: CORS, body: 'Method Not Allowed' };
+  if (event.httpMethod !== 'GET') {
+    return { statusCode: 405, headers: { 'Allow': 'GET' }, body: 'Method Not Allowed' };
+  }
 
   const { SUPABASE_URL, SUPABASE_ANON_KEY } = process.env;
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    return json(500, { ok:false, error:'Missing Supabase env vars' }, CORS);
+    return json(500, { ok: false, error: 'Missing Supabase env vars' });
   }
 
-  const slug = (event.queryStringParameters?.slug || '').trim();
+  const slug = new URLSearchParams(event.rawQuery || event.queryStringParameters).get('slug');
+  if (!slug) return json(400, { ok: false, error: 'slug required' });
 
-  // Liste modu (aktif formlar)
-  if (!slug) {
-    const url = `${SUPABASE_URL}/rest/v1/forms`
-      + `?select=slug,title,description,active`
-      + `&active=is.true`
-      + `&order=created_at.desc`;
-    const r = await fetch(url, { headers: auth(SUPABASE_ANON_KEY) });
-    const rows = await r.json().catch(() => []);
-    if (!r.ok) return json(r.status, { ok:false, error:'List fetch failed', data:rows }, CORS);
-    return ok({ ok:true, forms: rows }, CORS, 60);
-  }
+  const url = `${SUPABASE_URL}/rest/v1/forms?slug=eq.${encodeURIComponent(slug)}&select=*`;
+  const r = await fetch(url, {
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
+  });
 
-  // Tek form: schema JSON içinde fields var
-  const url = `${SUPABASE_URL}/rest/v1/forms`
-    + `?select=slug,title,description,schema,active`
-    + `&slug=eq.${encodeURIComponent(slug)}`
-    + `&active=is.true`
-    + `&limit=1`;
-  const resp = await fetch(url, { headers: auth(SUPABASE_ANON_KEY) });
-  const data = await resp.json().catch(() => []);
-  if (!resp.ok) return json(resp.status, { ok:false, error:'Fetch failed', data }, CORS);
+  const rows = await r.json().catch(() => []);
+  const one = Array.isArray(rows) ? rows[0] : null;
+  if (!one) return json(404, { ok: false, error: 'not found' });
 
-  const row = Array.isArray(data) ? data[0] : null;
-  if (!row) return json(404, { ok:false, error:'Form not found' }, CORS);
-
-  const fields = (row.schema && Array.isArray(row.schema.fields)) ? row.schema.fields : [];
+  // normalize: always provide schema.questions (and mirror to fields for eski clientlar)
+  const qs = one.schema?.questions || one.schema?.fields || [];
   const schema = {
-    slug: row.slug,
-    title: row.title || row.slug,
-    description: row.description || '',
-    fields
+    slug: one.slug,
+    title: one.title,
+    description: one.description,
+    active: !!one.active,
+    questions: qs,
+    fields: qs
   };
 
-  return ok({ ok:true, schema }, CORS, 120);
+  return json(200, { ok: true, schema });
 }
 
-/* helpers */
-function auth(key) {
-  return { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' };
-}
-function json(status, body, extra = {}) {
+function json(code, obj) {
   return {
-    statusCode: status,
-    headers: { 'Content-Type': 'application/json', ...extra },
-    body: JSON.stringify(body)
-  };
-}
-function ok(body, cors, sMaxAge = 0) {
-  return {
-    statusCode: 200,
-    headers: {
-      ...cors,
-      'Content-Type': 'application/json',
-      'Cache-Control': `public, max-age=0, s-maxage=${sMaxAge}`
-    },
-    body: JSON.stringify(body)
+    statusCode: code,
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    body: JSON.stringify(obj)
   };
 }
