@@ -89,7 +89,41 @@
         formEl.appendChild(makeRow(`${label}<input type="text" name="${name}" ${req}>`));
       }
     });
-
+<!-- ... form.html içindeki script'te, renderForm() içinde -->
+if (q.type === "text") {
+  body.innerHTML = `<input type="text" name="${name}" placeholder="Yanıtınız">`;
+} else if (q.type === "textarea") {
+  body.innerHTML = `<textarea name="${name}" placeholder="Yanıtınız"></textarea>`;
+} else if (q.type === "select") {
+  const opts = (q.options || []);
+  if (!opts.length) {
+    body.innerHTML = `<div class="noopt">Bu soru için seçenek tanımlı değil.</div>`;
+  } else {
+    const optionsHtml = opts.map(o => `<option value="${o}">${o}</option>`).join('');
+    body.innerHTML = `
+      <select name="${name}">
+        <option value="" disabled selected>Seçiniz</option>
+        ${optionsHtml}
+      </select>`;
+  }
+} else if (q.type === "checkbox") {
+  (q.options || []).forEach((opt, j) => {
+    const id = `${name}_${j}`;
+    body.insertAdjacentHTML(
+      "beforeend",
+      `<label class="opt"><input id="${id}" type="checkbox" name="${name}" value="${opt}"><span>${opt}</span></label>`
+    );
+  });
+} else {
+  // radio (default)
+  (q.options || []).forEach((opt, j) => {
+    const id = `${name}_${j}`;
+    body.insertAdjacentHTML(
+      "beforeend",
+      `<label class="opt"><input id="${id}" type="radio" name="${name}" value="${opt}"><span>${opt}</span></label>`
+    );
+  });
+}
     // submit butonu
     const btn = document.createElement('button');
     btn.type = 'submit'; btn.textContent = 'Gönder'; btn.id='btnSend';
