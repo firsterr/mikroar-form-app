@@ -3,191 +3,174 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Form</title>
+<title>Form(lar) – Şifreli Liste</title>
 <link rel="stylesheet" href="/form.css">
 <style>
-  .note{display:none;margin:16px 0;padding:12px;border-radius:8px}
-  .note.err{display:block;background:#ffe8e8;color:#b00020;border:1px solid #f3c5c5}
-  .note.warn{display:block;background:#fff5da;color:#6b5100;border:1px solid #f1e2b3}
-  .note.ok{display:block;background:#e7fff1;color:#0a7d3b;border:1px solid #bdf0cf}
-  .row{margin:18px 0}
-  label{display:block;font-weight:600;margin-bottom:8px}
-  .muted{color:#666;font-size:.95rem}
-  /* >>> yeni: ilk başlık gizli, form fade-in */
-  .hidden{display:none}
-  .fade{opacity:0; transition:opacity .18s ease}
-  .fade.show{opacity:1}
+  :root{--b:#ccd;--bg:#f6f7f8;--pri:#2d6ef7}
+  body{font:14px system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+  main{max-width:960px;margin:36px auto;padding:0 16px}
+  h1{font-size:28px;margin:0 0 14px}
+  .bar{display:flex;gap:10px;align-items:center;margin:8px 0 20px}
+  .search{flex:1;display:flex;gap:8px}
+  .search input{flex:1;padding:10px;border:1px solid var(--b);border-radius:10px}
+  .btn{padding:10px 14px;border-radius:10px;border:1px solid var(--b);background:var(--bg);cursor:pointer}
+  .btn.pri{background:var(--pri);color:#fff;border-color:var(--pri)}
+  .list{border:1px solid var(--b);border-radius:12px;overflow:hidden}
+  .row{display:grid;grid-template-columns:1.2fr 2fr .9fr .9fr .9fr;gap:10px;align-items:center;padding:12px 14px;border-bottom:1px solid #e7eaee}
+  .row.head{background:#f0f3f8;font-weight:700}
+  .row a{color:#0a56c2;text-decoration:none}
+  .row:last-child{border-bottom:none}
+  .tag{padding:3px 8px;border-radius:999px;border:1px solid #cfe2ff;background:#eef5ff;font-size:12px}
+  .muted{color:#666}
+  /* kilit overlay */
+  #lock{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(246,247,248,.96);z-index:9999}
+  #lock .card{background:#fff;border:1px solid var(--b);border-radius:12px;padding:22px 24px;max-width:420px;width:92%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.08)}
+  #lock h3{margin:0 0 8px;font-size:20px}
+  #unlockBtn{padding:10px 14px;border-radius:10px;border:1px solid var(--pri);background:var(--pri);color:#fff;cursor:pointer}
+  .note{display:none;margin:12px 0;padding:10px;border-radius:10px;border:1px solid #ccd}
+  .note.err{display:block;background:#ffe8e8;color:#b00020;border-color:#f3c5c5}
 </style>
 </head>
 <body>
-<main class="wrap">
-  <!-- >>> başlık ilk anda gizli -->
-  <h1 id="title" class="hidden"></h1>
-  <p id="desc" class="muted" style="display:none"></p>
-  <!-- uyarı ilk anda görünmesin -->
-  <p id="alert" class="note"></p>
+<main>
+  <h1>Form(lar) – Liste</h1>
+  <div class="bar">
+    <div class="search">
+      <input id="q" type="text" placeholder="Slug veya başlık ile ara…">
+      <button id="btnRefresh" class="btn">Yenile</button>
+    </div>
+    <button id="btnToken" class="btn">🔑 Anahtar</button>
+  </div>
 
-  <!-- >>> fade sınıfı eklendi -->
-  <form id="form" method="POST" action="#" class="fade" style="display:none"></form>
+  <div id="alert" class="note"></div>
+
+  <div class="list" id="list" hidden>
+    <div class="row head">
+      <div>Slug</div><div>Başlık</div><div>Formu Aç</div><div>Sonuçlar</div><div>Paylaş</div>
+    </div>
+    <!-- satırlar JS ile gelecek -->
+  </div>
 </main>
+
+<!-- KİLİT OVERLAY -->
+<div id="lock" role="dialog" aria-modal="true">
+  <div class="card">
+    <h3>Yönetici anahtarı gerekli</h3>
+    <p>Devam etmek için X-Admin-Token anahtarını girin.</p>
+    <button id="unlockBtn">Anahtar Gir</button>
+  </div>
+</div>
 
 <script>
 (() => {
-  const $ = (s) => document.querySelector(s);
-  const titleEl = $('#title');
-  const descEl  = $('#desc');
-  const alertEl = $('#alert');
-  const formEl  = $('#form');
-
-  const slug = new URLSearchParams(location.search).get('slug')
-            || location.pathname.replace(/^\/+|\/+$/g,'');
   const API = '/api';
+  const LS_KEY = 'ADMIN_TOKEN';
+  const $ = (s)=>document.querySelector(s);
 
-  function showErr(msg){ alertEl.textContent = msg; alertEl.className='note err'; alertEl.style.display='block'; }
-  function showWarn(msg){ alertEl.textContent = msg; alertEl.className='note warn'; alertEl.style.display='block'; }
-  function showOk(msg){ alertEl.textContent = msg; alertEl.className='note ok'; alertEl.style.display='block'; }
-  function hideNote(){ alertEl.style.display='none'; alertEl.className='note'; alertEl.textContent=''; }
+  const lock = $('#lock');
+  const alertEl = $('#alert');
+  const listEl = $('#list');
+  const qEl = $('#q');
 
-  if (!slug) { showErr('URL’de slug yok.'); return; }
-
-  // Fallback: JS kapalıysa bile çalışsın
-  formEl.action = `${API}/submit-form?slug=${encodeURIComponent(slug)}`;
-  formEl.method = 'POST';
-
-  // Helpers
-  function mk(name, attrs={}, html=''){
-    const el = document.createElement(name);
-    for (const [k,v] of Object.entries(attrs)) el.setAttribute(k, v);
-    if (html) el.innerHTML = html;
-    return el;
+  function toastErr(msg){
+    alertEl.textContent = msg;
+    alertEl.className = 'note err';
+    alertEl.style.display = 'block';
+  }
+  function clearToast(){
+    alertEl.style.display='none';
+    alertEl.className='note';
+    alertEl.textContent='';
   }
 
-  function drawQuestion(q, idx){
-    const type = (q.type || 'text').toLowerCase();
-    const name = q.name || `q${idx+1}`;
-    const label = q.label || `Soru ${idx+1}`;
-    const opts = Array.isArray(q.options) ? q.options : [];
-
-    const row = mk('div', { class:'row' });
-    row.appendChild(mk('label', { for:`f_${name}` }, label + (q.required ? ' *' : '')));
-
-    if (type === 'radio' || type === 'checkbox') {
-      const g = mk('div');
-      opts.forEach((opt,i) => {
-        const id = `f_${name}_${i}`;
-        const w = mk('div');
-        const input = mk('input', { type, id, name, value:opt, ...(q.required && type==='radio' ? {required:''}: {}) });
-        if (type === 'checkbox') input.name = name + '[]';
-        const lab = mk('label', { for:id }, opt);
-        w.appendChild(input); w.appendChild(lab);
-        g.appendChild(w);
-      });
-      row.appendChild(g);
-      return row;
+  function getToken(){
+    let t = localStorage.getItem(LS_KEY);
+    if(!t){
+      t = prompt('Yönetici anahtarı (X-Admin-Token):');
+      if (t) localStorage.setItem(LS_KEY, t);
     }
-
-    if (type === 'select') {
-      const select = mk('select', { id:`f_${name}`, name, ...(q.required ? {required:''} : {}) });
-      // >>> uyarı yok; seçenek yoksa sadece placeholder dursun
-      select.appendChild(mk('option', { value:'', disabled:'', selected:'' }, 'Seçiniz'));
-      opts.forEach(v => select.appendChild(mk('option',{value:v}, v)));
-      row.appendChild(select);
-      return row;
-    }
-
-    if (type === 'textarea') {
-      row.appendChild(mk('textarea', { id:`f_${name}`, name, ...(q.required?{required:''}:{}) }));
-      return row;
-    }
-
-    const itype = (type === 'email') ? 'email' : 'text';
-    row.appendChild(mk('input', { type:itype, id:`f_${name}`, name, ...(q.required?{required:''}:{}) }));
-    return row;
+    return t;
+  }
+  function ensureAuthOverlay(){
+    const has = !!localStorage.getItem(LS_KEY);
+    lock.style.display = has ? 'none' : 'flex';
+    document.body.style.overflow = has ? '' : 'hidden';
   }
 
-  // Şemayı yükle
-  fetch(`${API}/forms?slug=${encodeURIComponent(slug)}`)
-    .then(r => r.json())
-    .then(j => {
-      if (!j.ok || !j.schema) throw new Error(j.error || 'Form bulunamadı');
-      const s = j.schema;
-
-      // >>> başlığı sadece başarıyla doldur
-      titleEl.textContent = s.title || slug;
-      titleEl.classList.remove('hidden');
-
-      if (s.description){ descEl.textContent = s.description; descEl.style.display = 'block'; }
-
-      const qs = s.questions || s.fields || [];
-      formEl.innerHTML = '';
-      if (!qs.length){
-        showErr('Bu formda soru tanımı bulunamadı.');
-      } else {
-        hideNote();
-        qs.forEach((q,i) => formEl.appendChild(drawQuestion(q,i)));
-        const btn = mk('button', { type:'submit' }, 'Gönder');
-        formEl.appendChild(btn);
-
-        // >>> yumuşak açılış
-        formEl.style.display = 'block';
-        requestAnimationFrame(() => formEl.classList.add('show'));
-      }
-    })
-    .catch(e => {
-      titleEl.textContent = 'Form yüklenemedi';
-      titleEl.classList.remove('hidden');
-      showErr(e.message || 'Hata');
+  // Listeyi çiz
+  function renderRows(items){
+    // başlık satırından sonrasını temizle
+    [...listEl.querySelectorAll('.row')].slice(1).forEach(n=>n.remove());
+    items.forEach(it=>{
+      const r = document.createElement('div');
+      r.className = 'row';
+      const slug = it.slug;
+      const title = it.title || slug;
+      // linkler
+      const hrefForm = `/form.html?slug=${encodeURIComponent(slug)}`;
+      const hrefResults = `/results.html?slug=${encodeURIComponent(slug)}`;
+      const hrefShare = `/share/${encodeURIComponent(slug)}`;
+      r.innerHTML = `
+        <div><span class="tag">${slug}</span></div>
+        <div>${title}</div>
+        <div><a target="_blank" href="${hrefForm}">Form</a></div>
+        <div><a target="_blank" href="${hrefResults}">Sonuçlar</a></div>
+        <div><a target="_blank" href="${hrefShare}">Paylaş</a></div>
+      `;
+      listEl.appendChild(r);
     });
+  }
 
-  // Submit (Madde #2: 409 için IP uyarısı)
-  formEl.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    hideNote();
-    const btn = formEl.querySelector('button[type="submit"]');
-    if (btn) btn.disabled = true;
-
-    // answers
-    const answers = {};
-    [...formEl.elements].forEach(el => {
-      if (!el.name) return;
-      if (el.type === 'radio'){
-        if (el.checked) answers[el.name] = el.value;
-      } else if (el.type === 'checkbox'){
-        const base = el.name.replace(/\[\]$/, '');
-        answers[base] = answers[base] || [];
-        if (el.checked) answers[base].push(el.value);
-      } else if (el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || el.type === 'text' || el.type === 'email'){
-        answers[el.name] = el.value;
-      }
-    });
-
+  // Veri çek (forms-list) — header’a token ekliyoruz (backend gerekirse kontrol eder)
+  async function fetchList(){
+    clearToast();
     try{
-      const r = await fetch(`${API}/submit-form?slug=${encodeURIComponent(slug)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept':'application/json' },
-        body: JSON.stringify({ answers })
+      const t = localStorage.getItem(LS_KEY) || '';
+      const r = await fetch(`${API}/forms-list`, {
+        headers: { 'X-Admin-Token': t }
       });
       const j = await r.json().catch(()=>({}));
-
-      if (r.status === 409 || j.alreadySubmitted) {
-        const when = j.at ? ` (${new Date(j.at).toLocaleString()})` : '';
-        showWarn('Bu IP ile zaten yanıt gönderilmiş.' + when);
-        if (btn) btn.disabled = false;
-        return;
-      }
-
-      if (r.ok && j.ok){
-        showOk('Gönderildi, teşekkürler!');
-        formEl.reset();
-      }else{
-        showErr(j?.data?.message || j?.error || `Hata: ${r.status}`);
-      }
-    }catch(err){
-      showErr('Bağlantı hatası: ' + err.message);
-    }finally{
-      if (btn) btn.disabled = false;
+      if (!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      const items = (j.forms || []).map(x=>({
+        slug: x.slug,
+        title: x.title || (x.schema && x.schema.title) || x.slug
+      }));
+      renderRows(items);
+      listEl.hidden = false;
+    }catch(e){
+      toastErr(e.message || 'Liste alınamadı');
     }
+  }
+
+  // Arama (istemci tarafı filtre)
+  qEl.addEventListener('input', ()=>{
+    const q = qEl.value.toLowerCase().trim();
+    const rows = [...listEl.querySelectorAll('.row')].slice(1);
+    rows.forEach(r=>{
+      const text = r.textContent.toLowerCase();
+      r.style.display = text.includes(q) ? '' : 'none';
+    });
   });
+
+  // UI butonları
+  $('#btnRefresh').addEventListener('click', fetchList);
+  $('#btnToken').addEventListener('click', ()=>{
+    localStorage.removeItem(LS_KEY);
+    getToken();
+    ensureAuthOverlay();
+    fetchList();
+  });
+  document.getElementById('unlockBtn').addEventListener('click', ()=>{
+    localStorage.removeItem(LS_KEY);
+    getToken();
+    ensureAuthOverlay();
+    fetchList();
+  });
+
+  // Boot
+  if (!localStorage.getItem(LS_KEY)) { try{ getToken(); }catch{} }
+  ensureAuthOverlay();
+  if (localStorage.getItem(LS_KEY)) fetchList();
 })();
 </script>
 </body>
