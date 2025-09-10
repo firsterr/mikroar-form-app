@@ -98,15 +98,6 @@
 
   /* iOS metin yakınlaştırmayı engelle */
   input,select,textarea,button{font-size:16px}
-  /* İlk boyama için hafif iskelet kart (sadece boşluk tutar) */
-.skeleton {
-  background:#fff;
-  border:1px solid var(--border);
-  border-radius:18px;
-  padding:18px;
-  min-height:120px;
-  box-shadow:var(--shadow);
-}
 </style>
 </head>
 <body>
@@ -139,21 +130,96 @@
   const descEl  = $('#desc');
   const formEl  = $('#form');
 
-  // Slug: ?slug=… varsa onu, yoksa /slug yolunu kullan
+  // Liste elemanları
+  const pickWrap = $('#pickWrap');
+  const pickSel  = $('#pickSelect');
+  const pickBtn  = $('#pickBtn');
+  const listWarn = $('#listWarn');
+
+  // :has() desteği yoksa kök elemana sınıf ekle (CSS fallback için)
+  if (!(CSS.supports && CSS.supports('selector(:has(*))'))) {
+    document.documentElement.classList.add('no-has');
+  }
+
+  // SLUG tespiti
   const rawPath  = location.pathname.replace(/^\/+|\/+$/g,'');
   const pathSlug = rawPath && !/\.html$/i.test(rawPath) ? rawPath : '';
   const slug     = new URLSearchParams(location.search).get('slug') || pathSlug;
+  const API = '/api';
 
-  // —— SSR şeması var mı? (Edge Function koyuyor) ——
-  let SSR_SCHEMA = null;
-  const ssrTag = document.getElementById('__SCHEMA__');
-  if (ssrTag) {
-    try { SSR_SCHEMA = JSON.parse(ssrTag.textContent || '{}'); } catch {}
+  function showSkeleton(){
+  formEl.style.display = 'block';
+  formEl.innerHTML = `
+    <div class="skel"><div class="sbar" style="width:120px"></div><div class="sgap"></div><div class="sbar"></div><div class="sgap"></div><div class="sbar"></div></div>
+    <div class="skel"><div class="sbar" style="width:140px"></div><div class="sgap"></div><div class="sbar"></div><div class="sgap"></div><div class="sbar"></div></div>
+    <div class="skel"><div class="sbar" style="width:100px"></div><div class="sgap"></div><div class="sbar" style="height:42px"></div></div>
+  `;
+}
+function clearSkeleton(){ formEl.innerHTML = ''; }
+
+  // Alt uyarı şeridi (Google Forms gibi buton altına gelir)
+  const alertBottom = document.createElement('p');
+  alertBottom.id = 'alertBottom';
+  alertBottom.className = 'note center';
+  alertBottom.style.display = 'none';
+
+  function setNote(kind, msg){
+    alertBottom.className = 'note ' + kind + ' center';
+    alertBottom.textContent = msg;
+    alertBottom.style.display = 'block';
   }
-  if (!SSR_SCHEMA && '.__SCHEMA__' in window === false && window.__SCHEMA__)
-    SSR_SCHEMA = window.__SCHEMA__;
+  const showErr  = (m)=>setNote('err',m);
+  const showWarn = (m)=>setNote('warn',m);
+  const showOk   = (m)=>setNote('ok',m);
+  const hideNote = ()=>{ alertBottom.style.display='none'; };
 
-  // ---------- UI yardımcıları ----------
+  // SLUG YOKSA LİSTE
+  async function loadList(){
+    titleEl.style.display = 'none';
+    descEl.style.display  = 'none';
+    pickWrap.style.display = 'block';
+    pickSel.disabled = true; pickBtn.disabled = true;
+
+    try{
+      const r = await fetch(`${API}/forms-list`);
+      const j = await r.json().catch(()=>({}));
+      const items = (j && j.ok && (Array.isArray(j.items) || Array.isArray(j.forms)))
+        ? (j.items || j.forms) : [];
+
+      pickSel.innerHTML = '<option value="">— Form (slug) seçin —</option>';
+      if(items.length === 0){
+        listWarn.style.display = 'block';
+      }else{
+        listWarn.style.display = 'none';
+        items.forEach(it => {
+          const o = document.createElement('option');
+          o.value = it.slug;
+          o.textContent = `${it.title || it.slug} — ${it.slug}`;
+          pickSel.appendChild(o);
+        });
+      }
+    }catch(e){
+      listWarn.textContent = 'Liste alınamadı: ' + e.message;
+      listWarn.style.display = 'block';
+    }finally{
+      pickSel.disabled = false; pickBtn.disabled = false;
+    }
+  }
+
+  pickBtn?.addEventListener('click', () => {
+    const v = pickSel.value;
+    if (!v) { pickSel.focus(); return; }
+    location.href = `${location.pathname}?slug=${encodeURIComponent(v)}`;
+  });
+  pickSel?.addEventListener('change', () => pickBtn.click());
+
+  if (!slug) { loadList(); return; }
+showSkeleton(); // <— ekle
+  // Form fallback action
+  formEl.action = `/api/submit-form?slug=${encodeURIComponent(slug)}`;
+  formEl.method = 'POST';
+
+  // Yardımcı DOM
   const mk = (name, attrs={}, html='') => {
     const el = document.createElement(name);
     for (const [k,v] of Object.entries(attrs)) el.setAttribute(k, v);
@@ -171,24 +237,32 @@
     row.appendChild(mk('label', { for:`f_${name}` }, label + (q.required ? ' *' : '')));
 
     if (type === 'radio' || type === 'checkbox') {
+      if (!opts.length){
+        row.appendChild(mk('div', {class:'muted'}, 'Bu soru için seçenek tanımlı değil.'));
+        return row;
+      }
       const g = mk('div', { class:'choices' });
-      (opts.length ? opts : ['Seçenek yok']).forEach((opt,i) => {
+      opts.forEach((opt,i) => {
         const id = `f_${name}_${i}`;
-        const lbl = mk('label', { class:'opt', for:id });
-        const input = mk('input', { type, id, name, value:String(opt), ...(q.required && type==='radio' ? {required:''}:{}) });
+        const labelWrap = mk('label', { class:'opt', for:id });
+        const input = mk('input', { type, id, name, value:String(opt), ...(q.required && type==='radio' ? {required:''}: {}) });
         if (type === 'checkbox') input.name = name + '[]';
-        lbl.appendChild(input);
-        lbl.appendChild(mk('span', {}, String(opt)));
-        g.appendChild(lbl);
+        labelWrap.appendChild(input);
+        labelWrap.appendChild(mk('span',{}, String(opt)));
+        g.appendChild(labelWrap);
       });
       row.appendChild(g);
       return row;
     }
 
     if (type === 'select') {
-      const select = mk('select', { id:`f_${name}`, name, ...(q.required ? {required:''}:{}) });
+      const select = mk('select', { id:`f_${name}`, name, ...(q.required ? {required:''} : {}) });
       select.appendChild(mk('option', { value:'', disabled:'', selected:'' }, 'Seçiniz'));
-      opts.forEach(v => select.appendChild(mk('option',{value:String(v)}, String(v))));
+      if (opts.length) {
+        opts.forEach(v => select.appendChild(mk('option',{value:String(v)}, String(v))));
+      } else {
+        row.appendChild(mk('div', { class:'muted' }, 'Bu soru için seçenek tanımlı değil.'));
+      }
       row.appendChild(select);
       return row;
     }
@@ -203,89 +277,110 @@
     return row;
   }
 
-  function render(schema){
-    // Başlık & açıklama
-    titleEl.textContent = schema.title || slug || 'Form';
-    titleEl.style.display = 'block';
-    if (schema.description) {
-      descEl.textContent = schema.description;
-      descEl.style.display = 'block';
-    } else {
-      descEl.style.display = 'none';
-    }
+  // ŞEMA YÜKLEME
+  fetch(`${API}/forms?slug=${encodeURIComponent(slug)}`)
+    .then(r => r.json())
+    .then(j => {
+      if (!j.ok || !j.schema) throw new Error(j.error || 'Form bulunamadı');
+      clearSkeleton();        // <— ekle
+      const s = j.schema;
 
-    // Soru kartları
-    formEl.innerHTML = '';
-    const qs = schema.questions || schema.fields || [];
-    qs.forEach((q,i) => formEl.appendChild(drawQuestion(q,i)));
+      titleEl.textContent = s.title || slug;
+      titleEl.style.display = 'block';
+      if (s.description){ descEl.textContent = s.description; descEl.style.display = 'block'; }
 
-    // Gönder düğmesi
-    formEl.appendChild(mk('button',{type:'submit'},'Gönder'));
-    formEl.style.display = 'block';
+      const qs = s.questions || s.fields || [];
+      formEl.innerHTML = '';
+      if (!qs.length){
+        showErr('Bu formda soru tanımı bulunamadı.');
+      } else {
+        hideNote();
+        qs.forEach((q,i) => formEl.appendChild(drawQuestion(q,i)));
+
+        // Gönder alanı (buton üstte, alt notlar butonun altında)
+        const actions = mk('div', {class:'actions center'});
+        actions.appendChild(mk('button', { type:'submit' }, 'Gönder'));
+        formEl.appendChild(actions);
+
+        // Alt bilgi/uyarı notu ve meta
+        formEl.appendChild(alertBottom);
+        formEl.appendChild(mk('p',{class:'after center'},
+          'Bu form mikroar.com alanında oluşturuldu. Uygunsuzluk bildirimi veya iletişim için site yöneticisine başvurabilirsiniz.'
+        ));
+// >>> SADECE BAŞARILI YÜKLEMEDEN SONRA BRAND EKLE <<<
+formEl.appendChild(mk('p', { class: 'brand' }, 'mikroAR'));
+        formEl.style.display = 'block';
+      }
+    })
+    .catch(e => {
+       clearSkeleton();        // <— ekle
+      titleEl.textContent = 'Form yüklenemedi';
+      showErr(e.message || 'Hata');
+      formEl.style.display = 'block';
+      formEl.appendChild(alertBottom);
+    });
+
+  // :has() fallback – eski tarayıcılar için seçili efekti
+  if (document.documentElement.classList.contains('no-has')) {
+    formEl.addEventListener('change', (e) => {
+      if (!e.target.matches('input[type="radio"], input[type="checkbox"]')) return;
+      const row = e.target.closest('.row');
+      row?.querySelectorAll('.opt').forEach(o => {
+        const inp = o.querySelector('input');
+        o.classList.toggle('checked', !!inp?.checked);
+      });
+    });
   }
 
-  function wireSubmit(){
-    const note = document.createElement('p');
-    note.className = 'note';
-    note.style.display = 'none';
-    formEl.appendChild(note);
-    const setNote = (kind,msg)=>{ note.className='note '+kind; note.textContent=msg; note.style.display='block'; };
+  // GÖNDER
+  formEl.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    hideNote();
+    const btn = formEl.querySelector('button[type="submit"]');
+    if (btn) btn.disabled = true;
 
-    formEl.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      note.style.display='none';
-      const btn = formEl.querySelector('button[type="submit"]'); btn && (btn.disabled=true);
+    // Yanıtları topla
+    const answers = {};
+    [...formEl.elements].forEach(el => {
+      if (!el.name) return;
+      if (el.type === 'radio'){
+        if (el.checked) answers[el.name] = el.value;
+      } else if (el.type === 'checkbox'){
+        const base = el.name.replace(/\[\]$/, '');
+        answers[base] = answers[base] || [];
+        if (el.checked) answers[base].push(el.value);
+      } else if (el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || el.type === 'text' || el.type === 'email'){
+        answers[el.name] = el.value;
+      }
+    });
 
-      const answers = {};
-      [...formEl.elements].forEach(el => {
-        if (!el.name) return;
-        if (el.type === 'radio'){ if (el.checked) answers[el.name] = el.value; }
-        else if (el.type === 'checkbox'){
-          const base = el.name.replace(/\[\]$/, '');
-          (answers[base] ??= []);
-          if (el.checked) answers[base].push(el.value);
-        } else if (el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || el.type === 'text' || el.type === 'email'){
-          answers[el.name] = el.value;
-        }
+    try{
+      const r = await fetch(`${API}/submit-form?slug=${encodeURIComponent(slug)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept':'application/json' },
+        body: JSON.stringify({ answers })
       });
 
-      try{
-        const r = await fetch(`/api/submit-form?slug=${encodeURIComponent(slug||'')}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept':'application/json' },
-          body: JSON.stringify({ answers })
-        });
-        let j=null; try{ j=await r.json(); }catch{}
+      let j = null;
+      try { j = await r.json(); } catch(_) {}
 
-        if (r.status === 409) { setNote('warn', (j?.data?.message||j?.message||j?.error)||'Bu anketi daha önce doldurdunuz.'); return; }
-        if (r.ok && (j?.ok ?? true)) { setNote('ok','Gönderildi, teşekkürler!'); formEl.reset(); }
-        else { setNote('err', (j?.data?.message||j?.message||j?.error)||`Hata: ${r.status}`); }
-      }catch(err){ setNote('err','Bağlantı hatası: '+err.message); }
-      finally{ btn && (btn.disabled=false); }
-    });
-  }
+      if (r.status === 409) {
+        showWarn((j && (j.data?.message || j.message || j.error)) || 'Bu anketi daha önce doldurmuşsunuz.');
+        return;
+      }
 
-  // —— Çalıştırma mantığı ——
-  // SSR varsa: anında render (fetch YOK)
-  if (SSR_SCHEMA && (SSR_SCHEMA.questions || SSR_SCHEMA.fields)) {
-    render(SSR_SCHEMA);
-    wireSubmit();
-    return;
-  }
-
-  // SSR yoksa (edge düşerse) tek fetch ile çiz
-  if (!slug) return; // slug'sız listeme sayfası sizde ayrı
-
-  fetch(`/api/forms?slug=${encodeURIComponent(slug)}`)
-    .then(r => r.json())
-    .then(j => { if (!j.ok || !j.schema) throw new Error(j.error || 'Form bulunamadı'); render(j.schema); wireSubmit(); })
-    .catch(e => {
-      titleEl.textContent = 'Form yüklenemedi';
-      const warn = document.createElement('p');
-      warn.className='note warn';
-      warn.textContent = e.message || 'Hata';
-      formEl.before(warn);
-    });
+      if (r.ok && (j?.ok ?? true)) {
+        showOk('Gönderildi, teşekkürler!');
+        formEl.reset();
+      } else {
+        showErr((j && (j.data?.message || j.message || j.error)) || `Hata: ${r.status}`);
+      }
+    }catch(err){
+      showErr('Bağlantı hatası: ' + err.message);
+    }finally{
+      if (btn) btn.disabled = false;
+    }
+  });
 })();
 </script>
 </body>
