@@ -6,124 +6,76 @@
 <title>Form</title>
 <link rel="stylesheet" href="/form.css">
 <style>
-  /* —— Google Forms tadında, tek elle kullanılabilir kartlı tema —— */
-
+  /* —— Google Forms’a yakın sade kartlı tema —— */
   :root{
     --bg:#f6f7fb;
-    --card:#fff;
+    --paper:#fff;
     --text:#1f2937;
     --muted:#6b7280;
     --border:#e5e7eb;
-    --border-2:#dadce0;
     --primary:#2563eb;
     --primary-600:#1d4ed8;
-    --ring: 0 0 0 3px rgba(37,99,235,.14);
+    --danger:#b91c1c;
+    --warn:#b45309;
+    --ring:0 0 0 3px rgba(37,99,235,.15);
     --shadow: 0 10px 20px rgba(17,24,39,.06), 0 2px 6px rgba(17,24,39,.06);
   }
 
-  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji"}
-  .wrap{max-width:860px;margin:48px auto;padding:0 20px}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji"}
+  .wrap{max-width:920px;margin:40px auto;padding:0 20px}
+
+  /* Orta kolon */
+  #form{max-width:680px;margin:18px auto 8px;display:flex;flex-direction:column;gap:16px}
 
   /* Başlık & açıklama */
   #title{display:block;font-size:34px;margin:0 0 6px;font-weight:800;letter-spacing:-.01em}
-  #desc{display:none;color:var(--muted);margin:0 0 14px}
+  #desc{display:block;color:var(--muted);margin:0 0 12px}
 
-  /* Uyarı/ok notları (butonun ALTINDA göstereceğiz) */
-  .note{display:none;margin:12px 0;padding:12px 14px;border-radius:12px;border:1px solid var(--border);background:#fff;box-shadow:var(--shadow);font-size:.975rem}
-  .note.err{display:block;background:#fef2f2;border-color:#fecaca;color:#b91c1c}
-  .note.warn{display:block;background:#fff7ed;border-color:#fed7aa;color:#b45309}
+  /* Uyarı/mesaj şeritleri */
+  .note{display:none;margin:12px auto 0;max-width:680px;
+    padding:12px 14px;border-radius:12px;border:1px solid var(--border);background:#fff;box-shadow:var(--shadow)}
+  .note.err{display:block;background:#fef2f2;border-color:#fecaca;color:var(--danger)}
+  .note.warn{display:block;background:#fff7ed;border-color:#fed7aa;color:var(--warn)}
   .note.ok{display:block;background:#ecfdf5;border-color:#bbf7d0;color:#047857}
 
-  /* Form kartları */
-  #form{margin-top:18px;display:flex;flex-direction:column;gap:16px}
-  .row{
-    background:var(--card);
-    border:1px solid var(--border-2);
-    border-radius:14px;
-    padding:18px 18px 14px;
-    box-shadow:var(--shadow);
-  }
-  .row > label{
-    display:block;
-    font-weight:700;
-    margin:0 0 8px;
-    letter-spacing:.2px;
-  }
-  .muted{color:var(--muted);font-size:.95rem}
+  /* Soru kartları */
+  .row{background:var(--paper);border:1px solid var(--border);border-radius:18px;
+    padding:18px;box-shadow:var(--shadow)}
+  .row > label{display:block;font-weight:700;margin:0 0 10px;letter-spacing:.2px}
 
   /* Metin / e-posta / select / textarea */
-  input[type=text],
-  input[type=email],
-  select,
-  textarea{
-    width:100%;
-    padding:14px 14px;
-    border:1px solid var(--border-2);
-    border-radius:12px;
-    background:#fff;
-    font:inherit;
-    outline:none;
-    transition:border-color .15s, box-shadow .15s, background-color .15s;
-  }
+  input[type=text],input[type=email],select,textarea{
+    width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:#fff;font:inherit;outline:none;
+    transition:border-color .15s, box-shadow .15s}
   textarea{min-height:120px;resize:vertical}
-  input[type=text]:focus,
-  input[type=email]:focus,
-  select:focus,
-  textarea:focus{
-    border-color:var(--primary);
-    box-shadow:var(--ring);
-  }
-  select:invalid{color:var(--muted)}
-  select option[value=""]{color:var(--muted)}
+  input[type=text]:focus,input[type=email]:focus,select:focus,textarea:focus{border-color:var(--primary);box-shadow:var(--ring)}
+  select:invalid{color:var(--muted)} select option[value=""]{color:var(--muted)}
 
-  /* Radio / checkbox seçenekleri – geniş temas alanı ve seçili efekti */
-  .choices{display:flex;flex-direction:column;gap:8px;margin-top:6px}
-  .opt{
-    display:flex;align-items:center;gap:12px;
-    padding:10px 12px;border:1px solid var(--border-2);border-radius:12px;
-    transition:border-color .15s, background-color .15s, box-shadow .15s; cursor:pointer;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .opt:hover{background:#f9fafb;border-color:#d2d6db}
-  .opt input{width:20px;height:20px;flex:0 0 20px;accent-color:var(--primary)}
-  /* CSS :has ile seçili efekti (destek varsa) */
-  .opt:has(input:checked){
-    border-color:var(--primary); background:#eff6ff; box-shadow:var(--ring);
-  }
-  /* :has desteklenmezse JS .checked sınıfını ekleyecek */
-  .opt.checked{border-color:var(--primary); background:#eff6ff; box-shadow:var(--ring);}
+  /* Radio/checkbox liste – tek elle rahat tıklansın */
+  .row > div > div{margin:8px 0}
+  .row input[type=radio], .row input[type=checkbox]{width:20px;height:20px;accent-color:var(--primary)}
+  .row input[type=radio] + label, .row input[type=checkbox] + label{
+    display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;
+    width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:#fff;
+    transition:box-shadow .15s, border-color .15s, background .15s}
+  .row input[type=radio] + label:hover,
+  .row input[type=checkbox] + label:hover{border-color:#d8dbe2}
+  .row input[type=radio]:focus-visible + label,
+  .row input[type=checkbox]:focus-visible + label{box-shadow:var(--ring)}
+  .row input[type=radio]:checked + label,
+  .row input[type=checkbox]:checked + label{border-color:var(--primary);background:#f4f7ff;box-shadow:var(--ring)}
 
-  /* Gönder alanı – buton hafif üstte, alt notlar butonun altında */
-  .actions{display:flex;align-items:center;gap:14px;margin-top:4px}
-  button[type=submit]{
-    appearance:none;border:0;background:var(--primary);color:#fff;
-    font-weight:700;padding:12px 18px;border-radius:12px;cursor:pointer;
-    box-shadow:var(--shadow);margin-top:4px
-  }
+  /* Gönder butonu */
+  button[type=submit]{appearance:none;border:0;background:var(--primary);color:#fff;
+    font-weight:700;padding:12px 18px;border-radius:12px;cursor:pointer;align-self:flex-start;margin:8px auto 0 0;
+    box-shadow:var(--shadow)}
   button[type=submit]:hover{background:var(--primary-600)}
   button[disabled]{opacity:.6;cursor:not-allowed}
 
-  .foot-meta{color:var(--muted);font-size:.92rem;margin-top:4px}
-
-  /* Slug seçme ekranı (form.html?slug yokken) */
-  .selector{
-    background:var(--card);
-    border:1px solid var(--border-2);
-    border-radius:14px;
-    padding:18px;
-    box-shadow:var(--shadow);
-    margin-top:18px;
-  }
-  .selector h2{margin:0 0 12px;font-size:22px}
-  .selector .bar{display:flex;gap:10px}
-  .selector select{flex:1}
-
-  @media (max-width:640px){
-    .wrap{padding:0 14px}
-    #title{font-size:28px}
-    .opt{padding:12px} /* başparmak için biraz daha geniş temas alanı */
-    button[type=submit]{width:100%} /* tek elle kullanım için buton geniş */
-  }
+  /* Alt bilgi ve marka */
+  .after{max-width:680px;margin:12px auto 0;color:var(--muted);font-size:.95rem}
+  .brand{max-width:680px;margin:20px auto 0;text-align:center;font-size:26px;font-weight:900;letter-spacing:.5px;color:#111}
 </style>
 </head>
 <body>
