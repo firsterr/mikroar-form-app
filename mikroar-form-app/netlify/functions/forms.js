@@ -39,12 +39,8 @@ export async function handler(event) {
 
 function json(code, obj) {
   return {
-  statusCode: 200,
-  headers: {
-    'Content-Type': 'application/json; charset=utf-8',
-    // Netlify edge cache:
-    'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=30'
-  },
-  body: JSON.stringify({ ok: true, schema })
-};
+    statusCode: code,
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    body: JSON.stringify(obj)
+  };
 }
