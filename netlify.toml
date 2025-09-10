@@ -5,7 +5,7 @@
 [functions]
   directory = "mikroar-form-app/netlify/functions"
 
-# --- API / Functions ---
+# --- API / Functions (tüm hostlarda) ---
 [[redirects]]
   from = "/api/forms"
   to   = "/.netlify/functions/forms"
@@ -52,76 +52,49 @@
     Cache-Control = "no-cache"
 
 # =========================
-# anket.mikroar.com → /admin.html
+# anket.mikroar.com  →  admin.html
+# (tam URL ile domaine özel kural)
 # =========================
 
-# API mutlaka fonksiyonlara gitsin
+# /form.html bu domainde görünmesin
 [[redirects]]
-  from = "/api/*"
-  to   = "/.netlify/functions/:splat"
-  status = 200
-  conditions = { Host = ["anket.mikroar.com"] }
-
-# Bu hostta /form.html görülmesin → admin'e yönlendir
-[[redirects]]
-  from = "/form.html"
+  from = "https://anket.mikroar.com/form.html"
   to   = "/admin.html"
   status = 301
-  conditions = { Host = ["anket.mikroar.com"] }
 
-# /admin ve kök istekleri admin.html'e ver
+# kök ve diğer tüm yollar admin.html
 [[redirects]]
-  from = "/admin"
+  from = "https://anket.mikroar.com/"
   to   = "/admin.html"
   status = 200
-  conditions = { Host = ["anket.mikroar.com"] }
 
 [[redirects]]
-  from = "/"
+  from = "https://anket.mikroar.com/*"
   to   = "/admin.html"
   status = 200
-  conditions = { Host = ["anket.mikroar.com"] }
-
-# kalan her şey admin.html
-[[redirects]]
-  from = "/*"
-  to   = "/admin.html"
-  status = 200
-  conditions = { Host = ["anket.mikroar.com"] }
 
 # =========================
-# form.mikroar.com → /form.html
+# form.mikroar.com  →  form.html
 # =========================
 
-# API mutlaka fonksiyonlara gitsin
+# admin yolları bu domainde görünmesin
 [[redirects]]
-  from = "/api/*"
-  to   = "/.netlify/functions/:splat"
-  status = 200
-  conditions = { Host = ["form.mikroar.com"] }
-
-# Bu hostta admin sayfaları görünmesin → form.html'e yönlendir
-[[redirects]]
-  from = "/admin"
+  from = "https://form.mikroar.com/admin"
   to   = "/form.html"
   status = 301
-  conditions = { Host = ["form.mikroar.com"] }
 
 [[redirects]]
-  from = "/admin.html"
+  from = "https://form.mikroar.com/admin.html"
   to   = "/form.html"
   status = 301
-  conditions = { Host = ["form.mikroar.com"] }
 
 # kök ve kalan her şey form.html
 [[redirects]]
-  from = "/"
+  from = "https://form.mikroar.com/"
   to   = "/form.html"
   status = 200
-  conditions = { Host = ["form.mikroar.com"] }
 
 [[redirects]]
-  from = "/*"
+  from = "https://form.mikroar.com/*"
   to   = "/form.html"
   status = 200
-  conditions = { Host = ["form.mikroar.com"] }
