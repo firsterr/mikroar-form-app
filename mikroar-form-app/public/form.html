@@ -214,7 +214,7 @@ function clearSkeleton(){ formEl.innerHTML = ''; }
   pickSel?.addEventListener('change', () => pickBtn.click());
 
   if (!slug) { loadList(); return; }
-
+showSkeleton(); // <— ekle
   // Form fallback action
   formEl.action = `/api/submit-form?slug=${encodeURIComponent(slug)}`;
   formEl.method = 'POST';
@@ -282,6 +282,7 @@ function clearSkeleton(){ formEl.innerHTML = ''; }
     .then(r => r.json())
     .then(j => {
       if (!j.ok || !j.schema) throw new Error(j.error || 'Form bulunamadı');
+      clearSkeleton();        // <— ekle
       const s = j.schema;
 
       titleEl.textContent = s.title || slug;
@@ -312,6 +313,7 @@ formEl.appendChild(mk('p', { class: 'brand' }, 'mikroAR'));
       }
     })
     .catch(e => {
+       clearSkeleton();        // <— ekle
       titleEl.textContent = 'Form yüklenemedi';
       showErr(e.message || 'Hata');
       formEl.style.display = 'block';
