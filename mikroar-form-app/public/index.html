@@ -1,25 +1,15 @@
 <!doctype html>
-<html lang="tr"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Formlar</title><link rel="stylesheet" href="/form.css">
-</head><body>
-<main>
-  <h1>Formlar</h1>
-  <ul id="list"></ul>
-</main>
+<meta charset="utf-8">
+<title>Yönlendiriliyor…</title>
 <script>
-(async () => {
-  const ul = document.querySelector('#list');
- const r = await fetch('/api/forms'); // forms.js list modu
-  const j = await r.json().catch(()=>({}));
-  if (!j.ok) { ul.innerHTML = '<li>Liste alınamadı</li>'; return; }
-  ul.innerHTML = j.forms.map(f => `
-    <li>
-      <strong>${f.title || f.slug}</strong>
-      — <a href="/form.html?slug=${encodeURIComponent(f.slug)}">Doldur</a>
-      — <a href="/results.html?slug=${encodeURIComponent(f.slug)}">Sonuçlar</a>
-      — <a href="/share/${encodeURIComponent(f.slug)}" target="_blank">Paylaş</a>
-    </li>`).join('');
-})();
+  (function () {
+    var h = location.hostname;
+    // anket.mikroar.com → admin
+    if (/^anket\.mikroar\.com$/i.test(h)) {
+      location.replace("/admin.html");
+      return;
+    }
+    // form.mikroar.com (veya diğerleri) → form
+    location.replace("/form.html");
+  })();
 </script>
-</body></html>
