@@ -135,33 +135,32 @@
 <script>
 (() => {
   const $ = (s) => document.querySelector(s);
-  const formEl = $('#form');
   const titleEl = $('#title');
   const descEl  = $('#desc');
-  const API = '/api';
+  const formEl  = $('#form');
 
-  // 1) Slug tespiti (form.html ise query’den, değilse path’ten)
+  // Slug: ?slug=… varsa onu, yoksa /slug yolunu kullan
   const rawPath  = location.pathname.replace(/^\/+|\/+$/g,'');
   const pathSlug = rawPath && !/\.html$/i.test(rawPath) ? rawPath : '';
   const slug     = new URLSearchParams(location.search).get('slug') || pathSlug;
 
-  // 2) SSR tespiti — Edge Function markup/JSON bıraktı mı?
-  //    a) <script id="__SCHEMA__" type="application/json">…</script>
-  //    b) window.__SCHEMA__
+  // —— SSR şeması var mı? (Edge Function koyuyor) ——
   let SSR_SCHEMA = null;
   const ssrTag = document.getElementById('__SCHEMA__');
   if (ssrTag) {
     try { SSR_SCHEMA = JSON.parse(ssrTag.textContent || '{}'); } catch {}
   }
-  if (!SSR_SCHEMA && window.__SCHEMA__) SSR_SCHEMA = window.__SCHEMA__;
+  if (!SSR_SCHEMA && '.__SCHEMA__' in window === false && window.__SCHEMA__)
+    SSR_SCHEMA = window.__SCHEMA__;
 
-  // 3) Form çizimi
+  // ---------- UI yardımcıları ----------
   const mk = (name, attrs={}, html='') => {
     const el = document.createElement(name);
     for (const [k,v] of Object.entries(attrs)) el.setAttribute(k, v);
     if (html) el.innerHTML = html;
     return el;
   };
+
   function drawQuestion(q, idx){
     const type  = (q.type || 'text').toLowerCase();
     const name  = q.name || `q${idx+1}`;
@@ -175,21 +174,21 @@
       const g = mk('div', { class:'choices' });
       (opts.length ? opts : ['Seçenek yok']).forEach((opt,i) => {
         const id = `f_${name}_${i}`;
-        const wrap = mk('label', { class:'opt', for:id });
-        const input = mk('input', { type, id, name, value:String(opt), ...(q.required && type==='radio' ? {required:''}: {}) });
+        const lbl = mk('label', { class:'opt', for:id });
+        const input = mk('input', { type, id, name, value:String(opt), ...(q.required && type==='radio' ? {required:''}:{}) });
         if (type === 'checkbox') input.name = name + '[]';
-        const txt = mk('span', {}, String(opt));
-        wrap.appendChild(input); wrap.appendChild(txt);
-        g.appendChild(wrap);
+        lbl.appendChild(input);
+        lbl.appendChild(mk('span', {}, String(opt)));
+        g.appendChild(lbl);
       });
       row.appendChild(g);
       return row;
     }
 
     if (type === 'select') {
-      const select = mk('select', { id:`f_${name}`, name, ...(q.required ? {required:''} : {}) });
+      const select = mk('select', { id:`f_${name}`, name, ...(q.required ? {required:''}:{}) });
       select.appendChild(mk('option', { value:'', disabled:'', selected:'' }, 'Seçiniz'));
-      (opts || []).forEach(v => select.appendChild(mk('option',{value:String(v)}, String(v))));
+      opts.forEach(v => select.appendChild(mk('option',{value:String(v)}, String(v))));
       row.appendChild(select);
       return row;
     }
@@ -205,7 +204,7 @@
   }
 
   function render(schema){
-    // Başlık/açıklama
+    // Başlık & açıklama
     titleEl.textContent = schema.title || slug || 'Form';
     titleEl.style.display = 'block';
     if (schema.description) {
@@ -215,23 +214,21 @@
       descEl.style.display = 'none';
     }
 
-    // Kartlar
+    // Soru kartları
     formEl.innerHTML = '';
     const qs = schema.questions || schema.fields || [];
     qs.forEach((q,i) => formEl.appendChild(drawQuestion(q,i)));
 
-    // Gönder barı
+    // Gönder düğmesi
     formEl.appendChild(mk('button',{type:'submit'},'Gönder'));
     formEl.style.display = 'block';
   }
 
-  // 4) Submit handler (IP/409 için sarı uyarı)
   function wireSubmit(){
     const note = document.createElement('p');
     note.className = 'note';
     note.style.display = 'none';
     formEl.appendChild(note);
-
     const setNote = (kind,msg)=>{ note.className='note '+kind; note.textContent=msg; note.style.display='block'; };
 
     formEl.addEventListener('submit', async (e) => {
@@ -245,7 +242,7 @@
         if (el.type === 'radio'){ if (el.checked) answers[el.name] = el.value; }
         else if (el.type === 'checkbox'){
           const base = el.name.replace(/\[\]$/, '');
-          answers[base] = answers[base] || [];
+          (answers[base] ??= []);
           if (el.checked) answers[base].push(el.value);
         } else if (el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || el.type === 'text' || el.type === 'email'){
           answers[el.name] = el.value;
@@ -258,42 +255,30 @@
           headers: { 'Content-Type': 'application/json', 'Accept':'application/json' },
           body: JSON.stringify({ answers })
         });
-        let j = null; try { j = await r.json(); } catch{}
+        let j=null; try{ j=await r.json(); }catch{}
 
         if (r.status === 409) { setNote('warn', (j?.data?.message||j?.message||j?.error)||'Bu anketi daha önce doldurdunuz.'); return; }
         if (r.ok && (j?.ok ?? true)) { setNote('ok','Gönderildi, teşekkürler!'); formEl.reset(); }
         else { setNote('err', (j?.data?.message||j?.message||j?.error)||`Hata: ${r.status}`); }
-      }catch(err){
-        setNote('err','Bağlantı hatası: '+err.message);
-      }finally{
-        btn && (btn.disabled=false);
-      }
+      }catch(err){ setNote('err','Bağlantı hatası: '+err.message); }
+      finally{ btn && (btn.disabled=false); }
     });
   }
 
-  // 5) Strateji:
-  //    a) SSR varsa: HİÇ fetch yapma → anında render
-  //    b) SSR yoksa: tek fetch ile çiz
+  // —— Çalıştırma mantığı ——
+  // SSR varsa: anında render (fetch YOK)
   if (SSR_SCHEMA && (SSR_SCHEMA.questions || SSR_SCHEMA.fields)) {
     render(SSR_SCHEMA);
     wireSubmit();
     return;
   }
 
-  // SSR yoksa fallback (ama formu gizleme – FOUC yok)
-  if (!slug) {
-    // slug’sız /form.html sayfasında listeme davranışı sizde zaten var;
-    // burada sadece slug’lı path için fallback’i kapatıyoruz.
-    return;
-  }
+  // SSR yoksa (edge düşerse) tek fetch ile çiz
+  if (!slug) return; // slug'sız listeme sayfası sizde ayrı
 
   fetch(`/api/forms?slug=${encodeURIComponent(slug)}`)
     .then(r => r.json())
-    .then(j => {
-      if (!j.ok || !j.schema) throw new Error(j.error || 'Form bulunamadı');
-      render(j.schema);
-      wireSubmit();
-    })
+    .then(j => { if (!j.ok || !j.schema) throw new Error(j.error || 'Form bulunamadı'); render(j.schema); wireSubmit(); })
     .catch(e => {
       titleEl.textContent = 'Form yüklenemedi';
       const warn = document.createElement('p');
