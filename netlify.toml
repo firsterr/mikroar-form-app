@@ -5,21 +5,24 @@
 [functions]
   directory = "mikroar-form-app/netlify/functions"
 
-# --- API / Functions (tüm hostlarda) ---
+# --- API / Functions (öncelik en üstte) ---
 [[redirects]]
   from = "/api/forms"
   to   = "/.netlify/functions/forms"
   status = 200
+  force = true
 
 [[redirects]]
   from = "/api/admin/forms"
   to   = "/.netlify/functions/forms-admin"
   status = 200
+  force = true
 
 [[redirects]]
   from = "/api/*"
   to   = "/.netlify/functions/:splat"
   status = 200
+  force = true
 
 # --- Kısa link fonksiyonları ---
 [[redirects]]
@@ -32,7 +35,7 @@
   to   = "/.netlify/functions/share?slug=:slug"
   status = 200
 
-# --- Güvenlik / Önbellek header'ları ---
+# --- Güvenlik / Önbellek ---
 [[headers]]
   for = "/*"
   [headers.values]
@@ -51,50 +54,15 @@
   [headers.values]
     Cache-Control = "no-cache"
 
-# =========================
-# anket.mikroar.com  →  admin.html
-# (tam URL ile domaine özel kural)
-# =========================
-
-# /form.html bu domainde görünmesin
+# --- route yardımcıları ---
+# / → index.html (index de hosta göre gerekli sayfaya yönlendiriyor)
 [[redirects]]
-  from = "https://anket.mikroar.com/form.html"
-  to   = "/admin.html"
-  status = 301
-
-# kök ve diğer tüm yollar admin.html
-[[redirects]]
-  from = "https://anket.mikroar.com/"
-  to   = "/admin.html"
+  from = "/"
+  to   = "/index.html"
   status = 200
 
+# admin kısa yol
 [[redirects]]
-  from = "https://anket.mikroar.com/*"
+  from = "/admin"
   to   = "/admin.html"
-  status = 200
-
-# =========================
-# form.mikroar.com  →  form.html
-# =========================
-
-# admin yolları bu domainde görünmesin
-[[redirects]]
-  from = "https://form.mikroar.com/admin"
-  to   = "/form.html"
-  status = 301
-
-[[redirects]]
-  from = "https://form.mikroar.com/admin.html"
-  to   = "/form.html"
-  status = 301
-
-# kök ve kalan her şey form.html
-[[redirects]]
-  from = "https://form.mikroar.com/"
-  to   = "/form.html"
-  status = 200
-
-[[redirects]]
-  from = "https://form.mikroar.com/*"
-  to   = "/form.html"
   status = 200
