@@ -21,117 +21,87 @@
     --shadow: 0 10px 20px rgba(17,24,39,.06), 0 2px 6px rgba(17,24,39,.06);
   }
 
-  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
-    font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji"}
+  html,body{
+    margin:0;padding:0;background:var(--bg);color:var(--text);
+    font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";
+  }
   .wrap{max-width:920px;margin:40px auto;padding:0 20px}
 
-  /* Orta kolon */
-  #form{max-width:680px;margin:18px auto 8px;display:flex;flex-direction:column;gap:16px}
+  /* MERKEZ KOLON: her şeyi ortala */
+  .center { width:min(720px,100%); margin-inline:auto; }
+  #title,#desc,#alertTop,#form,#pickWrap,.note,.after,.brand { width:min(720px,100%); margin-inline:auto; }
 
   /* Başlık & açıklama */
   #title{display:block;font-size:34px;margin:0 0 6px;font-weight:800;letter-spacing:-.01em}
   #desc{display:block;color:var(--muted);margin:0 0 12px}
 
   /* Uyarı/mesaj şeritleri */
-  .note{display:none;margin:12px auto 0;max-width:680px;
-    padding:12px 14px;border-radius:12px;border:1px solid var(--border);background:#fff;box-shadow:var(--shadow)}
+  .note{display:none;margin:12px auto 0; padding:12px 14px;border-radius:12px;border:1px solid var(--border);background:#fff;box-shadow:var(--shadow)}
   .note.err{display:block;background:#fef2f2;border-color:#fecaca;color:var(--danger)}
   .note.warn{display:block;background:#fff7ed;border-color:#fed7aa;color:var(--warn)}
   .note.ok{display:block;background:#ecfdf5;border-color:#bbf7d0;color:#047857}
 
-  /* Soru kartları */
-  .row{background:var(--paper);border:1px solid var(--border);border-radius:18px;
-    padding:18px;box-shadow:var(--shadow)}
+  /* Form ve kartlar */
+  #form{display:flex;flex-direction:column;gap:16px;margin:18px auto 8px}
+  .row{background:var(--paper);border:1px solid var(--border);border-radius:18px;padding:18px;box-shadow:var(--shadow)}
   .row > label{display:block;font-weight:700;margin:0 0 10px;letter-spacing:.2px}
 
-  /* Metin / e-posta / select / textarea */
+  /* Text / Email / Select / Textarea */
   input[type=text],input[type=email],select,textarea{
     width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:#fff;font:inherit;outline:none;
-    transition:border-color .15s, box-shadow .15s}
+    transition:border-color .15s, box-shadow .15s
+  }
   textarea{min-height:120px;resize:vertical}
   input[type=text]:focus,input[type=email]:focus,select:focus,textarea:focus{border-color:var(--primary);box-shadow:var(--ring)}
   select:invalid{color:var(--muted)} select option[value=""]{color:var(--muted)}
 
-  /* Radio/checkbox liste – tek elle rahat tıklansın */
-  .row > div > div{margin:8px 0}
-  .row input[type=radio], .row input[type=checkbox]{width:20px;height:20px;accent-color:var(--primary)}
-  .row input[type=radio] + label, .row input[type=checkbox] + label{
-    display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;
-    width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:#fff;
-    transition:box-shadow .15s, border-color .15s, background .15s}
-  .row input[type=radio] + label:hover,
-  .row input[type=checkbox] + label:hover{border-color:#d8dbe2}
-  .row input[type=radio]:focus-visible + label,
-  .row input[type=checkbox]:focus-visible + label{box-shadow:var(--ring)}
-  .row input[type=radio]:checked + label,
-  .row input[type=checkbox]:checked + label{border-color:var(--primary);background:#f4f7ff;box-shadow:var(--ring)}
+  /* Radio/Checkbox – alt alta, geniş tıklama alanlı */
+  .choices{display:flex;flex-direction:column;gap:10px}
+  .opt{
+    display:flex;align-items:center;gap:12px;cursor:pointer;user-select:none;
+    padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:#fff;
+    transition:background .15s, border-color .15s, box-shadow .15s;
+  }
+  .opt input{width:20px;height:20px;accent-color:var(--primary)}
+  .opt span{flex:1}
+  .opt:hover{border-color:#d8dbe2}
+  .opt:focus-within{box-shadow:var(--ring); border-color:var(--primary)}
+
+  /* Seçili vurgu (modern tarayıcılar) */
+  .opt:has(input:checked){border-color:var(--primary);background:#f4f7ff;box-shadow:var(--ring)}
+  /* Fallback: JS, .checked sınıfını ekler */
+  .no-has .opt.checked{border-color:var(--primary);background:#f4f7ff;box-shadow:var(--ring)}
 
   /* Gönder butonu */
-  button[type=submit]{appearance:none;border:0;background:var(--primary);color:#fff;
-    font-weight:700;padding:12px 18px;border-radius:12px;cursor:pointer;align-self:flex-start;margin:8px auto 0 0;
-    box-shadow:var(--shadow)}
+  .actions{display:flex;gap:10px;margin-top:4px}
+  button[type=submit]{
+    appearance:none;border:0;background:var(--primary);color:#fff;font-weight:700;
+    padding:12px 18px;border-radius:12px;cursor:pointer;box-shadow:var(--shadow)
+  }
   button[type=submit]:hover{background:var(--primary-600)}
   button[disabled]{opacity:.6;cursor:not-allowed}
 
   /* Alt bilgi ve marka */
-  .after{max-width:680px;margin:12px auto 0;color:var(--muted);font-size:.95rem}
-  .brand{max-width:680px;margin:20px auto 0;text-align:center;font-size:26px;font-weight:900;letter-spacing:.5px;color:#111}
-  /* — Google Forms gibi ortala — */
-#title,
-#desc,
-#alert,
-#form,
-#pickWrap{
-  width: min(720px, 100%);
-  margin-left: auto;
-  margin-right: auto;   /* yatayda ortala */
-}
+  .after{color:var(--muted);font-size:.95rem}
+  .brand{margin:20px auto 0;text-align:center;font-size:26px;font-weight:900;letter-spacing:.5px;color:#111}
 
-/* Soru kartları form genişliğini tam kullansın */
-#form .row{ width: 100%; }
-  /* — Merkezde tut (web + mobil) — */
-#title, #desc, #alert, #form, #pickWrap{
-  width: min(720px, 100%);
-  margin-inline: auto;     /* yatayda ortala */
-}
+  /* Slug seçme kartı */
+  .selector{background:var(--paper);border:1px solid var(--border);border-radius:18px;padding:18px;box-shadow:var(--shadow);margin-top:18px}
+  .selector h2{margin:0 0 12px}
+  .selector .bar{display:flex;gap:10px}
+  .selector select{flex:1}
 
-/* — Radio/Checkbox gruplarını DİKEY diz — */
-.row > div{                /* grup container'ı */
-  display: block;          /* her seçenek satırı alt alta gelsin */
-}
-.row > div > div{          /* tek tek seçenek satırları */
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 10px 0;
-}
-
-/* — Dokunma alanını büyüt, tek elle kullanım kolay olsun — */
-.row > div > div label{
-  display: inline-block;
-  padding: 10px 12px;
-  border-radius: 10px;
-  transition: background .15s, box-shadow .15s;
-}
-input[type=radio]:checked + label,
-input[type=checkbox]:checked + label{
-  background: #eef2ff;
-  box-shadow: inset 0 0 0 2px var(--primary);
-}
-
-/* Select ve metin alanları kenarlara yapışmasın */
-select, textarea, input[type=text], input[type=email]{
-  width: 100%;
-}
+  /* iOS metin yakınlaştırmayı engelle */
+  input,select,textarea,button{font-size:16px}
 </style>
 </head>
 <body>
 <main class="wrap">
-  <h1 id="title" style="display:none"></h1>
-  <p id="desc" class="muted"></p>
+  <h1 id="title" class="center" style="display:none"></h1>
+  <p id="desc" class="center"></p>
 
   <!-- SLUG YOKKEN LİSTE -->
-  <section id="pickWrap" class="selector" style="display:none">
+  <section id="pickWrap" class="selector center" style="display:none">
     <h2>Bir anket seçin</h2>
     <p id="listWarn" class="note warn" style="display:none">Listelenecek form bulunamadı.</p>
     <div class="bar">
@@ -143,8 +113,9 @@ select, textarea, input[type=text], input[type=email]{
   </section>
 
   <!-- SLUG VARSA FORM -->
-  <form id="form" method="POST" action="#" style="display:none"></form>
- 
+  <form id="form" class="center" method="POST" action="#" style="display:none"></form>
+
+  <div class="brand center">mikroAR</div>
 </main>
 
 <script>
@@ -160,29 +131,34 @@ select, textarea, input[type=text], input[type=email]{
   const pickBtn  = $('#pickBtn');
   const listWarn = $('#listWarn');
 
-  // SLUG tespiti (form.html ise query’den, değilse path’ten)
+  // :has() desteği yoksa kök elemana sınıf ekle (CSS fallback için)
+  if (!(CSS.supports && CSS.supports('selector(:has(*))'))) {
+    document.documentElement.classList.add('no-has');
+  }
+
+  // SLUG tespiti
   const rawPath  = location.pathname.replace(/^\/+|\/+$/g,'');
   const pathSlug = rawPath && !/\.html$/i.test(rawPath) ? rawPath : '';
   const slug     = new URLSearchParams(location.search).get('slug') || pathSlug;
   const API = '/api';
 
-  // Alt not alanını formun sonuna ekliyoruz (Google Forms gibi)
+  // Alt uyarı şeridi (Google Forms gibi buton altına gelir)
   const alertBottom = document.createElement('p');
   alertBottom.id = 'alertBottom';
-  alertBottom.className = 'note';
+  alertBottom.className = 'note center';
   alertBottom.style.display = 'none';
 
-  function setNote(el, kind, msg){
-    el.className = 'note ' + kind;
-    el.textContent = msg;
-    el.style.display = 'block';
+  function setNote(kind, msg){
+    alertBottom.className = 'note ' + kind + ' center';
+    alertBottom.textContent = msg;
+    alertBottom.style.display = 'block';
   }
-  function showErr(msg){ setNote(alertBottom, 'err', msg); }
-  function showWarn(msg){ setNote(alertBottom, 'warn', msg); }
-  function showOk(msg){ setNote(alertBottom, 'ok', msg); }
-  function hideNote(){ alertBottom.style.display = 'none'; }
+  const showErr  = (m)=>setNote('err',m);
+  const showWarn = (m)=>setNote('warn',m);
+  const showOk   = (m)=>setNote('ok',m);
+  const hideNote = ()=>{ alertBottom.style.display='none'; };
 
-  // --- SLUG YOKSA LİSTEYİ GETİR ---
+  // SLUG YOKSA LİSTE
   async function loadList(){
     titleEl.style.display = 'none';
     descEl.style.display  = 'none';
@@ -253,13 +229,12 @@ select, textarea, input[type=text], input[type=email]{
       const g = mk('div', { class:'choices' });
       opts.forEach((opt,i) => {
         const id = `f_${name}_${i}`;
-        const wrap = mk('label', { class:'opt', for:id }); // geniş temas alanı
+        const labelWrap = mk('label', { class:'opt', for:id });
         const input = mk('input', { type, id, name, value:String(opt), ...(q.required && type==='radio' ? {required:''}: {}) });
         if (type === 'checkbox') input.name = name + '[]';
-        const txt = mk('span', {}, String(opt));
-        wrap.appendChild(input);
-        wrap.appendChild(txt);
-        g.appendChild(wrap);
+        labelWrap.appendChild(input);
+        labelWrap.appendChild(mk('span',{}, String(opt)));
+        g.appendChild(labelWrap);
       });
       row.appendChild(g);
       return row;
@@ -307,13 +282,13 @@ select, textarea, input[type=text], input[type=email]{
         qs.forEach((q,i) => formEl.appendChild(drawQuestion(q,i)));
 
         // Gönder alanı (buton üstte, alt notlar butonun altında)
-        const actions = mk('div', {class:'actions'});
+        const actions = mk('div', {class:'actions center'});
         actions.appendChild(mk('button', { type:'submit' }, 'Gönder'));
         formEl.appendChild(actions);
 
         // Alt bilgi/uyarı notu ve meta
         formEl.appendChild(alertBottom);
-        formEl.appendChild(mk('p',{class:'foot-meta'},
+        formEl.appendChild(mk('p',{class:'after center'},
           'Bu form mikroar.com alanında oluşturuldu. Uygunsuzluk bildirimi veya iletişim için site yöneticisine başvurabilirsiniz.'
         ));
 
@@ -327,9 +302,8 @@ select, textarea, input[type=text], input[type=email]{
       formEl.appendChild(alertBottom);
     });
 
-  // :has fallback – bazı tarayıcılarda seçili efekti JS ile uygula
-  const supportsHas = CSS.supports?.('selector(:has(*))');
-  if (!supportsHas) {
+  // :has() fallback – eski tarayıcılar için seçili efekti
+  if (document.documentElement.classList.contains('no-has')) {
     formEl.addEventListener('change', (e) => {
       if (!e.target.matches('input[type="radio"], input[type="checkbox"]')) return;
       const row = e.target.closest('.row');
