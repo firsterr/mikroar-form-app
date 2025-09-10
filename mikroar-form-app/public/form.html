@@ -137,6 +137,9 @@
   const pickBtn  = $('#pickBtn');
   const listWarn = $('#listWarn');
 
+  // SSR ile geldiysek client-side render'ı atla; sadece submit handler'ı çalışsın
+const SSR_READY = document.getElementById('form')?.dataset?.ssr === '1';
+  
   // :has() desteği yoksa kök elemana sınıf ekle (CSS fallback için)
   if (!(CSS.supports && CSS.supports('selector(:has(*))'))) {
     document.documentElement.classList.add('no-has');
