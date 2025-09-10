@@ -6,6 +6,11 @@
 <title>Form</title>
 <link rel="stylesheet" href="/form.css">
 <style>
+  /* ---- Skeleton ---- */
+.skel {background:#fff;border:1px solid var(--border);border-radius:18px;box-shadow:var(--shadow);padding:18px}
+.sbar{height:16px;border-radius:8px;background:linear-gradient(90deg,#eef1f6 25%,#e6eaf1 37%,#eef1f6 63%);background-size:400% 100%;animation:sh 1.2s infinite}
+.sgap{height:10px}
+@keyframes sh{0%{background-position:100% 0}100%{background-position:-100% 0}}
   /* —— Google Forms’a yakın sade kartlı tema —— */
   :root{
     --bg:#f6f7fb;
@@ -141,6 +146,16 @@
   const pathSlug = rawPath && !/\.html$/i.test(rawPath) ? rawPath : '';
   const slug     = new URLSearchParams(location.search).get('slug') || pathSlug;
   const API = '/api';
+
+  function showSkeleton(){
+  formEl.style.display = 'block';
+  formEl.innerHTML = `
+    <div class="skel"><div class="sbar" style="width:120px"></div><div class="sgap"></div><div class="sbar"></div><div class="sgap"></div><div class="sbar"></div></div>
+    <div class="skel"><div class="sbar" style="width:140px"></div><div class="sgap"></div><div class="sbar"></div><div class="sgap"></div><div class="sbar"></div></div>
+    <div class="skel"><div class="sbar" style="width:100px"></div><div class="sgap"></div><div class="sbar" style="height:42px"></div></div>
+  `;
+}
+function clearSkeleton(){ formEl.innerHTML = ''; }
 
   // Alt uyarı şeridi (Google Forms gibi buton altına gelir)
   const alertBottom = document.createElement('p');
