@@ -46,3 +46,38 @@
   from = "/share/:slug"
   to   = "/.netlify/functions/share?slug=:slug"
   status = 200
+  # --- anket.mikroar.com -> /admin ---
+[[redirects]]
+  from = "/"
+  to = "/admin"
+  status = 301
+  force = true
+  conditions = { Host = ["anket.mikroar.com"] }
+
+# admin altındaki tüm yollar düzgün çalışsın
+[[redirects]]
+  from = "/*"
+  to = "/admin/:splat"
+  status = 200
+  conditions = { Host = ["anket.mikroar.com"] }
+
+# --- form.mikroar.com -> /form.html ---
+# API çağrılarını bozmayalım
+[[redirects]]
+  from = "/api/*"
+  to = "/api/:splat"
+  status = 200
+  conditions = { Host = ["form.mikroar.com"] }
+
+# köke ve diğer tüm yollara /form.html döndür (query string korunur)
+[[redirects]]
+  from = "/"
+  to = "/form.html"
+  status = 200
+  conditions = { Host = ["form.mikroar.com"] }
+
+[[redirects]]
+  from = "/*"
+  to = "/form.html"
+  status = 200
+  conditions = { Host = ["form.mikroar.com"] }
