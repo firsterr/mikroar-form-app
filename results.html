@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="tr"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sonuçlar</title><link rel="stylesheet" href="/form.css">
+<style>table{border-collapse:collapse}td,th{border:1px solid #ddd;padding:6px}</style>
+</head><body>
+<main>
+  <h1 id="h">Sonuçlar</h1>
+  <p><button id="csvBtn">CSV indir</button></p>
+  <table id="t"><thead></thead><tbody></tbody></table>
+</main>
+<script>
+(async () => {
+  const p = new URLSearchParams(location.search);
+  const slug = p.get('slug');
+  if (!slug) { document.querySelector('#h').textContent='Slug yok'; return; }
+
+  // şema başlıklarını çekelim
+  const s = await (await fetch('/api/forms?slug='+encodeURIComponent(slug))).json();
+  const fields = (s.schema && s.schema.fields) || [];
+  const columns = ['created_at','ip', ...fields.map(f=>f.name)];
+
+  const r = await (await fetch('/api/responses?slug='+encodeURIComponent(slug))).json();
+  const rows = (r.rows || []).map(x => {
+    const ans = x.answers || {};
+    return [x.created_at, x.ip, ...fields.map(f => ans[f.name] ?? '')];
+  });
+
+  // başlık
+  document.querySelector('#h').textContent = `Sonuçlar: ${slug}`;
+  document.querySelector('#t thead').innerHTML =
+    '<tr>' + columns.map(c=>`<th>${c}</th>`).join('') + '</tr>';
+  document.querySelector('#t tbody').innerHTML =
+    rows.map(r=>'<tr>'+r.map(v=>`<td>${String(v).replaceAll('<','&lt;')}</td>`).join('')+'</tr>').join('');
+
+  // CSV
+  document.querySelector('#csvBtn').onclick = () => {
+    const csv = [columns.join(','), ...rows.map(r=>r.map(v=>`"${String(v).replaceAll('"','""')}"`).join(','))].join('\n');
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+    const a = Object.assign(document.createElement('a'), {
+      href: URL.createObjectURL(blob), download: `${slug}-results.csv`
+    });
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+})();
+</script>
+</body></html>
