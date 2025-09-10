@@ -98,6 +98,15 @@
 
   /* iOS metin yakınlaştırmayı engelle */
   input,select,textarea,button{font-size:16px}
+  /* İlk boyama için hafif iskelet kart (sadece boşluk tutar) */
+.skeleton {
+  background:#fff;
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:18px;
+  min-height:120px;
+  box-shadow:var(--shadow);
+}
 </style>
 </head>
 <body>
@@ -146,7 +155,17 @@
   const pathSlug = rawPath && !/\.html$/i.test(rawPath) ? rawPath : '';
   const slug     = new URLSearchParams(location.search).get('slug') || pathSlug;
   const API = '/api';
-
+// >>> BURAYI EKLE <<<
+if (slug) {
+  // İlk piksel: başlığı ve boş form kartını anında göster
+  titleEl.textContent = decodeURIComponent(slug);
+  titleEl.style.display = 'block';
+  formEl.style.display = 'block';
+  // Tek, hafif bir placeholder kart
+  if (!formEl.innerHTML.trim()) {
+    formEl.innerHTML = '<div class="skeleton"></div>';
+  }
+}
   function showSkeleton(){
   formEl.style.display = 'block';
   formEl.innerHTML = `
