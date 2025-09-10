@@ -66,17 +66,10 @@
   from = "/admin"
   to   = "/admin.html"
   status = 200
-  # ... mevcut ayarlarınızın altına ekleyin
 [[edge_functions]]
 function = "form-ssr"
 path = "/form.html"
 
-# form.mikroar.com hostu rewrite ediyor ama Edge Function yine form.html üzerinde çalışacak.
-[[edge_functions]]
-function = "form-ssr"
-path = "/form.html"
-
-# İsteğe bağlı: form.html altındaki varyantlar için de çalışsın
 [[edge_functions]]
 function = "form-ssr"
 path = "/form.html/*"
