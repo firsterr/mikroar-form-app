@@ -18,6 +18,9 @@ html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font:16px/1.
 a{color:var(--primary);text-decoration:none}
 .wrap{max-width:860px;margin:48px auto;padding:0 20px}
 
+<link rel="preload" href="/form.css" as="style" onload="this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="/form.css"></noscript>
+
 /* --------- Başlık / Açıklama --------- */
 h1{font-size:34px;margin:0 0 12px;font-weight:800;letter-spacing:-.01em}
 .muted{color:var(--muted)}
