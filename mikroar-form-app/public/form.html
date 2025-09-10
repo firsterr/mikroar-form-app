@@ -137,8 +137,72 @@
   const pickBtn  = $('#pickBtn');
   const listWarn = $('#listWarn');
 
-  // SSR ile geldiysek client-side render'ı atla; sadece submit handler'ı çalışsın
-const SSR_READY = document.getElementById('form')?.dataset?.ssr === '1';
+// SSR ile geldiysek: form HTML zaten dolu.
+// YAPILACAK TEK ŞEY: başlık/açıklama görünür ve submit handler'ı bağlamak.
+const SSR_READY = !!(window.__FORM && document.querySelector('#form[data-ssr="1"]'));
+if (SSR_READY) {
+  const slugSSR = window.__FORM.slug;
+  // Emniyet: title/desc görünür (SSR zaten bastı ama stil koruması için):
+  document.getElementById('title').style.display = 'block';
+  if (window.__FORM.description) document.getElementById('desc').style.display = 'block';
+
+  // Sadece submit handler bağla, başka hiçbir render yapma:
+  formEl.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = formEl.querySelector('button[type="submit"]'); btn && (btn.disabled = true);
+
+    const answers = {};
+    [...formEl.elements].forEach(el => {
+      if (!el.name) return;
+      if (el.type === 'radio') { if (el.checked) answers[el.name] = el.value; }
+      else if (el.type === 'checkbox') {
+        const base = el.name.replace(/\[\]$/, '');
+        answers[base] = answers[base] || [];
+        if (el.checked) answers[base].push(el.value);
+      } else if (el.tagName === 'SELECT' || el.tagName === 'TEXTAREA' || el.type === 'text' || el.type === 'email'){
+        answers[el.name] = el.value;
+      }
+    });
+
+    try {
+      const r = await fetch(`/api/submit-form?slug=${encodeURIComponent(slugSSR)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept':'application/json' },
+        body: JSON.stringify({ answers })
+      });
+      let j = null; try { j = await r.json(); } catch {}
+
+      if (r.status === 409) {
+        // ikinci doldurma: uyarı
+        alertBottom.className = 'note warn';
+        alertBottom.textContent =
+          (j && (j.data?.message || j.message || j.error)) ||
+          'Bu anketi daha önce doldurmuşsunuz.';
+        alertBottom.style.display = 'block';
+        return;
+      }
+      if (r.ok && (j?.ok ?? true)) {
+        alertBottom.className = 'note ok';
+        alertBottom.textContent = 'Gönderildi, teşekkürler!';
+        alertBottom.style.display = 'block';
+        formEl.reset();
+      } else {
+        alertBottom.className = 'note err';
+        alertBottom.textContent = (j && (j.data?.message || j.message || j.error)) || `Hata: ${r.status}`;
+        alertBottom.style.display = 'block';
+      }
+    } catch (err) {
+      alertBottom.className = 'note err';
+      alertBottom.textContent = 'Bağlantı hatası: ' + err.message;
+      alertBottom.style.display = 'block';
+    } finally {
+      btn && (btn.disabled = false);
+    }
+  });
+
+  // Client tarafı başka hiçbir şey yapmasın:
+  return;
+}
   
   // :has() desteği yoksa kök elemana sınıf ekle (CSS fallback için)
   if (!(CSS.supports && CSS.supports('selector(:has(*))'))) {
