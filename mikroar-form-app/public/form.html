@@ -156,7 +156,25 @@
   `;
 }
 function clearSkeleton(){ formEl.innerHTML = ''; }
+  
+// slug tespitinden sonra…
+if (window.__SCHEMA__) {
+  // sanki API'den gelmiş gibi işleyelim (mevcut render akışın)
+  const s = { ok: true, schema: window.__SCHEMA__ };
+  // burada senin zaten yaptığın render kodunu çağır
+  // Örn: clearSkeleton(); title/desc/qs çiz; formEl.style.display='block';
+  // Aşağıdaki satırı mevcut "then(j => { ... })" bloğunun içeriğiyle aynı yap.
+  (function render(j){ 
+    /* mevcut başarı bloğunu buraya taşı / ya da fonksiyonlaştırıp çağır */
+  })(s);
+  return; // fetch’e hiç gitme
+}
 
+// --- Enjekte yoksa normal yol (mevcut fetch) ---
+fetch(`${API}/forms?slug=${encodeURIComponent(slug)}`)
+  .then(r => r.json())
+  .then(j => { /* mevcut başarı bloğun */ })
+  .catch(e => { /* mevcut hata bloğun */ });
   // Alt uyarı şeridi (Google Forms gibi buton altına gelir)
   const alertBottom = document.createElement('p');
   alertBottom.id = 'alertBottom';
