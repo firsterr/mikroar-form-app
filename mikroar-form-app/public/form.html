@@ -291,7 +291,8 @@
         formEl.appendChild(mk('p',{class:'after center'},
           'Bu form mikroar.com alanında oluşturuldu. Uygunsuzluk bildirimi veya iletişim için site yöneticisine başvurabilirsiniz.'
         ));
-
+// >>> SADECE BAŞARILI YÜKLEMEDEN SONRA BRAND EKLE <<<
+formEl.appendChild(mk('p', { class: 'brand' }, 'mikroAR'));
         formEl.style.display = 'block';
       }
     })
