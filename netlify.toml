@@ -66,3 +66,7 @@
   from = "/admin"
   to   = "/admin.html"
   status = 200
+  # ---- Edge Function: form.html için SSR ----
+[[edge_functions]]
+path = "/form.html"
+function = "form-ssr"
