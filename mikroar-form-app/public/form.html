@@ -89,6 +89,40 @@
 
 /* Soru kartları form genişliğini tam kullansın */
 #form .row{ width: 100%; }
+  /* — Merkezde tut (web + mobil) — */
+#title, #desc, #alert, #form, #pickWrap{
+  width: min(720px, 100%);
+  margin-inline: auto;     /* yatayda ortala */
+}
+
+/* — Radio/Checkbox gruplarını DİKEY diz — */
+.row > div{                /* grup container'ı */
+  display: block;          /* her seçenek satırı alt alta gelsin */
+}
+.row > div > div{          /* tek tek seçenek satırları */
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0;
+}
+
+/* — Dokunma alanını büyüt, tek elle kullanım kolay olsun — */
+.row > div > div label{
+  display: inline-block;
+  padding: 10px 12px;
+  border-radius: 10px;
+  transition: background .15s, box-shadow .15s;
+}
+input[type=radio]:checked + label,
+input[type=checkbox]:checked + label{
+  background: #eef2ff;
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+/* Select ve metin alanları kenarlara yapışmasın */
+select, textarea, input[type=text], input[type=email]{
+  width: 100%;
+}
 </style>
 </head>
 <body>
