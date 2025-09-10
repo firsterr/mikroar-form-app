@@ -22,6 +22,15 @@ export async function handler(event) {
   const one = Array.isArray(rows) ? rows[0] : null;
   if (!one) return json(404, { ok: false, error: 'not found' });
 
+  return {
+  statusCode: 200,
+  headers: {
+    'Content-Type': 'application/json; charset=utf-8',
+    // Netlify edge cache:
+    'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=30'
+  },
+  body: JSON.stringify({ ok: true, schema })
+};
   // normalize: always provide schema.questions (and mirror to fields for eski clientlar)
   const qs = one.schema?.questions || one.schema?.fields || [];
   const schema = {
