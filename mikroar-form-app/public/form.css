@@ -110,3 +110,55 @@ button[disabled]{opacity:.6;cursor:not-allowed}
   .wrap{padding:0 14px}
   h1{font-size:28px}
 }
+
+/* ==== Google Forms benzeri sade tema (override) ==== */
+:root{
+  --g-pad: 14px;
+  --g-radius: 12px;
+  --g-shadow: 0 6px 20px rgba(0,0,0,.06);
+  --g-primary: #1a73e8;
+  --g-muted: #6b7280;
+  --g-border: #e5e7eb;
+  --g-bg: #f7f7fb;
+}
+html,body{ background: var(--g-bg); }
+#app{ max-width: 900px; margin: 24px auto; padding: 0 12px; }
+#title{
+  font-size: 28px; font-weight: 700; margin: 18px 0;
+}
+.form-desc{
+  margin: 8px 0 18px; color: var(--g-muted);
+}
+form#form{
+  background: #fff; padding: 8px;
+  border-radius: 16px; box-shadow: var(--g-shadow);
+}
+.row{
+  background:#fff; border:1px solid var(--g-border);
+  border-radius: var(--g-radius);
+  padding: var(--g-pad);
+  margin: 12px 0;
+}
+.q-title{ font-weight: 600; margin-bottom: 6px; display:flex; align-items:center; gap:6px; }
+.q-title .req{ color:#d93025; }
+.options{ display:grid; gap:10px; }
+.opt{ display:flex; gap:10px; align-items:center; }
+input[type="text"], input[type="email"], input[type="number"], select, textarea{
+  width:100%; border:1px solid var(--g-border); border-radius: 10px;
+  padding: 10px 12px; outline: none;
+}
+input:focus, select:focus, textarea:focus{
+  border-color: var(--g-primary); box-shadow: 0 0 0 3px rgba(26,115,232,.15);
+}
+.actions{
+  display:flex; justify-content:flex-start; padding: 8px 0 4px;
+}
+#btnSend{
+  background: var(--g-primary); color:#fff; border:none; border-radius: 999px;
+  padding: 10px 18px; font-weight:600; cursor:pointer;
+  box-shadow: 0 4px 14px rgba(26,115,232,.25);
+}
+#btnSend[aria-busy="true"]{ opacity:.75; cursor:progress; }
+.note.center{ color: var(--g-muted); }
+.after.center{ color: var(--g-muted); margin: 12px 0 4px; }
+.brand{ color: var(--g-muted); font-size: 12px; margin: 0 0 12px; }
