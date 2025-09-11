@@ -1,3 +1,7 @@
+# =========================
+# Netlify config — MIKROAR
+# =========================
+
 [build]
   publish = "mikroar-form-app/public"
   command = ""
@@ -5,26 +9,31 @@
 [functions]
   directory = "mikroar-form-app/netlify/functions"
 
-# --- API / Functions (öncelik en üstte) ---
+# ---- Edge Functions (TEK kez tanımlanır) ----
+[edge_functions]
+  bundler = "esbuild"
+
+[[edge_functions]]
+  function = "form-ssr"
+  path = "/form.html"
+
+# ---- API / Functions ----
 [[redirects]]
   from = "/api/forms"
   to   = "/.netlify/functions/forms"
   status = 200
-  force = true
 
 [[redirects]]
   from = "/api/admin/forms"
   to   = "/.netlify/functions/forms-admin"
   status = 200
-  force = true
 
 [[redirects]]
   from = "/api/*"
   to   = "/.netlify/functions/:splat"
   status = 200
-  force = true
 
-# --- Kısa link fonksiyonları ---
+# ---- Kısa link fonksiyonları ----
 [[redirects]]
   from = "/s/:code"
   to   = "/.netlify/functions/go?code=:code"
@@ -35,7 +44,7 @@
   to   = "/.netlify/functions/share?slug=:slug"
   status = 200
 
-# --- Güvenlik / Önbellek ---
+# ---- Güvenlik / Önbellek header'ları ----
 [[headers]]
   for = "/*"
   [headers.values]
@@ -54,25 +63,77 @@
   [headers.values]
     Cache-Control = "no-cache"
 
-# --- route yardımcıları ---
-# / → index.html (index de hosta göre gerekli sayfaya yönlendiriyor)
-[[redirects]]
-  from = "/"
-  to   = "/index.html"
-  status = 200
+# =========================
+# anket.mikroar.com → /admin.html
+# =========================
 
-# admin kısa yol
+# API mutlaka fonksiyonlara gitsin
+[[redirects]]
+  from = "/api/*"
+  to   = "/.netlify/functions/:splat"
+  status = 200
+  conditions = { Host = ["anket.mikroar.com"] }
+
+# Bu hostta /form.html görülmesin → admin'e yönlendir
+[[redirects]]
+  from = "/form.html"
+  to   = "/admin.html"
+  status = 301
+  conditions = { Host = ["anket.mikroar.com"] }
+
+# /admin ve kök istekleri admin.html'e ver
 [[redirects]]
   from = "/admin"
   to   = "/admin.html"
   status = 200
-  # ---- Edge Function: form.html için SSR ----
-[[edge_functions]]
-path = "/form.html"
-function = "form-ssr"
-[edge_functions]
-  bundler = "esbuild"
+  conditions = { Host = ["anket.mikroar.com"] }
 
-[[edge_functions]]
-  function = "form-ssr"
-  path = "/form.html"
+[[redirects]]
+  from = "/"
+  to   = "/admin.html"
+  status = 200
+  conditions = { Host = ["anket.mikroar.com"] }
+
+# Kalan her şey admin.html
+[[redirects]]
+  from = "/*"
+  to   = "/admin.html"
+  status = 200
+  conditions = { Host = ["anket.mikroar.com"] }
+
+# =========================
+# form.mikroar.com → /form.html
+# =========================
+
+# API mutlaka fonksiyonlara gitsin
+[[redirects]]
+  from = "/api/*"
+  to   = "/.netlify/functions/:splat"
+  status = 200
+  conditions = { Host = ["form.mikroar.com"] }
+
+# Admin sayfaları görünmesin → form.html
+[[redirects]]
+  from = "/admin"
+  to   = "/form.html"
+  status = 301
+  conditions = { Host = ["form.mikroar.com"] }
+
+[[redirects]]
+  from = "/admin.html"
+  to   = "/form.html"
+  status = 301
+  conditions = { Host = ["form.mikroar.com"] }
+
+# Kök ve kalan her şey form.html
+[[redirects]]
+  from = "/"
+  to   = "/form.html"
+  status = 200
+  conditions = { Host = ["form.mikroar.com"] }
+
+[[redirects]]
+  from = "/*"
+  to   = "/form.html"
+  status = 200
+  conditions = { Host = ["form.mikroar.com"] }
