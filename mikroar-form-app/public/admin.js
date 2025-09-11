@@ -155,7 +155,32 @@ async function loadForm() {
 
   toast('Form yüklendi.');
 }
+// === SLUG İLE FORM YÜKLE (FULL REPLACE) ===
+async function loadFormBySlug(slug) {
+  if (!slug) throw new Error("Slug gerekli");
+  const r = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`, { headers:{accept:"application/json"} });
+  const txt = await r.text();
+  let form = null;
+  try {
+    const j = JSON.parse(txt || "{}");
+    // Esnek şema: {form} | {data} | dizi
+    form = j.form || j.data || (Array.isArray(j) ? j[0] : null);
+  } catch(_) {}
 
+  if (!r.ok || !form) {
+    throw new Error(`Bulunamadı (HTTP ${r.status})`);
+  }
+
+  // Formu UI'a bas
+  $("#slug").value = form.slug || "";
+  $("#title").value = form.title || "";
+  $("#desc").value = (form.schema && form.schema.description) || "";
+  $("#status").value = form.active ? "Aktif" : "Pasif";
+
+  // Soruları doldur (schema.questions)
+  const qs = (form.schema && Array.isArray(form.schema.questions)) ? form.schema.questions : [];
+  renderQuestions(qs);
+}
 // ---- SAVE
 async function saveForm() {
   try {
