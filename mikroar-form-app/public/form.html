@@ -3,9 +3,27 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <!-- İlk boyayı garanti eden bayrak + kritik CSS -->
+<script>
+  // slug varsa: <html data-slug> → skeleton; yoksa picker
+  if (new URLSearchParams(location.search).has('slug')) {
+    document.documentElement.setAttribute('data-slug','1');
+  }
+</script>
+<style>
+  /* CSS gelmeden bile arka plan ve ilk içerik görünsün */
+  html,body{background:#f7f7fb}
+  /* Varsayılan sakla; bayrakla aç */
+  #picker{display:none}
+  #skeleton{display:none}
+  /* slug yoksa picker, varsa skeleton ANINDA görünür (JS beklemeden) */
+  html:not([data-slug]) #picker{display:block}
+  html[data-slug] #skeleton{display:block}
+</style>
   <title>Anket</title>
   <link rel="preload" href="/form.css" as="style" fetchpriority="high">
   <link rel="stylesheet" href="/form.css?v=5"/>
+  <link rel="preconnect" href="https://<SIZIN-SUPABASE-PROJE>.supabase.co" crossorigin>
   <style>
     :root{ --g-pad:14px; --g-radius:12px; --g-primary:#1a73e8; --g-muted:#6b7280; --g-border:#e5e7eb; --g-bg:#f7f7fb; --g-shadow:0 6px 20px rgba(0,0,0,.06) }
     html,body{ background:var(--g-bg) }
@@ -65,7 +83,7 @@
     <!-- Gerçek form -->
     <form id="form" novalidate></form>
 
-    <div id="skeleton" class="skeleton" aria-hidden="true" style="display:none">
+   <div id="skeleton" class="skeleton" aria-hidden="true">
       <div class="bar" style="width:50%"></div>
       <div class="bar" style="width:85%"></div>
       <div class="bar" style="width:70%"></div>
