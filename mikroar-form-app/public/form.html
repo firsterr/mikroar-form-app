@@ -124,26 +124,45 @@
         return;
       }
 
-      // SSR yoksa: hafif skeleton + tek fetch
-      show($('#skeleton'));
-      try {
-        const params = new URLSearchParams(location.search);
-        const slug = params.get('slug');
-        if (!slug) throw new Error('slug gerekli');
+ 
+    // SSR yoksa: hafif skeleton + tek fetch
+show($('#skeleton'));
+try {
+  const params = new URLSearchParams(location.search);
+  const slug = params.get('slug');
+  if (!slug) throw new Error('slug gerekli');
 
-        const r = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`, {
-          headers: { 'accept': 'application/json' }
-        });
-        if (!r.ok) throw new Error('Form bulunamadı');
+  const r = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`, {
+    headers: { 'accept': 'application/json' }
+  });
+  if (!r.ok) throw new Error('Form bulunamadı');
 
-        const { form } = await r.json();
-        window.__FORM = form; // ileride lazım olabilir
-        hide($('#skeleton'));
-        renderClient(form);
-      } catch (e) {
-        hide($('#skeleton'));
-        $('#app').innerHTML = `<p class="center">Hata: ${esc(e.message || e)}</p>`;
-      }
+  // --- ESNEK JSON ÇÖZÜMLEME (kritik hotfix) ---
+  let j;
+  try { j = await r.json(); } catch { j = null; }
+  // Olası payload formatları: {form:{...}}  |  {data:{...}}  |  {...}
+  const form = (j && (j.form || j.data)) ? (j.form || j.data) : j;
+
+  if (!form || typeof form !== 'object') {
+    throw new Error('Geçersiz yanıt (form verisi yok).');
+  }
+
+  // Güvenli alanlar (boşluklar)
+  form.title = form.title || 'Anket';
+  form.description = form.description || '';
+  if (typeof form.schema === 'string') {
+    try { form.schema = JSON.parse(form.schema); } catch { form.schema = {}; }
+  }
+  if (!form.schema || typeof form.schema !== 'object') form.schema = {};
+  if (!Array.isArray(form.schema.questions)) form.schema.questions = [];
+
+  window.__FORM = form; // ileride de kullanılabilir
+  hide($('#skeleton'));
+  renderClient(form);
+} catch (e) {
+  hide($('#skeleton'));
+  $('#app').innerHTML = `<p class="center">Hata: ${esc(e.message || e)}</p>`;
+}
     }
 
     // Başlat
