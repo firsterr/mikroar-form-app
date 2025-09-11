@@ -66,3 +66,27 @@ exports.handler = async (event) => {
     body: JSON.stringify({ ok:true, rows })
   };
 };
+
+import { createClient } from "@supabase/supabase-js";
+const URL = process.env.SUPABASE_URL;
+const SRV = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+const db = createClient(URL, SRV, { auth: { persistSession: false } });
+
+const ipOf = h =>
+  h["x-nf-client-connection-ip"] || h["client-ip"] || (h["x-forwarded-for"] || "").split(",")[0] || null;
+
+export async function handler(event) {
+  if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
+
+  let body; try { body = JSON.parse(event.body || "{}"); } catch { body = {}; }
+
+  const form_slug = body.form_slug || body.slug || null;
+  const answers   = body.answers || null;
+  if (!form_slug || !answers) return { statusCode: 400, body: JSON.stringify({ error: "Eksik parametre" }) };
+
+  const { error } = await db.from("responses").insert([{ form_slug, answers, ip: ipOf(event.headers || {}) }]);
+  if (error) { console.error("responses insert error:", error); return { statusCode: 500, body: JSON.stringify({ error: "Yanıt kaydedilemedi." }) }; }
+
+  return { statusCode: 200, headers: { "content-type": "application/json" }, body: JSON.stringify({ ok: true }) };
+}
