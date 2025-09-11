@@ -107,3 +107,36 @@ exports.handler = async (event) => {
     return { statusCode: 500, body: JSON.stringify({ ok:false, error: err.message }) };
   }
 };
+
+import { createClient } from "@supabase/supabase-js";
+const URL = process.env.SUPABASE_URL;
+const SRV = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY;
+const db  = createClient(URL, SRV, { auth: { persistSession: false } });
+
+export async function handler(event){
+  const token = event.headers["x-admin-token"] || event.headers["x-admin-key"];
+  if (!token || token !== process.env.ADMIN_TOKEN) return { statusCode: 401, body: "unauthorized" };
+  if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
+
+  let body; try { body = JSON.parse(event.body || "{}"); } catch { body = {}; }
+  const { slug, title, description, questions, schema, active } = body;
+  if (!slug) return { statusCode: 400, body: "slug gerekli" };
+
+  // description kolonun yok → description'ı schema.description'a göm.
+  const baseSchema = typeof schema === "string" ? safeJSON(schema) : (schema || {});
+  if (description && !baseSchema.description) baseSchema.description = description;
+  if (Array.isArray(questions)) baseSchema.questions = questions;
+
+  const payload = {
+    slug,
+    title: title || null,
+    schema: baseSchema,
+    active: typeof active === "boolean" ? active : true
+  };
+
+  const { error } = await db.from("forms").upsert(payload, { onConflict: "slug" });
+  if (error) return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
+  return { statusCode: 200, body: JSON.stringify({ ok: true }) };
+}
+
+function safeJSON(s){ try{ return JSON.parse(s || "{}"); } catch { return {}; } }
