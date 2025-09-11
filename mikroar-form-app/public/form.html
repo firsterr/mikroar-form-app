@@ -97,7 +97,7 @@
   </div>
 
   <script>
-    // --- Token helpers (session bazlı) ---
+   // Token (sadece liste için)
 const TOKEN_KEY = 'admintoken';
 function getTokenForList() {
   let t = sessionStorage.getItem(TOKEN_KEY);
@@ -234,13 +234,14 @@ function openSlugPicker(){
     <div class="modal">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <h2 style="margin:0">Bir form seçin</h2>
-        <div>
-          <button id="logout" class="close" title="Çıkış">↩︎</button>
-          <button class="close" aria-label="Kapat">&times;</button>
+        <div style="display:flex;gap:6px">
+          <button id="authBtn" class="btn-mini" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#f8f9fb;cursor:pointer">Giriş</button>
+          <button class="close" aria-label="Kapat" style="border:none;background:transparent;font-size:20px;cursor:pointer">&times;</button>
         </div>
       </div>
       <label style="display:block;margin:8px 0 6px;font-size:12px;opacity:.7">Listeden seç (ilk 200 kayıt)</label>
       <select id="slugSelect" size="12" style="width:100%"></select>
+      <div id="msg" style="margin-top:8px;color:#6b7280"></div>
       <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end">
         <button id="goBtn" style="padding:10px 14px;border:none;border-radius:10px;background:var(--g-primary);color:#fff;font-weight:600;cursor:pointer">Git</button>
       </div>
@@ -248,27 +249,51 @@ function openSlugPicker(){
   document.body.appendChild(wrap);
 
   const close = ()=>wrap.remove();
-  wrap.querySelectorAll('.close').forEach(b=>b.addEventListener('click', close));
-  wrap.querySelector('#logout').addEventListener('click', ()=>{ clearTokenForList(); });
+  wrap.querySelector('.close').addEventListener('click', close);
 
   const listEl = wrap.querySelector('#slugSelect');
-  const go     = (slug)=>{ if(slug) location.href = `/form.html?slug=${encodeURIComponent(slug)}`; };
+  const msgEl  = wrap.querySelector('#msg');
+  const authBtn= wrap.querySelector('#authBtn');
 
+  const setAuthUI = ()=>{
+    const authed = !!sessionStorage.getItem(TOKEN_KEY);
+    authBtn.textContent = authed ? 'Çıkış' : 'Giriş';
+  };
+
+  authBtn.addEventListener('click', ()=>{
+    if (sessionStorage.getItem(TOKEN_KEY)) { clearTokenForList(); }
+    else { getTokenForList(); }
+    setAuthUI(); fetchList();
+  });
+
+  const go = (slug)=>{ if(slug && !listEl.disabled) location.href = `/form.html?slug=${encodeURIComponent(slug)}`; };
   listEl.addEventListener('dblclick', ()=> go(listEl.value));
   listEl.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); go(listEl.value); }});
   wrap.querySelector('#goBtn').addEventListener('click', ()=> go(listEl.value));
 
-  const token = getTokenForList();
-  if(!token){ listEl.innerHTML='<option>Yetkisiz: Anahtar gerekli</option>'; listEl.disabled=true; return; }
+  function fetchList(){
+    const token = sessionStorage.getItem(TOKEN_KEY);
+    if(!token){
+      listEl.innerHTML = '';
+      listEl.disabled = true;
+      msgEl.textContent = 'Yetkisiz: Listeyi görmek için ADMIN_TOKEN girin.';
+      return;
+    }
+    msgEl.textContent = 'Yükleniyor…';
+    fetch('/api/forms-list', { headers:{ accept:'application/json', 'x-admin-token': token } })
+      .then(r=> r.ok ? r.json() : Promise.reject())
+      .then(j=>{
+        const items = Array.isArray(j?.items) ? j.items.slice(0,200) : [];
+        listEl.innerHTML = items.map(it=>`<option value="${it.slug}">${(it.title||it.slug)} — ${it.slug}</option>`).join('');
+        listEl.disabled = items.length===0;
+        msgEl.textContent = items.length ? '' : 'Kayıt yok.';
+        if(items.length) listEl.selectedIndex = 0;
+      })
+      .catch(()=>{ listEl.innerHTML=''; listEl.disabled=true; msgEl.textContent='Yetkisiz veya liste alınamadı.'; });
+  }
 
-  fetch('/api/forms-list', { headers:{ accept:'application/json', 'x-admin-token': token } })
-    .then(r=> r.ok ? r.json() : Promise.reject(new Error('Yetkisiz')))
-    .then(j=>{
-      const items = Array.isArray(j?.items) ? j.items.slice(0,200) : [];
-      listEl.innerHTML = items.map(it=>`<option value="${it.slug}">${(it.title||it.slug)} — ${it.slug}</option>`).join('');
-      if(items.length) listEl.selectedIndex = 0;
-    })
-    .catch(()=>{ listEl.innerHTML='<option>Yetkisiz veya liste alınamadı</option>'; listEl.disabled=true; });
+  setAuthUI();
+  fetchList();
 }
     // --- Başlat
     async function bootstrap(){
