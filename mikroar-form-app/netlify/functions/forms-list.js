@@ -1,34 +1,37 @@
-// Netlify Function — return shape: { items: [...] }
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type'
-};
+// netlify/functions/forms-list.js
+const { createClient } = require('@supabase/supabase-js');
 
 exports.handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: CORS, body: '' };
-  if (event.httpMethod !== 'GET') return { statusCode: 405, headers: CORS, body: 'Method Not Allowed' };
+  try {
+    // --- Auth gate ---
+    const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
+    const hdrToken = event.headers['x-admin-token'] || event.headers['X-Admin-Token'] || '';
+    const qToken   = (event.queryStringParameters && event.queryStringParameters.token) || '';
+    const token = hdrToken || qToken;
+    if (!ADMIN_TOKEN || token !== ADMIN_TOKEN) {
+      return { statusCode: 401, body: JSON.stringify({ error: 'unauthorized' }) };
+    }
 
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const KEY =
-    process.env.SUPABASE_SERVICE_ROLE ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.SUPABASE_ANON_KEY;
+    // --- Supabase client (server role) ---
+    const url  = process.env.SUPABASE_URL;
+    const key  = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_ANON_KEY;
+    const sb   = createClient(url, key, { auth: { persistSession: false } });
 
-  if (!SUPABASE_URL || !KEY) {
-    return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: 'supabase-env-missing' }) };
+    // --- Data ---
+    const { data, error } = await sb
+      .from('forms')
+      .select('slug, title')
+      .order('created_at', { ascending: false })
+      .limit(200);
+
+    if (error) throw error;
+
+    return {
+      statusCode: 200,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ items: data || [] })
+    };
+  } catch (e) {
+    return { statusCode: 500, body: JSON.stringify({ error: String(e.message || e) }) };
   }
-
-  const url = `${SUPABASE_URL}/rest/v1/forms?select=slug,title,active,created_at&order=created_at.desc&limit=200`;
-  const r = await fetch(url, { headers: { apikey: KEY, Authorization: `Bearer ${KEY}` } });
-  const data = await r.json().catch(() => []);
-  if (!r.ok) {
-    return { statusCode: r.status, headers: CORS, body: JSON.stringify({ error: 'supabase-error' }) };
-  }
-
-  const items = (Array.isArray(data) ? data : [])
-    .filter(f => f.active !== false)
-    .map(f => ({ slug: f.slug, title: f.title || f.slug, created_at: f.created_at }));
-
-  return { statusCode: 200, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) };
 };
