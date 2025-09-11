@@ -1,77 +1,34 @@
+// Netlify Function — return shape: { form: {...} }
+const json = (code, obj) => ({
+  statusCode: code,
+  headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+  body: JSON.stringify(obj)
+});
 
-// netlify/functions/forms.js
-export async function handler(event) {
-  if (event.httpMethod !== 'GET') {
-    return { statusCode: 405, headers: { 'Allow': 'GET' }, body: 'Method Not Allowed' };
-  }
+exports.handler = async (event) => {
+  if (event.httpMethod !== 'GET') return json(405, { error: 'Method Not Allowed' });
 
-  const { SUPABASE_URL, SUPABASE_ANON_KEY } = process.env;
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    return json(500, { ok: false, error: 'Missing Supabase env vars' });
-  }
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const KEY =
+    process.env.SUPABASE_SERVICE_ROLE ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_ANON_KEY;
 
-  const slug = new URLSearchParams(event.rawQuery || event.queryStringParameters).get('slug');
-  if (!slug) return json(400, { ok: false, error: 'slug required' });
+  const slug = (event.queryStringParameters?.slug || '').trim();
+  if (!slug) return json(400, { error: 'slug gerekli' });
+  if (!SUPABASE_URL || !KEY) return json(500, { error: 'supabase-env-missing' });
 
-  const url = `${SUPABASE_URL}/rest/v1/forms?slug=eq.${encodeURIComponent(slug)}&select=*`;
-  const r = await fetch(url, {
-    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
-  });
+  const url = `${SUPABASE_URL}/rest/v1/forms`
+            + `?slug=eq.${encodeURIComponent(slug)}`
+            + `&select=id,slug,title,schema,active,created_at`;
 
+  const r = await fetch(url, { headers: { apikey: KEY, Authorization: `Bearer ${KEY}` } });
   const rows = await r.json().catch(() => []);
-  const one = Array.isArray(rows) ? rows[0] : null;
-  if (!one) return json(404, { ok: false, error: 'not found' });
+  if (!r.ok || !Array.isArray(rows) || rows.length === 0) {
+    return json(404, { error: 'Form bulunamadı' });
+  }
 
- 
-  // normalize: always provide schema.questions (and mirror to fields for eski clientlar)
-  const qs = one.schema?.questions || one.schema?.fields || [];
-  const schema = {
-    slug: one.slug,
-    title: one.title,
-    description: one.description,
-    active: !!one.active,
-    questions: qs,
-    fields: qs
-  };
-
-  return json(200, { ok: true, schema });
-}
-
-function json(code, obj) {
-  return {
-    statusCode: code,
-    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-    body: JSON.stringify(obj)
-  };
-}
-
-import { createClient } from "@supabase/supabase-js";
-
-// ENV adını her iki ihtimale göre oku
-const URL = process.env.SUPABASE_URL;
-const SRV = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-const db = createClient(URL, SRV, { auth: { persistSession: false } });
-
-export async function handler(event) {
-  if (event.httpMethod !== "GET") return { statusCode: 405, body: "Method Not Allowed" };
-
-  const u = new URL(event.rawUrl || `http://x${event.path}`);
-  const slug = u.searchParams.get("slug") || event.queryStringParameters?.slug;
-  if (!slug) return { statusCode: 400, body: JSON.stringify({ error: "slug gerekli" }) };
-
-  const { data, error } = await db
-    .from("forms")
-    // description yok; active alanını da döndürelim
-    .select("id, slug, title, schema, active, created_at")
-    .eq("slug", slug)
-    .maybeSingle();
-
-  if (error || !data) return { statusCode: 404, body: JSON.stringify({ error: "Form bulunamadı" }) };
-
-  return {
-    statusCode: 200,
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ form: data })
-  };
-}
+  const form = rows[0];
+  if (typeof form.schema === 'string') { try { form.schema = JSON.parse(form.schema); } catch { form.schema = {}; } }
+  return json(200, { form });
+};
