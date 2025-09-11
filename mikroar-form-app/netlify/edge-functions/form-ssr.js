@@ -1,92 +1,129 @@
-// Edge SSR: /form.html?slug=... isteğinde formu server-side üretir
-export default async (request, context) => {
-  const url = new URL(request.url);
-  if (url.pathname !== '/form.html') return context.next();
+// mikroar-form-app/netlify/edge-functions/form-ssr.js
+// Amaç: /form.html?slug=... için şemayı EDGE’de çekip HTML’i sunucu tarafında çizmek (ilk boyamada “boş ekran/yükleniyor” yok)
 
-  const slug = url.searchParams.get('slug');
-  if (!slug) return context.next();
+function esc(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 
-  // Functions üzerinden şemayı çek
-  const apiURL = new URL(`/.netlify/functions/forms?slug=${encodeURIComponent(slug)}`, url.origin);
-  let schema = null;
-  try {
-    const r = await fetch(apiURL.toString(), { headers: { Accept: 'application/json' } });
-    if (!r.ok) return context.next();
-    const j = await r.json();
-    if (!j?.ok || !j?.schema) return context.next();
-    schema = j.schema;
-  } catch { return context.next(); }
+function fieldHTML(q, idx) {
+  const type  = String(q.type || "text").toLowerCase();
+  const name  = q.name || `q${idx + 1}`;
+  const label = q.label || `Soru ${idx + 1}`;
+  const req   = q.required ? " required" : "";
+  const opts  = Array.isArray(q.options) ? q.options.map(v => String(v)) : [];
 
-  const baseRes = await context.next();
-  const ct = baseRes.headers.get('content-type') || '';
-  if (!ct.includes('text/html')) return baseRes;
+  // ortak kap
+  const start = `<div class="row"><label for="f_${esc(name)}">${esc(label)}${q.required ? " *" : ""}</label>`;
+  const end   = `</div>`;
 
-  // Yardımcılar
-  const esc = (s) => String(s ?? '')
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
-
-  const renderQ = (q, i) => {
-    const type = String(q.type || 'text').toLowerCase();
-    const name = q.name || `q${i+1}`;
-    const label = q.label || `Soru ${i+1}`;
-    const req = q.required ? ' required' : '';
-    const opts = Array.isArray(q.options) ? q.options : [];
-
-    if (type === 'radio' || type === 'checkbox') {
-      if (!opts.length) {
-        return `<div class="row"><label>${esc(label)}${req ? ' *' : ''}</label><div class="muted">Bu soru için seçenek tanımlı değil.</div></div>`;
-      }
-      const items = opts.map((opt,j)=>{
-        const id = `f_${name}_${j}`;
-        return `<div><input id="${id}" type="${type}" name="${esc(name)}" value="${esc(opt)}"${type==='radio'&&req?' required':''}><label for="${id}">${esc(opt)}</label></div>`;
-      }).join('');
-      return `<div class="row"><label>${esc(label)}${req ? ' *' : ''}</label><div>${items}</div></div>`;
+  if (type === "radio" || type === "checkbox") {
+    if (!opts.length) {
+      return `${start}<div class="muted">Bu soru için seçenek tanımlı değil.</div>${end}`;
     }
+    const items = opts.map((opt, i) => {
+      const id = `f_${name}_${i}`;
+      const n  = type === "checkbox" ? `${name}[]` : name;
+      // geniş tıklama alanı için label sarmalıyoruz
+      return `<label class="opt" for="${esc(id)}">
+                <input type="${type}" id="${esc(id)}" name="${esc(n)}" value="${esc(opt)}"${type === "radio" && q.required ? " required" : ""}>
+                <span>${esc(opt)}</span>
+              </label>`;
+    }).join("");
+    return `${start}<div class="choices">${items}</div>${end}`;
+  }
 
-    if (type === 'select') {
-      const options = opts.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');
-      const warn = opts.length ? '' : `<div class="muted">Bu soru için seçenek tanımlı değil.</div>`;
-      return `<div class="row"><label>${esc(label)}${req ? ' *' : ''}</label><select name="${esc(name)}"${req}><option value="" disabled selected>Seçiniz</option>${options}</select>${warn}</div>`;
-    }
+  if (type === "select") {
+    const first = `<option value="" disabled selected>Seçiniz</option>`;
+    const items = opts.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
+    const warn  = !opts.length ? `<div class="muted">Bu soru için seçenek tanımlı değil.</div>` : "";
+    return `${start}${warn}<select id="f_${esc(name)}" name="${esc(name)}"${req}>${first}${items}</select>${end}`;
+  }
 
-    if (type === 'textarea') {
-      return `<div class="row"><label>${esc(label)}${req ? ' *' : ''}</label><textarea name="${esc(name)}"${req}></textarea></div>`;
-    }
+  if (type === "textarea") {
+    return `${start}<textarea id="f_${esc(name)}" name="${esc(name)}"${req}></textarea>${end}`;
+  }
 
-    const it = type === 'email' ? 'email' : 'text';
-    return `<div class="row"><label>${esc(label)}${req ? ' *' : ''}</label><input type="${it}" name="${esc(name)}"${req}></div>`;
-  };
+  // text / email / default
+  const itype = type === "email" ? "email" : "text";
+  return `${start}<input type="${esc(itype)}" id="f_${esc(name)}" name="${esc(name)}"${req}>${end}`;
+}
 
-  const qs = (schema.questions || schema.fields || []).map(renderQ).join('');
-  const formInner = `${qs}<div class="actions"><button type="submit">Gönder</button></div><p class="foot-meta">Bu form mikroar.com alanında oluşturulmuştur.</p>`;
+export default async (req, context) => {
+  const url  = new URL(req.url);
+  const slug = url.searchParams.get("slug") || (url.pathname.endsWith(".html") ? "" : url.pathname.replace(/^\/+|\/+$/g, ""));
+  if (!slug) {
+    // slug yoksa SSR yok: normal dosyayı ver (liste ekranı zaten hızlı)
+    return context.next();
+  }
 
-  const full = {
+  // Paralel: sayfanın kendisi + API
+  const [baseRes, apiRes] = await Promise.all([
+    context.next(),                                  // /form.html statik dosya
+    fetch(new URL(`/api/forms?slug=${encodeURIComponent(slug)}`, req.url), {
+      headers: { "accept": "application/json" }
+    })
+  ]);
+
+  let json = null;
+  try { json = await apiRes.json(); } catch { /* yut */ }
+
+  if (!apiRes.ok || !json?.ok || !json?.schema) {
+    // API gelmediyse SSR denemeyelim; statik sayfayı olduğu gibi döndür
+    return baseRes;
+  }
+
+  const s  = json.schema || {};
+  const qs = Array.isArray(s.questions) ? s.questions : (Array.isArray(s.fields) ? s.fields : []);
+  const title = s.title || slug;
+  const desc  = s.description || "";
+
+  // Alanları HTML’e çevir
+  const fields = qs.map((q, i) => fieldHTML(q, i)).join("") +
+                 `<div class="actions"><button type="submit" class="primary">Gönder</button></div>` +
+                 `<p class="foot-meta">Bu form <strong>mikroar.com</strong> alanında oluşturulmuştur.</p>`;
+
+  // İstemci tarafı JS’in fetch yapmaması için boot veriyi gömelim
+  const boot = {
     slug,
-    title: schema.title || slug,
-    description: schema.description || '',
-    questions: (schema.questions || schema.fields || [])
+    schema: { title: s.title || "", description: s.description || "", questions: qs }
   };
+  const bootScript = `<script>window.__FORM__=${JSON.stringify(boot)};</script>`;
 
-  // HTML’e bas
-  const rewriter = new HTMLRewriter()
-    .on('h1#title', { element(el){ el.setInnerContent(full.title, {html:false}); el.setAttribute('style','display:block'); } })
-    .on('p#desc',   { element(el){
-      if (full.description) { el.setInnerContent(full.description, {html:false}); el.setAttribute('style','display:block'); }
-      else el.setAttribute('style','display:none');
-    }})
-    .on('form#form',{ element(el){
-      el.setAttribute('data-ssr','1');
-      el.removeAttribute('style');                 // display:none varsa kaldır
-      el.setAttribute('action', `/api/submit-form?slug=${encodeURIComponent(slug)}`);
-      el.setAttribute('method','POST');
-      el.setInnerContent(formInner, {html:true});  // SORULARI HTML OLARAK ENJEKTE ET
-    }})
-    .on('head', { element(el){
-      el.append(`<script id="__SSR_FORM__">window.__FORM=${JSON.stringify(full)};</script>`, {html:true});
-      el.append(`<meta name="ssr" content="1">`, {html:true});
-    }});
+  // DOM’u rewrite et: başlık, açıklama, form içeriği
+  const rewritten = new HTMLRewriter()
+    .on("h1#title", {
+      element(e) {
+        e.removeAttribute("style");
+        e.setInnerContent(esc(title), { html: false });
+      }
+    })
+    .on("p#desc", {
+      element(e) {
+        if (desc && String(desc).trim()) {
+          e.removeAttribute("style");
+          e.setInnerContent(esc(desc), { html: false });
+        }
+      }
+    })
+    .on("form#form", {
+      element(e) {
+        e.removeAttribute("style");              // display:none → kaldır
+        e.setInnerContent(fields, { html: true });
+      }
+    })
+    .on("body", {
+      element(e) {
+        e.append(bootScript, { html: true });
+      }
+    })
+    .transform(baseRes);
 
-  return rewriter.transform(baseRes);
+  return rewritten;
 };
 
-export const config = { path: '/form.html' };
+// Netlify eşleme
+export const config = { path: "/form.html" };
