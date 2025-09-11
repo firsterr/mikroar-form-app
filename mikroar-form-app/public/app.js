@@ -2,7 +2,21 @@
 
 (function () {
   "use strict";
-
+// --- Meta attrib helpers ---
+function getCookie(name){
+  return document.cookie.split('; ').find(r=>r.startsWith(name+'='))?.split('=')[1] || null;
+}
+function getUTM(){
+  const p = new URLSearchParams(location.search);
+  const o = {}; p.forEach((v,k)=>o[k]=v);
+  return o;
+}
+function getFbpFbc(){
+  const fbp = getCookie('_fbp');
+  const fbclid = new URLSearchParams(location.search).get('fbclid');
+  const fbc = fbclid ? `fb.1.${Date.now()}.${fbclid}` : null;
+  return { fbp, fbc };
+}
   // ---- Yardımcılar ----
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
@@ -125,7 +139,7 @@
   async function onSubmit(e) {
     e.preventDefault();
     const btn = $("#btnSend");
-
+try { if (window.fbq && event_id) window.fbq('track','Lead', { eventID: event_id }); } catch {}
     // Required kontrol
     const missing = validateRequired(formEl);
     if (missing.length > 0) {
@@ -137,7 +151,8 @@
       showError("Lütfen zorunlu alanları doldurun.");
       return;
     }
-
+const event_id = (crypto?.randomUUID?.() || (Date.now()+'-'+Math.random().toString(16).slice(2)));
+const { fbp, fbc } = getFbpFbc();
     // Veriyi derle
     const payload = {
   form_slug: window.__FORM?.slug || new URLSearchParams(location.search).get("slug") || null,
@@ -190,7 +205,14 @@ showSuccessView();
       }
     }
   }
-
+meta: {
+  ua: navigator.userAgent,
+  ts: new Date().toISOString(),
+  href: location.href,
+  event_id,          // <— dedupe anahtarı
+  fbp, fbc,          // <— attribution kalitesi
+  utm: getUTM()      // <— kampanya analitiği
+}
   // ---- Başlat ----
   function bootstrap() {
     if (!formEl) return;
