@@ -159,23 +159,28 @@
 
     try {
       const r = await fetch(SUBMIT_URL, {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json" },
-        body: JSON.stringify(payload)
-      });
+  method: "POST",
+  headers: { "content-type": "application/json", accept: "application/json" },
+  body: JSON.stringify(payload)
+});
 
-      if (!r.ok) {
-        // Alternatif endpoint fallback (opsiyonel)
-        // /api/answers --> bazı projelerde böyle adlandırılmış olabilir
-        const r2 = await fetch("/api/answers", {
-          method: "POST",
-          headers: { "content-type": "application/json", accept: "application/json" },
-          body: JSON.stringify(payload)
-        });
-        if (!r2.ok) throw new Error("Yanıt kaydedilemedi.");
-      }
+if (r.status === 409) {
+  showError("Bu anketi daha önce doldurmuşsunuz.");
+  // butonları eski haline getir
+  if (btn) { btn.disabled = false; btn.removeAttribute("aria-busy"); btn.textContent = "Gönder"; }
+  return;
+}
 
-      showSuccessView();
+if (!r.ok) {
+  const r2 = await fetch("/api/answers", {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!r2.ok) throw new Error("Yanıt kaydedilemedi.");
+}
+
+showSuccessView();
     } catch (err) {
       showError(err?.message || "Bir hata oluştu.");
       if (btn) {
