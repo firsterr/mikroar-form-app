@@ -1,92 +1,71 @@
 <!doctype html>
 <html lang="tr">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Anket</title>
-
-  <!-- Senin güncel dış stilin -->
   <link rel="preload" href="/form.css" as="style" fetchpriority="high">
-  <link rel="stylesheet" href="/form.css?v=6" />
-
-  <!-- Google Forms etkileşimleri (hafif) -->
+  <link rel="stylesheet" href="/form.css?v=5"/>
   <style>
-    /* Üst kart */
-    .gf-header{
-      background: linear-gradient(180deg,#fff,#fafbff);
-      border: 1px solid #e6e7ec;
-      border-radius: 16px;
-      box-shadow: 0 8px 24px rgba(17,24,39,.06);
-      padding: 22px;
-      margin: 24px auto 14px;
-    }
+    :root{ --g-pad:14px; --g-radius:12px; --g-primary:#1a73e8; --g-muted:#6b7280; --g-border:#e5e7eb; --g-bg:#f7f7fb; --g-shadow:0 6px 20px rgba(0,0,0,.06) }
+    html,body{ background:var(--g-bg) }
+    #app{ max-width:900px; margin:24px auto; padding:0 12px }
+    #title{ font-size:28px; font-weight:700; margin:18px 0; display:none }
+    .form-desc{ margin:8px 0 18px; color:var(--g-muted); display:none }
+    form#form{ background:#fff; padding:8px; border-radius:16px; box-shadow:var(--g-shadow); display:none }
+    .row{ background:#fff; border:1px solid var(--g-border); border-radius:var(--g-radius); padding:var(--g-pad); margin:12px 0 }
+    .q-title{ font-weight:600; margin-bottom:6px; display:flex; align-items:center; gap:6px }
+    .q-title .req{ color:#d93025 }
+    .options{ display:grid; gap:10px }
+    .opt{ display:flex; gap:10px; align-items:center }
+    input[type="text"], input[type="email"], input[type="number"], select, textarea{ width:100%; border:1px solid var(--g-border); border-radius:10px; padding:10px 12px; outline:none }
+    input:focus, select:focus, textarea:focus{ border-color:var(--g-primary); box-shadow:0 0 0 3px rgba(26,115,232,.15) }
+    .actions{ display:flex; justify-content:flex-start; padding:8px 0 4px }
+    #btnSend{ background:var(--g-primary); color:#fff; border:none; border-radius:999px; padding:10px 18px; font-weight:600; cursor:pointer; box-shadow:0 4px 14px rgba(26,115,232,.25) }
+    #btnSend[aria-busy="true"]{ opacity:.75; cursor:progress }
+    .after.center{ color:var(--g-muted); margin:12px 0 4px; text-align:center }
+    .brand{ color:var(--g-muted); font-size:12px; margin:0 0 12px; text-align:left }
+    .note.center{ color:#b91c1c; text-align:center }
 
-    /* Seçenek hover/seçili */
-    label.opt{
-      padding: 10px 12px;
-      border-radius: 10px;
-      transition: background .15s ease, box-shadow .15s ease;
-      cursor: pointer;
-    }
-    label.opt:hover{
-      background: #f4f6ff;
-      box-shadow: 0 0 0 3px rgba(26,115,232,.10) inset;
-    }
-    /* Modern tarayıcılarda seçili vurgusu */
-    label.opt:has(input:checked){
-      background: #eef3ff;
-      box-shadow: 0 0 0 3px rgba(26,115,232,.20) inset;
-    }
-    label.opt input{ margin: 0 6px 0 2px; }
+    /* Skeleton */
+    .skeleton{ padding:16px }
+    .skeleton .bar{ height:14px; margin:10px 0; border-radius:6px; background:linear-gradient(90deg,#eee,#f5f5f5,#eee) }
 
-    /* Skeleton yalnızca CSR fallback'te (gerekirse) */
-    .skeleton{ display:none; padding:16px; }
-    .skeleton .bar{ height:14px; margin:10px 0; border-radius:6px; background:linear-gradient(90deg,#eee,#f5f5f5,#eee); }
-
-    /* Slug picker (liste + manuel) */
-    .modal-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; z-index:9999; }
-    .modal{
-      background:#fff; width:min(720px,92vw); max-height:80vh; overflow:auto;
-      border-radius:14px; padding:18px; box-shadow:0 20px 60px rgba(0,0,0,.25); position:relative;
-    }
-    .modal h2{ margin:0 0 8px; }
-    .modal .search{ width:100%; padding:10px 12px; border:1px solid #ddd; border-radius:10px; }
-    .modal .row-flex{ display:flex; gap:10px; margin-top:10px; }
-    .modal .row-flex input{ flex:1; padding:10px 12px; border:1px solid #ddd; border-radius:10px; }
-    .modal .row-flex button{ padding:10px 14px; border:none; border-radius:10px; background:#1a73e8; color:#fff; font-weight:600; cursor:pointer; }
-    .modal .list{ margin-top:12px; display:grid; gap:8px; }
-    .modal .item{ display:flex; justify-content:space-between; align-items:center; gap:8px; border:1px solid #eee; border-radius:12px; padding:10px 12px; cursor:pointer; }
-    .modal .item:hover{ background:#fafafa; }
-    .modal .slug{ font-family:ui-monospace, SFMono-Regular, Menlo, monospace; opacity:.8; }
-    .modal .close{ position:absolute; top:10px; right:14px; border:none; background:transparent; font-size:20px; cursor:pointer; }
-
-    <style>
-  /* Modal select görünümü – daha net */
-  .modal select#slugSelect{
-    width:100%;
-    height:260px;
-    border:1px solid #e5e7eb;
-    border-radius:10px;
-    padding:8px;
-    background:#fff;
-  }
-  .modal h2{ margin:0 0 6px }
-</style>
+    /* --- Picker (slug yokken görünen tek alan) --- */
+    #picker{ display:none; background:#fff; border:1px solid var(--g-border); border-radius:16px; box-shadow:var(--g-shadow); padding:16px; }
+    #picker h2{ margin:0 0 8px }
+    #pickRow{ display:flex; gap:10px; align-items:center }
+    #slugSelect{ flex:1; border:1px solid var(--g-border); border-radius:10px; padding:10px 12px; min-width:0 }
+    #goBtn{ padding:10px 14px; border:none; border-radius:10px; background:var(--g-primary); color:#fff; font-weight:600; cursor:pointer }
+    #msg{ margin-top:8px; color:var(--g-muted) }
+    #authBtn{ margin-left:auto; padding:8px 12px; border:1px solid var(--g-border); background:#f8f9fb; border-radius:10px; cursor:pointer }
   </style>
 </head>
 <body>
   <div id="app">
-    <!-- Üst kart: Google Forms başlık alanı -->
-    <div class="gf-header">
-      <h1 id="title"></h1>
-      <p id="desc" class="form-desc"></p>
+    <!-- Başlık/alt başlık -->
+    <h1 id="title"></h1>
+    <p id="desc" class="form-desc"></p>
+
+    <!-- SLUG YOKSA sadece bu kutu görünecek -->
+    <div id="picker">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h2>Bir form seçin</h2>
+        <button id="authBtn">Giriş</button>
+      </div>
+      <div id="pickRow" style="margin-top:8px">
+        <select id="slugSelect">
+          <option value="">Seçiniz</option>
+        </select>
+        <button id="goBtn">Git</button>
+      </div>
+      <div id="msg"></div>
     </div>
 
-    <!-- Form gövdesi -->
+    <!-- Gerçek form -->
     <form id="form" novalidate></form>
 
-    <!-- Gerekirse kısa skeleton -->
-    <div id="skeleton" class="skeleton" aria-hidden="true">
+    <div id="skeleton" class="skeleton" aria-hidden="true" style="display:none">
       <div class="bar" style="width:50%"></div>
       <div class="bar" style="width:85%"></div>
       <div class="bar" style="width:70%"></div>
@@ -97,58 +76,27 @@
   </div>
 
   <script>
-   // Token (sadece liste için)
-const TOKEN_KEY = 'admintoken';
-function getTokenForList() {
-  let t = sessionStorage.getItem(TOKEN_KEY);
-  if (!t) {
-    t = prompt('ADMIN_TOKEN (listeyi görmek için):');
-    if (t) sessionStorage.setItem(TOKEN_KEY, t);
-  }
-  return t || null;
-}
-function clearTokenForList(){ sessionStorage.removeItem(TOKEN_KEY); }
-    // ===== Yardımcılar
-    const $  = s => document.querySelector(s);
-    const $$ = s => Array.from(document.querySelectorAll(s));
+    // ===== Helpers
+    const $ = s => document.querySelector(s);
     const show = el => el && (el.style.display = 'block');
     const hide = el => el && (el.style.display = 'none');
     const esc = s => String(s ?? '')
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-    // SSR tespiti: SSR üretildiyse hem window.__FORM vardır hem de <form data-ssr="1">
+    // --- Token (liste için) — admin ile aynı mantık / sessionStorage
+    const TOKEN_KEY = 'admintoken';
+    const hasToken = () => !!sessionStorage.getItem(TOKEN_KEY);
+    const promptToken = () => {
+      const t = prompt('ADMIN_TOKEN (liste için):','');
+      if (t) sessionStorage.setItem(TOKEN_KEY, t);
+      return !!t;
+    };
+    const clearToken = () => sessionStorage.removeItem(TOKEN_KEY);
+
+    // --- SSR tespiti
     const SSR_READY = !!(window.__FORM && document.querySelector('#form[data-ssr="1"]'));
 
-    // --- Başlık/Açıklama için akıllı eşleştirici (TR/EN anahtarlar)
-    const T_KEYS = ['title','baslik','başlık','form_title','heading','name','label','subject'];
-    const D_KEYS = ['description','aciklama','açıklama','desc','summary','about','note','not'];
-
-    function pickKey(obj, keys){
-      if (!obj || typeof obj !== 'object') return null;
-      const map = Object.create(null);
-      for (const k of Object.keys(obj)) map[k.toLowerCase()] = k;
-      for (const want of keys){
-        const lk = want.toLowerCase();
-        if (lk in map) {
-          const v = obj[map[lk]];
-          if (v !== undefined && v !== null && String(v).trim() !== '') return String(v);
-        }
-      }
-      return null;
-    }
-
-    function extractMeta(form){
-      const schema = typeof form?.schema === 'string' ? safeJSON(form.schema) : (form?.schema || {});
-      const title = pickKey(form, T_KEYS) || pickKey(schema, T_KEYS) || 'Anket'; // <- slug FALAN YOK
-      const desc  = pickKey(form, D_KEYS) || pickKey(schema, D_KEYS) || '';
-      return { schema, title, desc };
-    }
-
-    function safeJSON(s){
-      try { return JSON.parse(s || '{}'); } catch { return {}; }
-    }
-
-    // --- Tek soruyu HTML'e çevir
+    // --- Soru renderer
     function qHTML(q){
       const type = (q.type||'text').toLowerCase();
       const name = q.name || q.label || 'q';
@@ -161,7 +109,7 @@ function clearTokenForList(){ sessionStorage.removeItem(TOKEN_KEY); }
         const opts = Array.isArray(q.options)? q.options : [];
         inner = `<div class="options">` + opts.map(v=>{
           const val = esc(String(v));
-          const id  = `f_${name}_${val.replace(/\W+/g,'_')}`;
+          const id  = `f_${name}_${val.replace(/\\W+/g,'_')}`;
           return `<label class="opt" for="${id}">
                     <input type="${type}" id="${id}" name="${esc(name)}" value="${val}">
                     <span>${val}</span>
@@ -192,144 +140,109 @@ function clearTokenForList(){ sessionStorage.removeItem(TOKEN_KEY); }
               </div>`;
     }
 
-    // --- Client-side render
     function renderClient(form){
-      const { schema, title, desc } = extractMeta(form);
+      const t = $('#title'); t.textContent = form.title || (form.slug ? `Form: ${form.slug}` : 'Anket'); show(t);
+      const d = $('#desc'); const descText = (form.description || '').trim();
+      if (descText) { d.textContent = descText; d.style.display='block'; } else { d.style.display='none'; }
 
-      // Başlık-açıklama: slug YOK, net
-      $('#title').textContent = title;
-      if (desc.trim()) { $('#desc').textContent = desc; $('#desc').style.display='block'; }
-      else { $('#desc').textContent=''; $('#desc').style.display='none'; }
-
+      const schema = typeof form.schema==='string' ? JSON.parse(form.schema||'{}') : (form.schema||{});
       const qs = Array.isArray(schema.questions) ? schema.questions : [];
       $('#form').innerHTML =
         qs.map(qHTML).join('') +
         `<div class="actions"><button type="submit" id="btnSend">Gönder</button></div>
-         <p class="after center">Bu form <strong>mikroar.com</strong> alanında oluşturuldu.</p>
+         <p class="after">Bu form <strong>mikroar.com</strong> alanında oluşturuldu.</p>
          <p class="brand">mikroAR</p>`;
-
-      // Safari için :has() yedeği – seçili etikete sınıf ekle
-      $$('.opt input').forEach(inp=>{
-        inp.addEventListener('change', ()=>{
-          const p = inp.closest('label.opt');
-          if (!p) return;
-          if (inp.type === 'radio') {
-            $$(`input[type="radio"][name="${inp.name}"]`).forEach(r=>{
-              const pr = r.closest('label.opt'); if (pr) pr.classList.toggle('is-checked', r.checked);
-            });
-          } else {
-            p.classList.toggle('is-checked', inp.checked);
-          }
-        });
-      });
-
       show($('#form'));
     }
 
-    // --- Slug picker (liste + manuel giriş)
-function openSlugPicker(){
-  const wrap=document.createElement('div');
-  wrap.className='modal-backdrop';
-  wrap.innerHTML=`
-    <div class="modal">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <h2 style="margin:0">Bir form seçin</h2>
-        <div style="display:flex;gap:6px">
-          <button id="authBtn" class="btn-mini" style="padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#f8f9fb;cursor:pointer">Giriş</button>
-          <button class="close" aria-label="Kapat" style="border:none;background:transparent;font-size:20px;cursor:pointer">&times;</button>
-        </div>
-      </div>
-      <label style="display:block;margin:8px 0 6px;font-size:12px;opacity:.7">Listeden seç (ilk 200 kayıt)</label>
-      <select id="slugSelect" size="12" style="width:100%"></select>
-      <div id="msg" style="margin-top:8px;color:#6b7280"></div>
-      <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end">
-        <button id="goBtn" style="padding:10px 14px;border:none;border-radius:10px;background:var(--g-primary);color:#fff;font-weight:600;cursor:pointer">Git</button>
-      </div>
-    </div>`;
-  document.body.appendChild(wrap);
+    // --- Picker (drop-down) ---
+    let listLoaded = false;
+    function setAuthUI(){ $('#authBtn').textContent = hasToken() ? 'Çıkış' : 'Giriş'; }
+    function ensureToken(){ if (hasToken()) return true; if (promptToken()){ setAuthUI(); return true; } return false; }
 
-  const close = ()=>wrap.remove();
-  wrap.querySelector('.close').addEventListener('click', close);
-
-  const listEl = wrap.querySelector('#slugSelect');
-  const msgEl  = wrap.querySelector('#msg');
-  const authBtn= wrap.querySelector('#authBtn');
-
-  const setAuthUI = ()=>{
-    const authed = !!sessionStorage.getItem(TOKEN_KEY);
-    authBtn.textContent = authed ? 'Çıkış' : 'Giriş';
-  };
-
-  authBtn.addEventListener('click', ()=>{
-    if (sessionStorage.getItem(TOKEN_KEY)) { clearTokenForList(); }
-    else { getTokenForList(); }
-    setAuthUI(); fetchList();
-  });
-
-  const go = (slug)=>{ if(slug && !listEl.disabled) location.href = `/form.html?slug=${encodeURIComponent(slug)}`; };
-  listEl.addEventListener('dblclick', ()=> go(listEl.value));
-  listEl.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); go(listEl.value); }});
-  wrap.querySelector('#goBtn').addEventListener('click', ()=> go(listEl.value));
-
-  function fetchList(){
-    const token = sessionStorage.getItem(TOKEN_KEY);
-    if(!token){
-      listEl.innerHTML = '';
-      listEl.disabled = true;
-      msgEl.textContent = 'Yetkisiz: Listeyi görmek için ADMIN_TOKEN girin.';
-      return;
-    }
-    msgEl.textContent = 'Yükleniyor…';
-    fetch('/api/forms-list', { headers:{ accept:'application/json', 'x-admin-token': token } })
-      .then(r=> r.ok ? r.json() : Promise.reject())
-      .then(j=>{
+    async function loadListOnce(){
+      if (listLoaded) return;
+      if (!ensureToken()){
+        $('#msg').textContent = 'Yetkisiz: Liste için ADMIN_TOKEN gerekli.';
+        $('#slugSelect').disabled = true;
+        return;
+      }
+      $('#msg').textContent = 'Yükleniyor…';
+      try{
+        const r = await fetch('/api/forms-list', { headers:{ accept:'application/json', 'x-admin-token': sessionStorage.getItem(TOKEN_KEY) } });
+        if (!r.ok) throw 0;
+        const j = await r.json();
         const items = Array.isArray(j?.items) ? j.items.slice(0,200) : [];
-        listEl.innerHTML = items.map(it=>`<option value="${it.slug}">${(it.title||it.slug)} — ${it.slug}</option>`).join('');
-        listEl.disabled = items.length===0;
-        msgEl.textContent = items.length ? '' : 'Kayıt yok.';
-        if(items.length) listEl.selectedIndex = 0;
-      })
-      .catch(()=>{ listEl.innerHTML=''; listEl.disabled=true; msgEl.textContent='Yetkisiz veya liste alınamadı.'; });
-  }
+        const sel = $('#slugSelect');
+        sel.innerHTML = `<option value="">Seçiniz</option>` + items.map(it=>`<option value="${esc(it.slug)}">${esc(it.title || it.slug)} — ${esc(it.slug)}</option>`).join('');
+        sel.disabled = items.length===0;
+        $('#msg').textContent = items.length ? '' : 'Kayıt yok.';
+        listLoaded = true;
+      }catch{
+        $('#msg').textContent = 'Yetkisiz veya liste alınamadı.';
+        $('#slugSelect').disabled = true;
+      }
+    }
 
-  setAuthUI();
-  fetchList();
-}
-    // --- Başlat
+    // --- Başlat ---
     async function bootstrap(){
       const params = new URLSearchParams(location.search);
       const slug = params.get('slug');
 
-      // slug yoksa seçici
-      if (!slug) { openSlugPicker(); return; }
+      // slug YOKSA → sadece picker görünsün
+      if (!slug) {
+        show($('#picker'));
+        setAuthUI();
 
-      // SSR varsa: fetch yok; başlık/açıklamayı __FORM’dan yaz
-      if (SSR_READY) {
-        try {
-          const f = window.__FORM || {};
-          const { title, desc } = extractMeta(f);
-          $('#title').textContent = title;
-          if (desc.trim()) { $('#desc').textContent = desc; $('#desc').style.display='block'; }
-          show($('#form'));
-        } catch { show($('#form')); }
+        // Giriş/Çıkış
+        $('#authBtn').addEventListener('click', ()=>{
+          if (hasToken()) clearToken(); else promptToken();
+          setAuthUI(); listLoaded=false; $('#slugSelect').innerHTML = `<option value="">Seçiniz</option>`; $('#slugSelect').disabled=false; $('#msg').textContent='';
+        });
+
+        // Kullanıcı seçeneğe tıklayınca listeyi o an yükle
+        $('#slugSelect').addEventListener('focus', loadListOnce);
+        $('#slugSelect').addEventListener('mousedown', loadListOnce);
+
+        // Seçildiğinde git
+        $('#slugSelect').addEventListener('change', ()=>{ const v = $('#slugSelect').value; if (v) location.href = `/form.html?slug=${encodeURIComponent(v)}`; });
+        $('#goBtn').addEventListener('click', ()=>{ const v = $('#slugSelect').value; if (v) location.href = `/form.html?slug=${encodeURIComponent(v)}`; });
+
         return;
       }
 
-      // CSR fallback: tek fetch
-      // NOT: Skeleton'u ancak yanıt 120ms'ten uzun sürerse göster (algılanan hız için)
-      let showTimer = setTimeout(()=> show($('#skeleton')), 120);
+      // slug VARSA → SSR varsa sadece göster, yoksa fetch et
+      if (SSR_READY) {
+        try {
+          const f = window.__FORM || {};
+          const t = $('#title'); t.textContent = (f.title || (f.slug ? `Form: ${f.slug}` : 'Anket')); show(t);
+          const d = $('#desc'); const txt = (f.description || '').trim();
+          if (txt) { d.textContent = txt; d.style.display='block'; } else { d.style.display='none'; }
+        } catch {}
+        show($('#form'));
+        return;
+      }
+
+      show($('#skeleton'));
       try {
         const r = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`, { headers:{ 'accept':'application/json' } });
         if (!r.ok) throw new Error('Form bulunamadı');
-        let j; try { j = await r.json(); } catch { j = null; }
+        const j = await r.json().catch(()=>null);
         const form = (j && (j.form || j.data)) ? (j.form || j.data) : j;
         if (!form || typeof form !== 'object') throw new Error('Geçersiz yanıt (form verisi yok).');
 
-        window.__FORM = form; // app.js submit için
-        clearTimeout(showTimer); hide($('#skeleton'));
+        form.slug = form.slug || slug;
+        form.title = form.title || `Form: ${form.slug}`;
+        form.description = form.description || '';
+        if (typeof form.schema === 'string') { try { form.schema = JSON.parse(form.schema); } catch { form.schema = {}; } }
+        if (!form.schema || typeof form.schema !== 'object') form.schema = {};
+        if (!Array.isArray(form.schema.questions)) form.schema.questions = [];
+
+        window.__FORM = form;
+        hide($('#skeleton'));
         renderClient(form);
       } catch (e) {
-        clearTimeout(showTimer); hide($('#skeleton'));
+        hide($('#skeleton'));
         $('#app').innerHTML = `<p class="center">Hata: ${esc(e.message || e)}</p>`;
       }
     }
@@ -337,7 +250,7 @@ function openSlugPicker(){
     bootstrap();
   </script>
 
-  <!-- Submit/teşekkür ekranı (güncel app.js ile) -->
+  <!-- Submit/teşekkür ekranı vb. için app.js -->
   <script src="/app.js" defer></script>
 </body>
 </html>
