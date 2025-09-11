@@ -140,15 +140,15 @@
 
     // Veriyi derle
     const payload = {
-      form_id: window.__FORM?.id || null,
-      slug: window.__FORM?.slug || new URLSearchParams(location.search).get("slug") || null,
-      answers: serializeForm(formEl),
-      meta: {
-        ua: navigator.userAgent,
-        ts: new Date().toISOString(),
-        href: location.href
-      }
-    };
+  form_slug: window.__FORM?.slug || new URLSearchParams(location.search).get("slug") || null,
+  answers: serializeForm(formEl),
+  ip: null, // backend IP ekleyebilir
+  meta: {
+    ua: navigator.userAgent,
+    ts: new Date().toISOString(),
+    href: location.href
+  }
+};
 
     // UI kilidi
     if (btn) {
