@@ -97,6 +97,17 @@
   </div>
 
   <script>
+    // --- Token helpers (session bazlı) ---
+const TOKEN_KEY = 'admintoken';
+function getTokenForList() {
+  let t = sessionStorage.getItem(TOKEN_KEY);
+  if (!t) {
+    t = prompt('ADMIN_TOKEN (listeyi görmek için):');
+    if (t) sessionStorage.setItem(TOKEN_KEY, t);
+  }
+  return t || null;
+}
+function clearTokenForList(){ sessionStorage.removeItem(TOKEN_KEY); }
     // ===== Yardımcılar
     const $  = s => document.querySelector(s);
     const $$ = s => Array.from(document.querySelectorAll(s));
