@@ -134,7 +134,71 @@
          <p class="brand">mikroAR</p>`;
       show($('#form'));
     }
+function openSlugPicker(){
+  // Modal iskeleti
+  const wrap = document.createElement('div');
+  wrap.className = 'modal-backdrop';
+  wrap.innerHTML = `
+    <div class="modal">
+      <button class="close" aria-label="Kapat">&times;</button>
+      <h2>Bir form seçin</h2>
+      <input type="search" class="search" placeholder="Slug veya başlık ara…"/>
+      <div class="list" id="slugList">
+        <div class="item">Liste yükleniyor…</div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(wrap);
 
+  const closeBtn = wrap.querySelector('.close');
+  closeBtn.addEventListener('click', () => wrap.remove());
+
+  const listEl = wrap.querySelector('#slugList');
+  const searchEl = wrap.querySelector('.search');
+
+  // Listeyi çek
+  fetch('/api/forms-list', { headers:{'accept':'application/json'} })
+    .then(r => r.json())
+    .then(j => {
+      const items = Array.isArray(j?.items) ? j.items : [];
+      if (!items.length) {
+        listEl.innerHTML = `<div class="item">Kayıt bulunamadı.</div>`;
+        return;
+      }
+      let current = items.slice();
+      const render = () => {
+        listEl.innerHTML = current.map(it => `
+          <div class="item" data-slug="${esc(it.slug)}">
+            <div>
+              <div><strong>${esc(it.title || it.slug)}</strong></div>
+              <div class="slug">${esc(it.slug)}</div>
+            </div>
+            <div class="go">&rarr;</div>
+          </div>
+        `).join('');
+        listEl.querySelectorAll('.item').forEach(el => {
+          el.addEventListener('click', () => {
+            const s = el.getAttribute('data-slug');
+            if (s) location.href = `/form.html?slug=${encodeURIComponent(s)}`;
+          });
+        });
+      };
+      render();
+
+      // Arama filtresi
+      searchEl.addEventListener('input', () => {
+        const q = searchEl.value.trim().toLowerCase();
+        current = items.filter(it =>
+          (it.slug || '').toLowerCase().includes(q) ||
+          (it.title || '').toLowerCase().includes(q)
+        );
+        render();
+      });
+    })
+    .catch(() => {
+      listEl.innerHTML = `<div class="item">Liste alınamadı.</div>`;
+    });
+}
     async function bootstrap(){
   const params = new URLSearchParams(location.search);
   const slug = params.get('slug');
