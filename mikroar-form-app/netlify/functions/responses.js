@@ -1,3 +1,29 @@
+async function sendMetaLead({ event_id, fbp, fbc, ua, url }) {
+  const PIXEL_ID = process.env.META_PIXEL_ID;
+  const ACCESS_TOKEN = process.env.META_CAPI_TOKEN;
+  if (!PIXEL_ID || !ACCESS_TOKEN || !event_id) return;
+
+  const payload = {
+    data: [{
+      event_name: "Lead",
+      event_time: Math.floor(Date.now()/1000),
+      event_id,
+      action_source: "website",
+      event_source_url: url,
+      user_data: {
+        client_user_agent: ua,
+        fbp: fbp || undefined,
+        fbc: fbc || undefined
+      }
+    }]
+  };
+
+  await fetch(`https://graph.facebook.com/v18.0/${PIXEL_ID}/events?access_token=${ACCESS_TOKEN}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
 const json = (code, obj) => ({
   statusCode: code,
   headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
@@ -48,3 +74,12 @@ exports.handler = async (event) => {
 
   return json(200, { ok: true });
 };
+try {
+  await sendMetaLead({
+    event_id: body?.meta?.event_id,
+    fbp: body?.meta?.fbp,
+    fbc: body?.meta?.fbc,
+    ua: body?.meta?.ua,
+    url: body?.meta?.href
+  });
+} catch {}
