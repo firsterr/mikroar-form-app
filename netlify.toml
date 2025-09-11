@@ -70,3 +70,9 @@
 [[edge_functions]]
 path = "/form.html"
 function = "form-ssr"
+[edge_functions]
+  bundler = "esbuild"
+
+[[edge_functions]]
+  function = "form-ssr"
+  path = "/form.html"
