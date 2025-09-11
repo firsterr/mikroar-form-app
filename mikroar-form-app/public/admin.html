@@ -16,23 +16,22 @@
     .toolbar{display:flex;gap:8px;align-items:center;margin-top:12px}
     .btn{padding:9px 14px;border:none;border-radius:10px;background:#f3f4f6;cursor:pointer}
     .btn.primary{background:var(--pri);color:#fff}
-    #toast{display:none;margin-top:8px;color:#0f766e}
-    /* ---- Soru satırı ---- */
+    #toast{display:none;margin-top:8px}
+
+    /* Soru satırı */
     #questions{display:grid;gap:12px}
     .qrow{border:1px dashed var(--b);border-radius:12px;padding:12px;background:#fff}
-    .qgrid{
-      display:grid;
-      grid-template-columns: 160px 140px 1fr 1fr 120px 80px;
-      gap:10px; align-items:center;
-    }
-    .qgrid .q-opts{display:block} /* JS tip değişiminde gizlenecek */
-    .qgrid .q-del{width:100%; background:#fee2e2; color:#991b1b}
+    .qgrid{display:grid;grid-template-columns:160px 140px 1fr 1fr 120px 80px;gap:10px;align-items:center}
+    .qgrid .q-del{width:100%;background:#fee2e2;color:#991b1b;border:none;border-radius:10px;padding:9px 0}
     .reqbox{display:flex;align-items:center;gap:6px;justify-content:center}
     .muted{color:var(--mut)}
-    @media (max-width:920px){
-      .qgrid{grid-template-columns:1fr 1fr;grid-auto-rows:auto}
-      .qgrid .q-del{justify-self:end;width:auto;padding:8px 12px}
-    }
+
+    /* Kilit ekranı */
+    #lock{position:fixed;inset:0;background:rgba(255,255,255,.9);display:none;align-items:center;justify-content:center;z-index:9999}
+    #lock .box{background:#fff;border:1px solid var(--b);border-radius:14px;padding:18px 20px;box-shadow:0 12px 30px rgba(0,0,0,.12);max-width:420px}
+    #lock h3{margin:0 0 6px}
+    #lock .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
+    @media (max-width:920px){ .qgrid{grid-template-columns:1fr 1fr;grid-auto-rows:auto} }
   </style>
 </head>
 <body>
@@ -41,22 +40,10 @@
 
     <div class="card">
       <div class="grid">
-        <div>
-          <label>Slug</label>
-          <input id="slug" placeholder="örn. ASD"/>
-        </div>
-        <div>
-          <label>Başlık</label>
-          <input id="title" placeholder="Anket başlığı"/>
-        </div>
-        <div>
-          <label>Açıklama (isteğe bağlı)</label>
-          <textarea id="desc" rows="3" placeholder="Kısa açıklama…"></textarea>
-        </div>
-        <div>
-          <label>Durum</label>
-          <select id="status"><option>Aktif</option><option>Pasif</option></select>
-        </div>
+        <div><label>Slug</label><input id="slug" placeholder="örn. ASD"/></div>
+        <div><label>Başlık</label><input id="title" placeholder="Anket başlığı"/></div>
+        <div><label>Açıklama (isteğe bağlı)</label><textarea id="desc" rows="3" placeholder="Kısa açıklama…"></textarea></div>
+        <div><label>Durum</label><select id="status"><option>Aktif</option><option>Pasif</option></select></div>
       </div>
 
       <div class="toolbar">
@@ -65,13 +52,24 @@
         <button id="btnLoad" class="btn">Yükle</button>
         <button id="btnSave" class="btn primary">Kaydet</button>
         <span class="muted" style="margin-left:auto">Admin anahtar:</span>
-        <button id="btnKey" class="btn">🔑 Ayarla</button>
+        <button id="btnAuth" class="btn">Giriş</button>
       </div>
       <div id="toast"></div>
     </div>
 
     <h2 style="margin:16px 0 8px">Sorular</h2>
     <div id="questions" class="card"></div>
+  </div>
+
+  <!-- Kilit -->
+  <div id="lock" role="dialog" aria-modal="true">
+    <div class="box">
+      <h3>Erişim kısıtlı</h3>
+      <p class="muted">Bu sayfa için <strong>ADMIN_TOKEN</strong> gerekli.</p>
+      <div class="actions">
+        <button id="btnUnlock" class="btn primary">Giriş yap</button>
+      </div>
+    </div>
   </div>
 
   <script src="/admin.js" defer></script>
