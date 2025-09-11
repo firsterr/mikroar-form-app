@@ -44,3 +44,34 @@ function json(code, obj) {
     body: JSON.stringify(obj)
   };
 }
+
+import { createClient } from "@supabase/supabase-js";
+
+// ENV adını her iki ihtimale göre oku
+const URL = process.env.SUPABASE_URL;
+const SRV = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+const db = createClient(URL, SRV, { auth: { persistSession: false } });
+
+export async function handler(event) {
+  if (event.httpMethod !== "GET") return { statusCode: 405, body: "Method Not Allowed" };
+
+  const u = new URL(event.rawUrl || `http://x${event.path}`);
+  const slug = u.searchParams.get("slug") || event.queryStringParameters?.slug;
+  if (!slug) return { statusCode: 400, body: JSON.stringify({ error: "slug gerekli" }) };
+
+  const { data, error } = await db
+    .from("forms")
+    // description yok; active alanını da döndürelim
+    .select("id, slug, title, schema, active, created_at")
+    .eq("slug", slug)
+    .maybeSingle();
+
+  if (error || !data) return { statusCode: 404, body: JSON.stringify({ error: "Form bulunamadı" }) };
+
+  return {
+    statusCode: 200,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ form: data })
+  };
+}
