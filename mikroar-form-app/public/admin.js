@@ -1,22 +1,34 @@
-// public/admin.js — FULL REPLACE (session based auth)
+// public/admin.js — FULL REPLACE (zorunlu token + dinamik Giriş/Çıkış + kilit)
 (function () {
   "use strict";
   const $  = (s,r=document)=>r.querySelector(s);
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
   const byIdOrName = id => document.getElementById(id) || document.querySelector(`[name="${id}"]`);
 
-  // ---- Session-based token (her sayfa yenilemede tekrar sorulsun)
-  const TK = 'admintoken';
-  function getToken() {
-    let t = sessionStorage.getItem(TK);
-    if (!t) {
-      t = prompt('ADMIN_TOKEN (Netlify env):');
-      if (t) sessionStorage.setItem(TK, t);
-    }
-    return t || null;
+  const TK = 'admintoken'; // sessionStorage — her yenilemede sıfırdan
+
+  // ----- Auth helpers
+  function hasToken(){ return !!sessionStorage.getItem(TK); }
+  function promptToken(){
+    const t = window.prompt('ADMIN_TOKEN (Netlify env):','');
+    if (t) sessionStorage.setItem(TK, t);
+    return !!t;
   }
   function clearToken(){ sessionStorage.removeItem(TK); }
+  function updateAuthUI(){
+    const btn = byIdOrName('btnAuth'); if (btn) btn.textContent = hasToken() ? 'Çıkış' : 'Giriş';
+    const lock = byIdOrName('lock'); if (lock) lock.style.display = hasToken() ? 'none' : 'flex';
+  }
+  function requireAuthInteractively(){
+    if (hasToken()) return true;
+    // isteğe bağlı prompt
+    if (promptToken()) { updateAuthUI(); return true; }
+    // iptal ettiyse kilitle
+    updateAuthUI();
+    return false;
+  }
 
+  // ----- UI refs
   const el = {
     slug:   ()=> byIdOrName("slug"),
     title:  ()=> byIdOrName("title"),
@@ -27,10 +39,12 @@
     btnNew: ()=> byIdOrName("btnNew"),
     btnAddQ:()=> byIdOrName("btnAddQ"),
     toast:  ()=> byIdOrName("toast"),
-    btnKey: ()=> byIdOrName("btnKey") || byIdOrName("btnAuth"), // geriye dönük
+    btnAuth:()=> byIdOrName("btnAuth"),
+    btnUnlock:()=> byIdOrName("btnUnlock"),
     box:    ()=> byIdOrName("questions"),
   };
 
+  // ----- Types & render
   const TYPE_MAP = {
     "tek seçim":"radio","radio":"radio","single":"radio","tek":"radio",
     "çoklu seçim":"checkbox","checkbox":"checkbox","çoklu":"checkbox",
@@ -46,7 +60,6 @@
     setTimeout(()=>{ t.style.display="none"; }, 2200);
   }
 
-  // --------- UI
   function makeRow(q, i){
     const row = document.createElement("div");
     row.className = "qrow";
@@ -69,7 +82,7 @@
       </div>`;
     const typeSel = $(".q-type", row);
     const optsInp = $(".q-opts", row);
-    const sync = ()=>{ optsInp.style.display = ["radio","checkbox","select"].includes(typeSel.value) ? "block" : "none"; if(optsInp.style.display==="none") optsInp.value=""; };
+    const sync = ()=>{ const show = ["radio","checkbox","select"].includes(typeSel.value); optsInp.style.display = show?"block":"none"; if(!show) optsInp.value=""; };
     typeSel.addEventListener("change", sync); sync();
     $(".q-del", row).addEventListener("click", () => row.remove());
     return row;
@@ -92,9 +105,10 @@
     });
   }
 
-  // --------- LOAD
+  // ----- API
   async function loadFormBySlug(slug){
     if(!slug) throw new Error("Slug gerekli");
+    if(!hasToken()) throw new Error("Yetkisiz: Giriş yapın.");
     const r = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`, { headers:{accept:"application/json"} });
     const tx = await r.text();
     let form=null; try{ const j=JSON.parse(tx||"{}"); form=j.form || j.data || (Array.isArray(j)?j[0]:null);}catch{}
@@ -105,7 +119,9 @@
     (el.status()||{}).value = form.active ? "Aktif" : "Pasif";
     const raw = (form.schema && Array.isArray(form.schema.questions)) ? form.schema.questions : [];
     const qs  = raw.map((qq,i)=>({
-      type: normType(qq.type), name: qq.name || `soru${i+1}`, label: qq.label || `Soru ${i+1}`,
+      type: normType(qq.type),
+      name: qq.name || `soru${i+1}`,
+      label: qq.label || `Soru ${i+1}`,
       required: !!qq.required,
       options: Array.isArray(qq.options) ? qq.options
             : qq.options!=null ? String(qq.options).split(",").map(s=>s.trim()).filter(Boolean) : []
@@ -113,9 +129,8 @@
     renderQuestions(qs);
   }
 
-  // --------- SAVE (protected)
   async function saveForm(){
-    const token = getToken(); if(!token) throw new Error("Anahtar gerekli");
+    if(!hasToken()) throw new Error("Yetkisiz: Giriş yapın.");
     const payload = {
       slug  : (el.slug()?.value || "").trim(),
       title : (el.title()?.value || "").trim(),
@@ -126,7 +141,7 @@
     if(!payload.slug) throw new Error("Slug gerekli");
     const r = await fetch("/api/forms-admin",{
       method:"POST",
-      headers:{ "content-type":"application/json", "x-admin-token": token, accept:"application/json" },
+      headers:{ "content-type":"application/json", "x-admin-token": sessionStorage.getItem(TK), accept:"application/json" },
       body: JSON.stringify(payload)
     });
     const txt = await r.text();
@@ -134,37 +149,47 @@
     return true;
   }
 
-  // --------- Bindings
+  // ----- Bindings
   document.addEventListener("DOMContentLoaded", ()=>{
-    // Oturum: sayfa açılır açılmaz sor
-    if (!getToken()) { /* iptal ettiyse */ toast("Anahtar gerekli — Giriş yapın", true); }
+    // İlk açılışta token iste — iptal edilirse ekran kilitli kalır
+    requireAuthInteractively();
 
-    el.btnKey()?.addEventListener("click", ()=>{
-      // Toggle: varsa çıkış, yoksa giriş
-      if (sessionStorage.getItem(TK)) { clearToken(); toast("Çıkış yapıldı"); }
-      else { getToken(); toast("Giriş yapıldı"); }
+    el.btnUnlock()?.addEventListener("click", ()=>{
+      if (promptToken()) toast("Giriş yapıldı");
+      updateAuthUI();
+    });
+
+    el.btnAuth()?.addEventListener("click", ()=>{
+      if (hasToken()) { clearToken(); toast("Çıkış yapıldı"); }
+      else { if (promptToken()) toast("Giriş yapıldı"); }
+      updateAuthUI();
     });
 
     el.btnLoad()?.addEventListener("click", async ()=>{
+      if(!hasToken()) { updateAuthUI(); return toast("Giriş gerekli", true); }
       try{ await loadFormBySlug(el.slug()?.value.trim()); toast("Form yüklendi"); }
       catch(e){ toast(e.message || "Bulunamadı", true); }
     });
 
     el.btnSave()?.addEventListener("click", async ()=>{
+      if(!hasToken()) { updateAuthUI(); return toast("Giriş gerekli", true); }
       try{ await saveForm(); toast("Kaydedildi"); }
       catch(e){ toast(e.message || "Kaydedilemedi", true); }
     });
 
     el.btnNew()?.addEventListener("click", ()=>{
+      if(!hasToken()) { updateAuthUI(); return toast("Giriş gerekli", true); }
       (el.title()||{}).value=""; (el.desc()||{}).value=""; (el.status()||{}).value="Aktif";
       renderQuestions([]);
     });
 
     el.btnAddQ()?.addEventListener("click", ()=>{
+      if(!hasToken()) { updateAuthUI(); return toast("Giriş gerekli", true); }
       const cur = collectQuestions(); cur.push({type:"radio",name:"",label:"",required:false,options:[]});
       renderQuestions(cur);
     });
 
     renderQuestions([]);
+    updateAuthUI();
   });
 })();
