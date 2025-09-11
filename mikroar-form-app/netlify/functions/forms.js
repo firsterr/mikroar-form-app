@@ -32,3 +32,15 @@ exports.handler = async (event) => {
   if (typeof form.schema === 'string') { try { form.schema = JSON.parse(form.schema); } catch { form.schema = {}; } }
   return json(200, { form });
 };
+
+const json = (code, obj) => ({
+  statusCode: code,
+- headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
++ headers: {
++   'Content-Type': 'application/json',
++   'Access-Control-Allow-Origin': '*',
++   // 60 sn CDN, 5 dk SWR → cold-start hissi azalır
++   'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300'
++ },
+  body: JSON.stringify(obj)
+});
