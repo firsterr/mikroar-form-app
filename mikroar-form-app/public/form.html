@@ -5,19 +5,46 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Anket</title>
 
-  <!-- Dış stil -->
+  <!-- Dış stil (senin güncel form.css'in) -->
   <link rel="preload" href="/form.css" as="style" fetchpriority="high">
-  <link rel="stylesheet" href="/form.css?v=4" />
+  <link rel="stylesheet" href="/form.css?v=5" />
 
-  <!-- Minimal ek stiller (modal + skeleton) -->
+  <!-- Google Forms etkileşimleri için küçük ek stiller -->
   <style>
+    /* Üst kart (GF header look) */
+    .gf-header{
+      background: linear-gradient(180deg,#fff,#fafbff);
+      border: 1px solid #e6e7ec;
+      border-radius: 16px;
+      box-shadow: 0 8px 28px rgba(17,24,39,.08);
+      padding: 22px;
+      margin: 28px auto 16px;
+    }
+    /* Seçenek hover + seçili vurgusu */
+    label.opt{
+      padding: 10px 12px;
+      border-radius: 10px;
+      transition: background .15s ease, box-shadow .15s ease;
+      cursor: pointer;
+    }
+    label.opt:hover{
+      background: #f4f6ff; /* hafif mavi fon */
+      box-shadow: 0 0 0 3px rgba(26,115,232,.10) inset;
+    }
+    /* Seçili durum – modern tarayıcılarda */
+    label.opt:has(input:checked){
+      background: #eef3ff;
+      box-shadow: 0 0 0 3px rgba(26,115,232,.20) inset;
+    }
+    /* Geniş tıklama alanı */
+    label.opt input{ margin: 0 6px 0 2px; }
+
+    /* Skeleton sadece SSR yoksa görünebilir */
     .skeleton{ padding:16px; }
     .skeleton .bar{ height:14px; margin:10px 0; border-radius:6px; background:linear-gradient(90deg,#eee,#f5f5f5,#eee); }
+    /* Modal (slug picker) – kısaltılmış */
     .modal-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; z-index:9999; }
-    .modal{
-      background:#fff; width:min(720px,92vw); max-height:80vh; overflow:auto;
-      border-radius:14px; padding:18px; box-shadow:0 20px 60px rgba(0,0,0,.25); position:relative;
-    }
+    .modal{ background:#fff; width:min(720px,92vw); max-height:80vh; overflow:auto; border-radius:14px; padding:18px; box-shadow:0 20px 60px rgba(0,0,0,.25); position:relative; }
     .modal h2{ margin:0 0 8px; }
     .modal .search{ width:100%; padding:10px 12px; border:1px solid #ddd; border-radius:10px; }
     .modal .row-flex{ display:flex; gap:10px; margin-top:10px; }
@@ -28,7 +55,6 @@
     .modal .item:hover{ background:#fafafa; }
     .modal .slug{ font-family:ui-monospace, SFMono-Regular, Menlo, monospace; opacity:.8; }
     .modal .close{ position:absolute; top:10px; right:14px; border:none; background:transparent; font-size:20px; cursor:pointer; }
-    .gf-header{ background:linear-gradient(180deg,#fff,#fafbff); border:1px solid #e6e7ec; border-radius:16px; box-shadow:0 8px 28px rgba(17,24,39,.08); padding:22px; margin:28px auto 16px; }
   </style>
 </head>
 <body>
@@ -42,7 +68,7 @@
     <!-- Form gövdesi -->
     <form id="form" novalidate></form>
 
-    <!-- Yalnızca SSR yoksa geçici iskelet -->
+    <!-- Sadece SSR yoksa kısa süreli skeleton -->
     <div id="skeleton" class="skeleton" aria-hidden="true" style="display:none">
       <div class="bar" style="width:50%"></div>
       <div class="bar" style="width:85%"></div>
@@ -55,16 +81,25 @@
 
   <script>
     // ===== Yardımcılar
-    const $ = s => document.querySelector(s);
+    const $  = s => document.querySelector(s);
+    const $$ = s => Array.from(document.querySelectorAll(s));
     const show = el => el && (el.style.display = 'block');
     const hide = el => el && (el.style.display = 'none');
     const esc = s => String(s ?? '')
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-    // SSR tespiti: SSR üretildiyse form DOM'da data-ssr="1" olarak gelir ve window.__FORM set edilir
+    // SSR tespiti
     const SSR_READY = !!(window.__FORM && document.querySelector('#form[data-ssr="1"]'));
 
-    // --- Tek soruyu HTML'e çevir (client-side render için)
+    // Başlık/ad açıklamayı çeşitli anahtar adlarından toparlayan akıllı eşleştirici
+    function coalesceTitle(obj){
+      return obj?.title || obj?.name || obj?.label || obj?.heading || obj?.form_title || null;
+    }
+    function coalesceDesc(obj){
+      return obj?.description || obj?.desc || obj?.summary || obj?.about || null;
+    }
+
+    // Tek soruyu HTML'e çevir
     function qHTML(q){
       const type = (q.type||'text').toLowerCase();
       const name = q.name || q.label || 'q';
@@ -108,25 +143,26 @@
               </div>`;
     }
 
-    // --- Client-side render (SSR yokken)
+    // Client-side render
     function renderClient(form){
-      // Başlık/alt başlığı ZORLA yaz ve göster
-      const t = $('#title'); t.textContent = form.title || (form.slug ? `Form: ${form.slug}` : 'Anket');
-      const d = $('#desc'); const descText = (form.description || '').trim();
-      if (descText) { d.textContent = descText; d.style.display='block'; } else { d.textContent = ''; d.style.display='none'; }
-
+      // Başlık/alt başlık – akıllı eşleştirme + fallback
       const schema = typeof form.schema==='string' ? JSON.parse(form.schema||'{}') : (form.schema||{});
+      const title = coalesceTitle(form) || coalesceTitle(schema) || (form.slug ? `Form: ${form.slug}` : 'Anket');
+      const desc  = coalesceDesc(form)  || coalesceDesc(schema)  || '';
+
+      const t = $('#title'); t.textContent = title;
+      const d = $('#desc');  if (String(desc).trim()) { d.textContent = desc; d.style.display='block'; } else { d.textContent=''; d.style.display='none'; }
+
       const qs = Array.isArray(schema.questions) ? schema.questions : [];
       $('#form').innerHTML =
         qs.map(qHTML).join('') +
         `<div class="actions"><button type="submit" id="btnSend">Gönder</button></div>
          <p class="after center">Bu form <strong>mikroar.com</strong> alanında oluşturuldu.</p>
          <p class="brand">mikroAR</p>`;
-
       show($('#form'));
     }
 
-    // --- Slug seçici (liste + manuel giriş)
+    // Slug seçici (liste + manuel)
     function openSlugPicker(){
       const wrap = document.createElement('div');
       wrap.className = 'modal-backdrop';
@@ -146,18 +182,13 @@
       `;
       document.body.appendChild(wrap);
 
-      const closeBtn = wrap.querySelector('.close');
-      closeBtn.addEventListener('click', () => wrap.remove());
-
       const listEl = wrap.querySelector('#slugList');
       const searchEl = wrap.querySelector('.search');
       const manual = wrap.querySelector('#manualSlug');
       const goBtn = wrap.querySelector('#goBtn');
+      wrap.querySelector('.close').addEventListener('click', () => wrap.remove());
 
-      function go(slug){
-        if (!slug) return;
-        location.href = `/form.html?slug=${encodeURIComponent(slug.trim())}`;
-      }
+      function go(slug){ if (slug) location.href = `/form.html?slug=${encodeURIComponent(slug.trim())}`; }
       goBtn.addEventListener('click', ()=> go(manual.value));
       manual.addEventListener('keydown', e => { if (e.key === 'Enter') go(manual.value); });
 
@@ -165,10 +196,7 @@
         .then(r => r.json())
         .then(j => {
           const items = Array.isArray(j?.items) ? j.items : [];
-          if (!items.length) {
-            listEl.innerHTML = `<div class="item">Kayıt bulunamadı.</div>`;
-            return;
-          }
+          if (!items.length) { listEl.innerHTML = `<div class="item">Kayıt bulunamadı.</div>`; return; }
           let current = items.slice();
           const render = () => {
             listEl.innerHTML = current.map(it => `
@@ -180,59 +208,57 @@
                 <div class="go">&rarr;</div>
               </div>
             `).join('');
-            listEl.querySelectorAll('.item').forEach(el => {
-              el.addEventListener('click', () => go(el.getAttribute('data-slug')));
-            });
+            listEl.querySelectorAll('.item').forEach(el => el.addEventListener('click', () => go(el.getAttribute('data-slug'))));
           };
           render();
-
           searchEl.addEventListener('input', () => {
             const q = searchEl.value.trim().toLowerCase();
             current = items.filter(it =>
-              (it.slug || '').toLowerCase().includes(q) ||
-              (it.title || '').toLowerCase().includes(q)
+              (it.slug || '').toLowerCase().includes(q) || (it.title || '').toLowerCase().includes(q)
             );
             render();
           });
         })
-        .catch(() => {
-          listEl.innerHTML = `<div class="item">Liste alınamadı.</div>`;
-        });
+        .catch(() => { listEl.innerHTML = `<div class="item">Liste alınamadı.</div>`; });
     }
 
-    // --- Başlat
+    // Başlat
     async function bootstrap(){
       const params = new URLSearchParams(location.search);
       const slug = params.get('slug');
 
-      // slug YOK → seçici modal
       if (!slug) { openSlugPicker(); return; }
 
-      // SSR VAR → fetch/skeleton yok; başlık/desc’yi __FORM’dan yazar, formu gösterir
       if (SSR_READY) {
+        // SSR: başlık/desc'yi __FORM'dan güvenle yaz
         try {
           const f = window.__FORM || {};
-          const t = $('#title'); t.textContent = (f.title || (f.slug ? `Form: ${f.slug}` : 'Anket'));
-          const d = $('#desc'); const txt = (f.description || '').trim();
-          if (txt) { d.textContent = txt; d.style.display='block'; } else { d.textContent=''; d.style.display='none'; }
-        } catch {}
-        show($('#form'));
+          const schema = typeof f.schema==='string' ? JSON.parse(f.schema||'{}') : (f.schema||{});
+          const title = coalesceTitle(f) || coalesceTitle(schema) || (f.slug ? `Form: ${f.slug}` : 'Anket');
+          const desc  = coalesceDesc(f)  || coalesceDesc(schema)  || '';
+          $('#title').textContent = title;
+          if (String(desc).trim()) { $('#desc').textContent = desc; $('#desc').style.display='block'; }
+          show($('#form'));
+        } catch { show($('#form')); }
         return;
       }
 
-      // SSR YOK → tek fetch ile getir, render et
+      // SSR yoksa: tek fetch ile getir
       show($('#skeleton'));
       try {
         const r = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`, { headers:{ 'accept':'application/json' } });
         if (!r.ok) throw new Error('Form bulunamadı');
         let j; try { j = await r.json(); } catch { j = null; }
+        // {form:{...}} | {data:{...}} | {...}
         const form = (j && (j.form || j.data)) ? (j.form || j.data) : j;
         if (!form || typeof form !== 'object') throw new Error('Geçersiz yanıt (form verisi yok).');
 
-        // Normalize + güvenli varsayılanlar
+        // Normalize
         form.slug = form.slug || slug;
-        form.title = form.title || `Form: ${form.slug}`;
-        form.description = form.description || '';
+        // Başlık ve açıklamayı potansiyel alanlardan toparla
+        form.title = coalesceTitle(form) || (form.slug ? `Form: ${form.slug}` : 'Anket');
+        form.description = coalesceDesc(form) || '';
+
         if (typeof form.schema === 'string') { try { form.schema = JSON.parse(form.schema); } catch { form.schema = {}; } }
         if (!form.schema || typeof form.schema !== 'object') form.schema = {};
         if (!Array.isArray(form.schema.questions)) form.schema.questions = [];
@@ -249,7 +275,7 @@
     bootstrap();
   </script>
 
-  <!-- Submit/teşekkür ekranı vb. (güncel app.js ile) -->
+  <!-- Submit/teşekkür ekranı için (güncel app.js) -->
   <script src="/app.js" defer></script>
 </body>
 </html>
