@@ -203,59 +203,67 @@
     }
 
     // --- Slug picker (liste + manuel giriş)
-  function openSlugPicker(){
-  const wrap = document.createElement('div');
-  wrap.className = 'modal-backdrop';
-  wrap.innerHTML = `
+ function openSlugPicker(){
+  const wrap=document.createElement('div');
+  wrap.className='modal-backdrop';
+  wrap.innerHTML=`
     <div class="modal">
       <button class="close" aria-label="Kapat">&times;</button>
       <h2>Bir form seçin</h2>
-      <input type="search" class="search" placeholder="Slug veya başlık ara…" />
+      <input type="search" class="search" placeholder="Slug veya başlık ara…"/>
       <div class="row-flex" style="margin-top:8px">
         <input type="text" id="manualSlug" placeholder="Slug'ı elle girin (ör. ASD)">
         <button id="goBtn">Git</button>
       </div>
       <label style="display:block;margin-top:12px;font-size:12px;opacity:.7">Listeden seç (ilk 200 kayıt)</label>
       <select id="slugSelect" size="10" style="width:100%;margin-top:6px"></select>
-      <div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end">
-        <button id="selectGo" style="padding:8px 12px;border:none;border-radius:10px;background:var(--g-primary);color:#fff;font-weight:600;cursor:pointer">Seç ve Git</button>
-      </div>
     </div>`;
   document.body.appendChild(wrap);
 
-  const close = () => wrap.remove();
+  const close = ()=>wrap.remove();
   wrap.querySelector('.close').addEventListener('click', close);
 
-  const go = (slug) => { if (slug) location.href = `/form.html?slug=${encodeURIComponent(slug.trim())}`; };
+  const listEl = wrap.querySelector('#slugSelect');
+  const searchEl = wrap.querySelector('.search');
+  const manual = wrap.querySelector('#manualSlug');
+  const goBtn = wrap.querySelector('#goBtn');
 
-  const listEl  = wrap.querySelector('#slugSelect');
-  const searchEl= wrap.querySelector('.search');
-  const manual  = wrap.querySelector('#manualSlug');
-  wrap.querySelector('#goBtn').addEventListener('click', () => go(manual.value));
-  manual.addEventListener('keydown', e => { if (e.key === 'Enter') go(manual.value); });
-  wrap.querySelector('#selectGo').addEventListener('click', () => go(listEl.value));
-
-  const renderOptions = (items) => {
-    listEl.innerHTML = items.map(it =>
-      `<option value="${esc(it.slug)}">${esc(it.title || it.slug)} — ${esc(it.slug)}</option>`
-    ).join('');
+  const go = (slug)=>{
+    if(!slug) return;
+    location.href = `/form.html?slug=${encodeURIComponent(slug.trim())}`;
   };
 
-  fetch('/api/forms-list', { headers:{'accept':'application/json'} })
-    .then(r => r.json())
-    .then(j => {
+  goBtn.addEventListener('click', ()=>{
+    const m = manual.value.trim();
+    if (m) go(m);
+    else   go(listEl.value); // manuel boşsa seçili öğe ile git
+  });
+  manual.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); goBtn.click(); }});
+
+  // select: çift tık veya Enter → git
+  listEl.addEventListener('dblclick', ()=> go(listEl.value));
+  listEl.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); go(listEl.value); }});
+
+  const render = (items)=>{
+    listEl.innerHTML = items.map(it=>`<option value="${esc(it.slug)}">${esc(it.title||it.slug)} — ${esc(it.slug)}</option>`).join('');
+    if(items.length) listEl.selectedIndex = 0;
+  };
+
+  fetch('/api/forms-list',{headers:{accept:'application/json'}})
+    .then(r=>r.json())
+    .then(j=>{
       const items = Array.isArray(j?.items) ? j.items.slice(0,200) : [];
-      if (!items.length) { listEl.innerHTML = `<option>Kayıt bulunamadı</option>`; listEl.disabled = true; return; }
-      let current = items.slice(); renderOptions(current);
-      searchEl.addEventListener('input', () => {
+      render(items);
+      searchEl.addEventListener('input',()=>{
         const q = searchEl.value.trim().toLowerCase();
-        current = items.filter(it => (it.slug||'').toLowerCase().includes(q) || (it.title||'').toLowerCase().includes(q));
-        renderOptions(current);
+        render(items.filter(it =>
+          (it.slug||'').toLowerCase().includes(q) ||
+          (it.title||'').toLowerCase().includes(q)
+        ));
       });
     })
-    .catch(() => { listEl.innerHTML = `<option>Liste alınamadı</option>`; listEl.disabled = true; });
+    .catch(()=>{ listEl.innerHTML='<option>Liste alınamadı</option>'; listEl.disabled=true; });
 }
-
     // --- Başlat
     async function bootstrap(){
       const params = new URLSearchParams(location.search);
