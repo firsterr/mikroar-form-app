@@ -1,9 +1,21 @@
-// public/admin.js — FULL REPLACE
+// public/admin.js — FULL REPLACE (session based auth)
 (function () {
   "use strict";
   const $  = (s,r=document)=>r.querySelector(s);
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
   const byIdOrName = id => document.getElementById(id) || document.querySelector(`[name="${id}"]`);
+
+  // ---- Session-based token (her sayfa yenilemede tekrar sorulsun)
+  const TK = 'admintoken';
+  function getToken() {
+    let t = sessionStorage.getItem(TK);
+    if (!t) {
+      t = prompt('ADMIN_TOKEN (Netlify env):');
+      if (t) sessionStorage.setItem(TK, t);
+    }
+    return t || null;
+  }
+  function clearToken(){ sessionStorage.removeItem(TK); }
 
   const el = {
     slug:   ()=> byIdOrName("slug"),
@@ -15,7 +27,7 @@
     btnNew: ()=> byIdOrName("btnNew"),
     btnAddQ:()=> byIdOrName("btnAddQ"),
     toast:  ()=> byIdOrName("toast"),
-    btnKey: ()=> byIdOrName("btnKey"),
+    btnKey: ()=> byIdOrName("btnKey") || byIdOrName("btnAuth"), // geriye dönük
     box:    ()=> byIdOrName("questions"),
   };
 
@@ -49,45 +61,25 @@
           <option value="email"${q.type==="email"?" selected":""}>E-posta</option>
           <option value="number"${q.type==="number"?" selected":""}>Sayı</option>
         </select>
-
         <input class="q-name"  placeholder="alan adı" value="${q.name||`soru${i+1}`}" />
         <input class="q-label" placeholder="Soru başlığı" value="${q.label||""}" />
         <input class="q-opts"  placeholder="Seçenekler (virgülle)" value="${Array.isArray(q.options)? q.options.join(", "): ""}" />
-
-        <div class="reqbox">
-          <input type="checkbox" class="q-req"${q.required?" checked":""}/>
-          <span class="muted">Zorunlu</span>
-        </div>
-
+        <div class="reqbox"><input type="checkbox" class="q-req"${q.required?" checked":""}/> <span class="muted">Zorunlu</span></div>
         <button class="q-del">Sil</button>
-      </div>
-    `;
+      </div>`;
     const typeSel = $(".q-type", row);
     const optsInp = $(".q-opts", row);
-
-    function syncOptsVisibility(){
-      if (["radio","checkbox","select"].includes(typeSel.value)) {
-        optsInp.style.display = "block";
-      } else {
-        optsInp.style.display = "none";
-        optsInp.value = "";
-      }
-    }
-    typeSel.addEventListener("change", syncOptsVisibility);
-    syncOptsVisibility();
-
+    const sync = ()=>{ optsInp.style.display = ["radio","checkbox","select"].includes(typeSel.value) ? "block" : "none"; if(optsInp.style.display==="none") optsInp.value=""; };
+    typeSel.addEventListener("change", sync); sync();
     $(".q-del", row).addEventListener("click", () => row.remove());
     return row;
   }
-
   function renderQuestions(list){
     const box = el.box(); if(!box) return;
-    box.innerHTML = "";
-    (list||[]).forEach((q,i)=> box.appendChild(makeRow(q,i)));
+    box.innerHTML = ""; (list||[]).forEach((q,i)=> box.appendChild(makeRow(q,i)));
   }
-
   function collectQuestions(){
-    return $$("#questions .qrow").map((row, i)=>{
+    return $$("#questions .qrow").map((row,i)=>{
       const type = $(".q-type",row).value;
       const name = $(".q-name",row).value.trim() || `soru${i+1}`;
       const label= $(".q-label",row).value.trim() || `Soru ${i+1}`;
@@ -107,27 +99,23 @@
     const tx = await r.text();
     let form=null; try{ const j=JSON.parse(tx||"{}"); form=j.form || j.data || (Array.isArray(j)?j[0]:null);}catch{}
     if(!r.ok || !form) throw new Error(`Bulunamadı (HTTP ${r.status})`);
-
     (el.slug()  ||{}).value = form.slug || "";
     (el.title() ||{}).value = form.title || "";
     (el.desc()  ||{}).value = (form.schema && form.schema.description) || "";
     (el.status()||{}).value = form.active ? "Aktif" : "Pasif";
-
     const raw = (form.schema && Array.isArray(form.schema.questions)) ? form.schema.questions : [];
     const qs  = raw.map((qq,i)=>({
-      type: normType(qq.type),
-      name: qq.name || `soru${i+1}`,
-      label: qq.label || `Soru ${i+1}`,
+      type: normType(qq.type), name: qq.name || `soru${i+1}`, label: qq.label || `Soru ${i+1}`,
       required: !!qq.required,
       options: Array.isArray(qq.options) ? qq.options
-             : qq.options!=null ? String(qq.options).split(",").map(s=>s.trim()).filter(Boolean)
-             : []
+            : qq.options!=null ? String(qq.options).split(",").map(s=>s.trim()).filter(Boolean) : []
     }));
     renderQuestions(qs);
   }
 
-  // --------- SAVE
+  // --------- SAVE (protected)
   async function saveForm(){
+    const token = getToken(); if(!token) throw new Error("Anahtar gerekli");
     const payload = {
       slug  : (el.slug()?.value || "").trim(),
       title : (el.title()?.value || "").trim(),
@@ -136,10 +124,9 @@
       schema: { questions: collectQuestions() }
     };
     if(!payload.slug) throw new Error("Slug gerekli");
-
     const r = await fetch("/api/forms-admin",{
       method:"POST",
-      headers:{ "content-type":"application/json", "x-admin-token": localStorage.getItem("admintoken") || "" },
+      headers:{ "content-type":"application/json", "x-admin-token": token, accept:"application/json" },
       body: JSON.stringify(payload)
     });
     const txt = await r.text();
@@ -149,9 +136,13 @@
 
   // --------- Bindings
   document.addEventListener("DOMContentLoaded", ()=>{
+    // Oturum: sayfa açılır açılmaz sor
+    if (!getToken()) { /* iptal ettiyse */ toast("Anahtar gerekli — Giriş yapın", true); }
+
     el.btnKey()?.addEventListener("click", ()=>{
-      const t = prompt("ADMIN_TOKEN (Netlify env):", localStorage.getItem("admintoken")||"");
-      if(t!=null){ localStorage.setItem("admintoken", t); toast("Anahtar kaydedildi"); }
+      // Toggle: varsa çıkış, yoksa giriş
+      if (sessionStorage.getItem(TK)) { clearToken(); toast("Çıkış yapıldı"); }
+      else { getToken(); toast("Giriş yapıldı"); }
     });
 
     el.btnLoad()?.addEventListener("click", async ()=>{
@@ -165,8 +156,7 @@
     });
 
     el.btnNew()?.addEventListener("click", ()=>{
-      (el.title()||{}).value=""; (el.desc()||{}).value="";
-      (el.status()||{}).value="Aktif";
+      (el.title()||{}).value=""; (el.desc()||{}).value=""; (el.status()||{}).value="Aktif";
       renderQuestions([]);
     });
 
