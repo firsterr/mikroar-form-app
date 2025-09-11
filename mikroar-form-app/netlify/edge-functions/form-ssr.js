@@ -1,23 +1,16 @@
 // netlify/edge-functions/form-ssr.js
-// Amaç: /form.html?slug=... isteklerinde formu edge'de SSR edip
-// boş/flash olmadan doğrudan HTML olarak döndürmek.
-
 export default async (req, context) => {
   const url = new URL(req.url);
 
-  // slug: ?slug=... yoksa path'ten (form.mikroar.com/SLUG gibi kullanım için)
-  const rawPath  = url.pathname.replace(/^\/+|\/+$/g, "");
-  const pathSlug = rawPath && !/\.html$/i.test(rawPath) ? rawPath : "";
-  const slug = url.searchParams.get("slug") || pathSlug;
-
-  // slug yoksa static sayfayı ver (liste ekranı)
+  // ?slug=...; form.html dışı path slug'ını yok sayıyoruz
+  const slug = url.searchParams.get("slug");
   if (!slug) return context.next();
 
-  // Şemayı iç fonksiyondan çek (aynı origin, soğuk başlatma riski düşük)
+  // Şemayı aynı origin functions'tan çek
   const api = new URL("/.netlify/functions/forms?slug=" + encodeURIComponent(slug), url.origin);
   let schema;
   try {
-    const r = await fetch(api.toString(), { headers: { "accept": "application/json" } });
+    const r = await fetch(api, { headers: { accept: "application/json" } });
     const j = await r.json();
     if (!r.ok || !j?.ok || !j?.schema) return context.next();
     schema = j.schema;
@@ -25,7 +18,6 @@ export default async (req, context) => {
     return context.next();
   }
 
-  // HTML yardımcıları
   const esc = (s) =>
     String(s ?? "")
       .replaceAll("&", "&amp;")
@@ -40,63 +32,45 @@ export default async (req, context) => {
     const req = q.required ? " required" : "";
     const opts = Array.isArray(q.options) ? q.options : [];
 
-    // Radio & Checkbox
     if (type === "radio" || type === "checkbox") {
-      const items = opts.length
-        ? opts
-            .map((opt, j) => {
-              const id = `f_${name}_${j}`;
-              const base = `<input type="${type}" id="${id}" name="${esc(name)}" value="${esc(opt)}"${type === "radio" && q.required ? " required" : ""}>`;
-              return `<div><label for="${id}">${base}<span>${esc(opt)}</span></label></div>`;
-            })
-            .join("")
-        : `<div class="muted">Bu soru için seçenek tanımlı değil.</div>`;
-
-      return `
-        <div class="row">
-          <label>${esc(label)}${q.required ? " *" : ""}</label>
-          <div>${items}</div>
-        </div>`;
+      const items = (opts.length ? opts : ["(Seçenek tanımlı değil)"])
+        .map((opt, j) => {
+          const id = `f_${name}_${j}`;
+          const need = type === "radio" && q.required ? " required" : "";
+          return `
+          <div>
+            <label for="${id}">
+              <input type="${type}" id="${id}" name="${esc(name)}" value="${esc(opt)}"${need}>
+              <span>${esc(opt)}</span>
+            </label>
+          </div>`;
+        })
+        .join("");
+      return `<div class="row"><label>${esc(label)}${q.required ? " *" : ""}</label><div>${items}</div></div>`;
     }
 
-    // Select
     if (type === "select") {
-      const options = opts.length
-        ? opts.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join("")
-        : "";
-      const warn = opts.length ? "" : `<div class="muted">Bu soru için seçenek tanımlı değil.</div>`;
+      const options = opts.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
       return `
-        <div class="row">
-          <label for="f_${esc(name)}">${esc(label)}${q.required ? " *" : ""}</label>
-          <select id="f_${esc(name)}" name="${esc(name)}"${req}>
-            <option value="" disabled selected>Seçiniz</option>
-            ${options}
-          </select>
-          ${warn}
-        </div>`;
-    }
-
-    // Textarea
-    if (type === "textarea") {
-      return `
-        <div class="row">
-          <label for="f_${esc(name)}">${esc(label)}${q.required ? " *" : ""}</label>
-          <textarea id="f_${esc(name)}" name="${esc(name)}"${req}></textarea>
-        </div>`;
-    }
-
-    // Text/Email default
-    const itype = type === "email" ? "email" : "text";
-    return `
       <div class="row">
         <label for="f_${esc(name)}">${esc(label)}${q.required ? " *" : ""}</label>
-        <input id="f_${esc(name)}" type="${itype}" name="${esc(name)}"${req} />
+        <select id="f_${esc(name)}" name="${esc(name)}"${req}>
+          <option value="" disabled selected>Seçiniz</option>
+          ${options}
+        </select>
       </div>`;
+    }
+
+    if (type === "textarea") {
+      return `<div class="row"><label for="f_${esc(name)}">${esc(label)}${q.required ? " *" : ""}</label><textarea id="f_${esc(name)}" name="${esc(name)}"${req}></textarea></div>`;
+    }
+
+    const itype = type === "email" ? "email" : "text";
+    return `<div class="row"><label for="f_${esc(name)}">${esc(label)}${q.required ? " *" : ""}</label><input id="f_${esc(name)}" type="${itype}" name="${esc(name)}"${req}></div>`;
   };
 
   const questions = (schema.questions || schema.fields || []).map(row).join("");
 
-  // SSR edilmiş tam sayfa (form.css ve forms.js ile)
   const html = `<!doctype html>
 <html lang="tr">
 <head>
@@ -105,7 +79,7 @@ export default async (req, context) => {
   <title>${esc(schema.title || slug)}</title>
   <link rel="stylesheet" href="/form.css">
   <style>
-    /* Kritik min-CSS: kartlar stil dosyası gelmeden de kutular görünür olsun */
+    /* Kritik min-CSS: stil dosyası gelmeden form kutuları görünsün */
     body{margin:0;background:#f6f7fb;color:#1f2937;font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
     .wrap{max-width:920px;margin:40px auto;padding:0 20px}
     #form{max-width:680px;margin:18px auto 8px}
@@ -114,10 +88,7 @@ export default async (req, context) => {
     input,select,textarea{width:100%;padding:12px 14px;border:1px solid #e5e7eb;border-radius:12px}
     button[type=submit]{appearance:none;border:0;background:#2563eb;color:#fff;padding:12px 18px;border-radius:12px;font-weight:700;cursor:pointer}
   </style>
-  <script>
-    // Hydration için şema:
-    window.__FORM__ = ${JSON.stringify({ slug, schema })};
-  </script>
+  <script>window.__FORM__=${JSON.stringify({ slug, schema })};</script>
   <script defer src="/forms.js"></script>
 </head>
 <body>
@@ -135,6 +106,10 @@ export default async (req, context) => {
 </html>`;
 
   return new Response(html, {
-    headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" }
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-cache",
+      "x-ssr": "yes"         // >>> doğrulama için
+    }
   });
 };
