@@ -211,12 +211,24 @@ function openSlugPicker(){
 
   // ---- slug VARSA ----
   if (SSR_READY) {
-    hide($('#skeleton'));
-    show($('#form'));
-    const d = $('#desc'); if (d && d.textContent.trim()) show(d);
-    const t = $('#title'); if (t && t.textContent.trim()) show(t);
-    return;
-  }
+  hide($('#skeleton'));
+
+  // SSR olsa da güvenli şekilde başlık/alt başlıkları __FORM'dan yaz
+  try {
+    const f = window.__FORM || {};
+    const t = $('#title');
+    const d = $('#desc');
+    if (t) { t.textContent = (f.title || 'Anket'); show(t); }
+    if (d) {
+      const descText = (f.description || '').trim();
+      if (descText) { d.textContent = descText; d.style.display='block'; }
+      else { d.style.display='none'; }
+    }
+  } catch {}
+
+  show($('#form'));
+  return;
+}
 
   // SSR yoksa: hafif skeleton + tek fetch
   show($('#skeleton'));
