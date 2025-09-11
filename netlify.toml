@@ -126,3 +126,9 @@
   to   = "/form.html"
   status = 200
   conditions = { Host = ["form.mikroar.com"] }
+
+  [[redirects]]
+from = "/admin"
+to   = "/admin.html"
+status = 200
+force  = true
