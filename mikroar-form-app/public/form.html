@@ -216,7 +216,7 @@
     }
 
     // --- Slug picker (liste + manuel giriş)
- function openSlugPicker(){
+function openSlugPicker(){
   const wrap=document.createElement('div');
   wrap.className='modal-backdrop';
   wrap.innerHTML=`
@@ -224,7 +224,7 @@
       <button class="close" aria-label="Kapat">&times;</button>
       <h2>Bir form seçin</h2>
       <label style="display:block;margin:8px 0 6px;font-size:12px;opacity:.7">Listeden seç (ilk 200 kayıt)</label>
-      <select id="slugSelect" size="12" style="width:100%;margin-top:4px"></select>
+      <select id="slugSelect" size="12"></select>
       <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end">
         <button id="goBtn" style="padding:10px 14px;border:none;border-radius:10px;background:var(--g-primary);color:#fff;font-weight:600;cursor:pointer">Git</button>
       </div>
@@ -237,7 +237,6 @@
   const listEl = wrap.querySelector('#slugSelect');
   const go     = (slug)=>{ if(slug) location.href = `/form.html?slug=${encodeURIComponent(slug)}`; };
 
-  // Çift tık / Enter / Buton
   listEl.addEventListener('dblclick', ()=> go(listEl.value));
   listEl.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); go(listEl.value); }});
   wrap.querySelector('#goBtn').addEventListener('click', ()=> go(listEl.value));
