@@ -4,62 +4,45 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Anket</title>
+
+  <!-- Dış stil -->
   <link rel="preload" href="/form.css" as="style" fetchpriority="high">
   <link rel="stylesheet" href="/form.css?v=4" />
-  <style>
-    /* ==== Google Forms benzeri hafif tema ==== */
-    :root{
-      --g-pad:14px; --g-radius:12px; --g-primary:#1a73e8;
-      --g-muted:#6b7280; --g-border:#e5e7eb; --g-bg:#f7f7fb;
-      --g-shadow:0 6px 20px rgba(0,0,0,.06);
-    }
-    html,body{ background:var(--g-bg); }
-    #app{ max-width:900px; margin:24px auto; padding:0 12px; }
-    #title{ font-size:28px; font-weight:700; margin:18px 0; display:none; }
-    .form-desc{ margin:8px 0 18px; color:var(--g-muted); display:none; }
-    form#form{ background:#fff; padding:8px; border-radius:16px; box-shadow:var(--g-shadow); display:none; }
-    .row{ background:#fff; border:1px solid var(--g-border); border-radius:var(--g-radius); padding:var(--g-pad); margin:12px 0; }
-    .q-title{ font-weight:600; margin-bottom:6px; display:flex; align-items:center; gap:6px; }
-    .q-title .req{ color:#d93025; }
-    .options{ display:grid; gap:10px; }
-    .opt{ display:flex; gap:10px; align-items:center; }
-    input[type="text"], input[type="email"], input[type="number"], select, textarea{
-      width:100%; border:1px solid var(--g-border); border-radius:10px; padding:10px 12px; outline:none;
-    }
-    input:focus, select:focus, textarea:focus{ border-color:var(--g-primary); box-shadow:0 0 0 3px rgba(26,115,232,.15); }
-    .actions{ display:flex; justify-content:flex-start; padding:8px 0 4px; }
-    #btnSend{ background:var(--g-primary); color:#fff; border:none; border-radius:999px; padding:10px 18px; font-weight:600; cursor:pointer; box-shadow:0 4px 14px rgba(26,115,232,.25); }
-    #btnSend[aria-busy="true"]{ opacity:.75; cursor:progress; }
-    .note.center{ color:var(--g-muted); }
-    .after.center{ color:var(--g-muted); margin:12px 0 4px; }
-    .brand{ color:var(--g-muted); font-size:12px; margin:0 0 12px; }
 
-    /* Skeleton */
+  <!-- Minimal ek stiller (modal + skeleton) -->
+  <style>
     .skeleton{ padding:16px; }
     .skeleton .bar{ height:14px; margin:10px 0; border-radius:6px; background:linear-gradient(90deg,#eee,#f5f5f5,#eee); }
-
-    /* Slug picker modal + manual giriş */
     .modal-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; z-index:9999; }
-    .modal{ background:#fff; width:min(720px,92vw); max-height:80vh; overflow:auto; border-radius:14px; padding:18px; box-shadow:0 20px 60px rgba(0,0,0,.25); position:relative; }
+    .modal{
+      background:#fff; width:min(720px,92vw); max-height:80vh; overflow:auto;
+      border-radius:14px; padding:18px; box-shadow:0 20px 60px rgba(0,0,0,.25); position:relative;
+    }
     .modal h2{ margin:0 0 8px; }
     .modal .search{ width:100%; padding:10px 12px; border:1px solid #ddd; border-radius:10px; }
     .modal .row-flex{ display:flex; gap:10px; margin-top:10px; }
     .modal .row-flex input{ flex:1; padding:10px 12px; border:1px solid #ddd; border-radius:10px; }
-    .modal .row-flex button{ padding:10px 14px; border:none; border-radius:10px; background:var(--g-primary); color:#fff; font-weight:600; cursor:pointer; }
+    .modal .row-flex button{ padding:10px 14px; border:none; border-radius:10px; background:#1a73e8; color:#fff; font-weight:600; cursor:pointer; }
     .modal .list{ margin-top:12px; display:grid; gap:8px; }
     .modal .item{ display:flex; justify-content:space-between; align-items:center; gap:8px; border:1px solid #eee; border-radius:12px; padding:10px 12px; cursor:pointer; }
     .modal .item:hover{ background:#fafafa; }
     .modal .slug{ font-family:ui-monospace, SFMono-Regular, Menlo, monospace; opacity:.8; }
     .modal .close{ position:absolute; top:10px; right:14px; border:none; background:transparent; font-size:20px; cursor:pointer; }
+    .gf-header{ background:linear-gradient(180deg,#fff,#fafbff); border:1px solid #e6e7ec; border-radius:16px; box-shadow:0 8px 28px rgba(17,24,39,.08); padding:22px; margin:28px auto 16px; }
   </style>
 </head>
 <body>
   <div id="app">
-    <h1 id="title"></h1>
-    <p id="desc" class="form-desc"></p>
+    <!-- Üst kart: Google Forms benzeri başlık/alt başlık -->
+    <div class="gf-header">
+      <h1 id="title"></h1>
+      <p id="desc" class="form-desc"></p>
+    </div>
 
+    <!-- Form gövdesi -->
     <form id="form" novalidate></form>
 
+    <!-- Yalnızca SSR yoksa geçici iskelet -->
     <div id="skeleton" class="skeleton" aria-hidden="true" style="display:none">
       <div class="bar" style="width:50%"></div>
       <div class="bar" style="width:85%"></div>
@@ -71,16 +54,17 @@
   </div>
 
   <script>
-    // ===== Helpers
+    // ===== Yardımcılar
     const $ = s => document.querySelector(s);
     const show = el => el && (el.style.display = 'block');
     const hide = el => el && (el.style.display = 'none');
     const esc = s => String(s ?? '')
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
+    // SSR tespiti: SSR üretildiyse form DOM'da data-ssr="1" olarak gelir ve window.__FORM set edilir
     const SSR_READY = !!(window.__FORM && document.querySelector('#form[data-ssr="1"]'));
 
-    // --- Client-side question renderer (SSR yoksa)
+    // --- Tek soruyu HTML'e çevir (client-side render için)
     function qHTML(q){
       const type = (q.type||'text').toLowerCase();
       const name = q.name || q.label || 'q';
@@ -124,12 +108,12 @@
               </div>`;
     }
 
+    // --- Client-side render (SSR yokken)
     function renderClient(form){
-      // Başlık / alt başlık — ZORLA yaz ve göster
-      const t = $('#title'); t.textContent = form.title || (form.slug ? `Form: ${form.slug}` : 'Anket'); show(t);
-      const d = $('#desc');
-      const descText = (form.description || '').trim();
-      if (descText) { d.textContent = descText; d.style.display='block'; } else { d.style.display='none'; }
+      // Başlık/alt başlığı ZORLA yaz ve göster
+      const t = $('#title'); t.textContent = form.title || (form.slug ? `Form: ${form.slug}` : 'Anket');
+      const d = $('#desc'); const descText = (form.description || '').trim();
+      if (descText) { d.textContent = descText; d.style.display='block'; } else { d.textContent = ''; d.style.display='none'; }
 
       const schema = typeof form.schema==='string' ? JSON.parse(form.schema||'{}') : (form.schema||{});
       const qs = Array.isArray(schema.questions) ? schema.questions : [];
@@ -138,10 +122,11 @@
         `<div class="actions"><button type="submit" id="btnSend">Gönder</button></div>
          <p class="after center">Bu form <strong>mikroar.com</strong> alanında oluşturuldu.</p>
          <p class="brand">mikroAR</p>`;
+
       show($('#form'));
     }
 
-    // -------- Slug Picker (liste + manuel giriş) --------
+    // --- Slug seçici (liste + manuel giriş)
     function openSlugPicker(){
       const wrap = document.createElement('div');
       wrap.className = 'modal-backdrop';
@@ -169,7 +154,6 @@
       const manual = wrap.querySelector('#manualSlug');
       const goBtn = wrap.querySelector('#goBtn');
 
-      // Manuel yönlendirme her zaman çalışır
       function go(slug){
         if (!slug) return;
         location.href = `/form.html?slug=${encodeURIComponent(slug.trim())}`;
@@ -177,7 +161,6 @@
       goBtn.addEventListener('click', ()=> go(manual.value));
       manual.addEventListener('keydown', e => { if (e.key === 'Enter') go(manual.value); });
 
-      // Listeyi çek (boş bile gelse manual var, sayfa çalışır)
       fetch('/api/forms-list', { headers:{'accept':'application/json'} })
         .then(r => r.json())
         .then(j => {
@@ -217,27 +200,27 @@
         });
     }
 
-    // -------- Başlat --------
+    // --- Başlat
     async function bootstrap(){
       const params = new URLSearchParams(location.search);
       const slug = params.get('slug');
 
-      // slug YOKSA → picker + manuel giriş
+      // slug YOK → seçici modal
       if (!slug) { openSlugPicker(); return; }
 
-      // SSR varsa: başlık/açıklamayı __FORM’dan yazarak göster
+      // SSR VAR → fetch/skeleton yok; başlık/desc’yi __FORM’dan yazar, formu gösterir
       if (SSR_READY) {
         try {
           const f = window.__FORM || {};
-          const t = $('#title'); t.textContent = (f.title || (f.slug ? `Form: ${f.slug}` : 'Anket')); show(t);
+          const t = $('#title'); t.textContent = (f.title || (f.slug ? `Form: ${f.slug}` : 'Anket'));
           const d = $('#desc'); const txt = (f.description || '').trim();
-          if (txt) { d.textContent = txt; d.style.display='block'; } else { d.style.display='none'; }
+          if (txt) { d.textContent = txt; d.style.display='block'; } else { d.textContent=''; d.style.display='none'; }
         } catch {}
         show($('#form'));
         return;
       }
 
-      // SSR yoksa: fetch ile getir ve render et
+      // SSR YOK → tek fetch ile getir, render et
       show($('#skeleton'));
       try {
         const r = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`, { headers:{ 'accept':'application/json' } });
@@ -246,7 +229,7 @@
         const form = (j && (j.form || j.data)) ? (j.form || j.data) : j;
         if (!form || typeof form !== 'object') throw new Error('Geçersiz yanıt (form verisi yok).');
 
-        // Güvenli varsayılanlar + normalize
+        // Normalize + güvenli varsayılanlar
         form.slug = form.slug || slug;
         form.title = form.title || `Form: ${form.slug}`;
         form.description = form.description || '';
@@ -266,7 +249,7 @@
     bootstrap();
   </script>
 
-  <!-- Submit/teşekkür ekranı vb. için app.js (daha önce verdiğim tam sürüm) -->
+  <!-- Submit/teşekkür ekranı vb. (güncel app.js ile) -->
   <script src="/app.js" defer></script>
 </body>
 </html>
