@@ -1,407 +1,244 @@
-// server.js — ESM
+// server.js  —  FULL REPLACE
 
-// ---- Imports
 import express from "express";
-import helmet from "helmet";
-import cors from "cors";
-import morgan from "morgan";
-import pkg from "pg";
-const { Pool } = pkg;
 import path from "path";
 import { fileURLToPath } from "url";
-import net from "node:net";
-import crypto from "node:crypto";
+import compression from "compression";
+import cors from "cors";
+import helmet from "helmet";
+import fetch from "node-fetch";
+import { createClient } from "@supabase/supabase-js";
 
-// ---- Utils
-function makeCode(len = 7) {
-  const alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  const buf = crypto.randomBytes(len);
-  let out = "";
-  for (let i = 0; i < len; i++) out += alphabet[buf[i] % alphabet.length];
-  return out;
-}
+// -------------------- infra --------------------
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ---- Env
-const {
-  PORT = 3000,
-  DATABASE_URL,
-  CORS_ORIGIN = "*",
-  ADMIN_USER = "admin",
-  ADMIN_PASS = "admin",
-  FRAME_ANCESTORS = "",
-  DUPLICATE_POLICY = "BLOCK", // BLOCK | UPDATE
-} = process.env;
-
-// ---- DB
-const pool = new Pool({
-  connectionString: DATABASE_URL,
-  ssl: DATABASE_URL?.includes("sslmode=require")
-    ? { rejectUnauthorized: false }
-    : undefined,
-});
-
-// ---- App
 const app = express();
-app.set("trust proxy", true);
+app.disable("x-powered-by");
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(cors());
+app.use(compression());
+app.use(express.json({ limit: "1mb" }));
 
-// ---- Helpers
-function getHost(req) {
-  return (
-    req.headers["x-forwarded-host"] || req.hostname || req.headers.host || ""
-  ).toLowerCase();
-}
-function pickClientIp(req) {
-  const chain = [
-    req.headers["cf-connecting-ip"],
-    req.headers["x-client-ip"],
-    req.headers["x-real-ip"],
-    req.headers["x-forwarded-for"],
-    req.ip,
-    req.socket?.remoteAddress,
-  ].filter(Boolean);
+const PORT = process.env.PORT || 3000;
 
-  for (let raw of chain) {
-    let first = String(raw).split(",")[0].trim();
-    first = first.replace(/^\[|\]$/g, "").replace(/:\d+$/, "");
-    if (first.startsWith("::ffff:")) first = first.slice(7);
-    if (net.isIP(first)) return first;
+// -------------------- supabase --------------------
+const SUPABASE_URL = process.env.SUPABASE_URL || "";
+const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE || "";
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "";
+
+const supabaseKey = SUPABASE_SERVICE_ROLE || SUPABASE_ANON_KEY || "";
+const supabase =
+  SUPABASE_URL && supabaseKey
+    ? createClient(SUPABASE_URL, supabaseKey, { auth: { persistSession: false } })
+    : null;
+
+// Tek noktadan form çekme
+async function getFormBySlug(slug) {
+  if (!slug) return null;
+
+  // Öncelik: Supabase doğrudan okuma
+  if (supabase) {
+    const { data, error } = await supabase
+      .from("forms")
+      .select("id, slug, title, description, schema")
+      .eq("slug", slug)
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      console.error("Supabase error:", error.message);
+    }
+    if (data) return normalizeForm(data);
   }
+
+  // Alternatif: varsa mevcut backend’in JSON endpoint’i
+  try {
+    const base = process.env.PUBLIC_BASE_URL || ""; // örn: https://form.mikroar.com
+    if (base) {
+      const r = await fetch(`${base}/api/forms?slug=${encodeURIComponent(slug)}`, {
+        headers: { "accept": "application/json" },
+      });
+      if (r.ok) {
+        const j = await r.json();
+        if (j && j.form) return normalizeForm(j.form);
+      }
+    }
+  } catch (e) {
+    console.error("Fallback fetch error:", e.message);
+  }
+
   return null;
 }
 
-// ---- Admin basic auth
-function adminOnly(req, res, next) {
-  const hdr = req.headers.authorization || "";
-  if (!hdr.startsWith("Basic ")) {
-    res.set("WWW-Authenticate", 'Basic realm="MikroAR Admin"');
-    return res.status(401).send("Yetkisiz");
+function normalizeForm(raw) {
+  // schema string ya da json olabilir
+  let schema = raw.schema;
+  if (typeof schema === "string") {
+    try { schema = JSON.parse(schema); } catch { schema = {}; }
   }
-  const [u, p] = Buffer.from(hdr.split(" ")[1], "base64").toString().split(":");
-  if (u !== ADMIN_USER || p !== ADMIN_PASS) {
-    res.set("WWW-Authenticate", 'Basic realm="MikroAR Admin"');
-    return res.status(401).send("Yetkisiz");
-  }
-  next();
+  return {
+    id: raw.id,
+    slug: raw.slug,
+    title: raw.title || "Anket",
+    description: raw.description || "",
+    schema: schema || {},
+  };
 }
 
-// ---- Security
-const faList = FRAME_ANCESTORS
-  ? FRAME_ANCESTORS.split(",").map((s) => s.trim()).filter(Boolean)
-  : [];
+// -------------------- SSR renderer --------------------
+function escapeHtml(s = "") {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      useDefaults: true,
-      directives: {
-        "default-src": ["'self'"],
-        "frame-ancestors": faList.length ? faList : ["'self'"],
-        "script-src": ["'self'", "'unsafe-inline'"],
-        "connect-src": ["'self'"],
-        "img-src": ["'self'", "data:"],
-        "style-src": ["'self'", "'unsafe-inline'"], // harici + inline css
-      },
-    },
-    frameguard: false,
-    crossOriginEmbedderPolicy: false,
-  })
-);
+function renderOption(name, opt, type = "radio") {
+  const val = escapeHtml(String(opt));
+  const id = `f_${name}_${val.replace(/\W+/g, "_")}`;
+  return `
+    <label class="opt" for="${id}">
+      <input type="${type}" id="${id}" name="${escapeHtml(name)}" value="${val}">
+      <span>${val}</span>
+    </label>
+  `;
+}
 
-// ---- Health (Render kontrolü için çok hızlı!)
-app.get("/health", (_req, res) => res.status(200).send("ok"));
+function renderQuestion(q) {
+  const type = (q.type || "text").toLowerCase();
+  const name = q.name || q.label || "q";
+  const label = escapeHtml(q.label || "");
+  const required = q.required ? " required" : "";
+  const desc = q.description ? `<div class="muted">${escapeHtml(q.description)}</div>` : "";
+  const ph = q.placeholder ? ` placeholder="${escapeHtml(q.placeholder)}"` : "";
+  const opt = Array.isArray(q.options) ? q.options : [];
 
-// ---- Subdomain guard
-app.use((req, res, next) => {
-  const host = getHost(req);
-  if (req.path === "/health") return next();
+  let inner = "";
 
-  // anket.* → tüm sayfalar şifreli, ayrıca /form.html engelli
-  if (host.startsWith("anket.")) {
-    if (req.path.startsWith("/form.html")) {
-      return res.status(404).send("Not found");
-    }
-    return adminOnly(req, res, next);
+  if (type === "radio" || type === "checkbox") {
+    const group = opt.map(o => renderOption(name, o, type)).join("");
+    inner = `<div class="options">${group}</div>`;
+  } else if (type === "select") {
+    const options = opt.length
+      ? opt.map(v => `<option value="${escapeHtml(String(v))}">${escapeHtml(String(v))}</option>`).join("")
+      : "";
+    inner = `
+      <div class="options">
+        <div class="opt">
+          <select id="f_${escapeHtml(name)}" name="${escapeHtml(name)}"${required}>
+            <option value="" disabled selected>Seçiniz</option>
+            ${options}
+          </select>
+        </div>
+      </div>`;
+  } else if (type === "textarea") {
+    inner = `<textarea id="f_${escapeHtml(name)}" name="${escapeHtml(name)}"${required}${ph}></textarea>`;
+  } else {
+    const itype = type === "email" ? "email" : type === "number" ? "number" : "text";
+    inner = `<input type="${itype}" id="f_${escapeHtml(name)}" name="${escapeHtml(name)}"${required}${ph}/>`;
   }
 
-  // form.* → sadece portal sayfaları şifreli
-  if (host.startsWith("form.")) {
-    const isPortal =
-      req.method === "GET" &&
-      (req.path === "/" || req.path === "/index.html" || req.path === "/results.html");
-    if (isPortal) return adminOnly(req, res, next);
-  }
-  next();
-});
+  return `
+    <div class="row">
+      <div class="q-title">
+        <label for="f_${escapeHtml(name)}">${label}</label>
+        ${q.required ? `<span class="req">*</span>` : ""}
+      </div>
+      ${desc}
+      ${inner}
+    </div>
+  `;
+}
 
-// ---- Common middlewares
-app.use(
-  cors({
-    origin: CORS_ORIGIN === "*" ? true : CORS_ORIGIN.split(",").map((s) => s.trim()),
-    credentials: false,
-  })
-);
-app.use(express.json({ limit: "1mb" }));
-app.use(express.urlencoded({ extended: true }));
-app.use(morgan("combined"));
+function renderFormBody(form) {
+  const schema = form.schema || {};
+  const questions = Array.isArray(schema?.questions) ? schema.questions : [];
+  const rows = questions.map(renderQuestion).join("");
 
-// ----------------------------------------------------------------------------
-//                                  API’LER
-// ----------------------------------------------------------------------------
-
-// Admin ping
-app.get("/api/admin/ping", adminOnly, (_req, res) => res.json({ ok: true }));
-
-// Form listesi (aktif)
-app.get("/api/forms-list", async (_req, res) => {
-  try {
-    const { rows } = await pool.query(
-      `SELECT slug, title FROM forms WHERE active = TRUE ORDER BY created_at DESC`
-    );
-    res.json({ ok: true, rows });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
-
-// Tek form
-app.get("/api/forms/:slug", async (req, res) => {
-  try {
-    const { slug } = req.params;
-    const { rows } = await pool.query(
-      `SELECT slug, title, description, active, schema
-         FROM forms
-        WHERE slug = $1
-        LIMIT 1`,
-      [slug]
-    );
-    if (!rows.length) return res.status(404).json({ ok: false, error: "not_found" });
-    if (rows[0].active === false)
-      return res.status(403).json({ ok: false, error: "inactive" });
-
-    const form = rows[0];
-    try {
-      if (typeof form.schema === "string") form.schema = JSON.parse(form.schema);
-    } catch {}
-    res.json({ ok: true, form });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
-
-// Admin: form create/update (TEK rota)
-app.post("/admin/api/forms", adminOnly, async (req, res) => {
-  try {
-    let { slug, title, description = null, active = true, schema, questions } =
-      req.body || {};
-
-    if (!slug || !title) {
-      return res.status(400).json({ ok: false, error: "slug ve title gerekli" });
-    }
-    if (!schema && Array.isArray(questions)) schema = { questions };
-    if (!schema || !Array.isArray(schema.questions)) schema = { questions: [] };
-
-    // upsert
-    await pool.query(
-      `INSERT INTO forms (slug, title, description, active, schema, created_at)
-       VALUES ($1, $2, $3, $4, $5, NOW())
-       ON CONFLICT (slug) DO UPDATE
-         SET title = EXCLUDED.title,
-             description = EXCLUDED.description,
-             active = EXCLUDED.active,
-             schema = EXCLUDED.schema`,
-      [slug.trim().toLowerCase(), title, description, !!active, schema]
-    );
-
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
-
-// Cevap gönderimi
-app.post("/api/forms/:slug/submit", async (req, res) => {
-  const { slug } = req.params;
-  const answersRaw = req.body?.answers ?? req.body;
-  if (!answersRaw || typeof answersRaw !== "object") {
-    return res.status(400).json({ ok: false, error: "invalid_payload" });
-  }
-  const answersJson = JSON.stringify(answersRaw);
-  const clientIp = pickClientIp(req) || null;
-
-  try {
-    const f = await pool.query("SELECT slug, active FROM forms WHERE slug = $1", [slug]);
-    if (!f.rows.length) return res.status(404).json({ ok: false, error: "Form bulunamadı" });
-    if (!f.rows[0].active) return res.status(403).json({ ok: false, error: "Form pasif" });
-
-    if (String(DUPLICATE_POLICY).toUpperCase() === "UPDATE") {
-      const upsertSql = `
-        INSERT INTO responses (form_slug, ip, answers, created_at)
-        VALUES ($1, $2::inet, $3::jsonb, NOW())
-        ON CONFLICT (form_slug, ip)
-          DO UPDATE SET answers = EXCLUDED.answers, created_at = NOW()
-        RETURNING id, created_at`;
-      const { rows } = await pool.query(upsertSql, [slug, clientIp, answersJson]);
-      return res.json({ ok: true, updated: true, at: rows[0]?.created_at });
-    }
-
-    try {
-      const insertSql = `
-        INSERT INTO responses (form_slug, ip, answers, created_at)
-        VALUES ($1, $2::inet, $3::jsonb, NOW())
-        RETURNING id, created_at`;
-      const { rows } = await pool.query(insertSql, [slug, clientIp, answersJson]);
-      return res.json({ ok: true, created: true, at: rows[0]?.created_at });
-    } catch (err) {
-      if (err?.code === "23505") {
-        const old = await pool.query(
-          "SELECT created_at FROM responses WHERE form_slug = $1 AND ip = $2::inet",
-          [slug, clientIp]
-        );
-        return res.json({
-          ok: true,
-          alreadySubmitted: true,
-          at: old.rows[0]?.created_at || null,
-        });
-      }
-      throw err;
-    }
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
-
-// Sonuçlar
-app.get("/api/admin/forms/:slug/responses", adminOnly, async (req, res) => {
-  try {
-    const { slug } = req.params;
-    const { rows: formRows } = await pool.query(
-      "SELECT title, schema, active FROM forms WHERE slug = $1",
-      [slug]
-    );
-    if (!formRows.length)
-      return res.status(404).json({ ok: false, error: "Form bulunamadı" });
-
-    const meta = formRows[0];
-    try {
-      if (typeof meta.schema === "string") meta.schema = JSON.parse(meta.schema);
-    } catch {}
-
-    const { rows } = await pool.query(
-      `SELECT created_at, ip::text AS ip, answers
-         FROM responses
-        WHERE form_slug = $1
-        ORDER BY created_at DESC`,
-      [slug]
-    );
-    res.json({ ok: true, meta, rows });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
-
-// ----------------------------------------------------------------------------
-//                                  SSR
-// ----------------------------------------------------------------------------
+  return `
+    <h1 id="title">${escapeHtml(form.title || "Anket")}</h1>
+    ${form.description ? `<p id="desc" class="form-desc">${escapeHtml(form.description)}</p>` : `<p id="desc" class="form-desc" style="display:none"></p>`}
+    <form id="form" data-ssr="1" novalidate>
+      ${rows}
+      <div class="actions">
+        <button type="submit" id="btnSend">Gönder</button>
+      </div>
+      <p id="alertBottom" class="note center" style="display:none"></p>
+      <p class="after center">Bu form <strong>mikroar.com</strong> alanında oluşturuldu.</p>
+      <p class="brand">mikroAR</p>
+    </form>
+  `;
+}
 
 function ssrHtml(form) {
   const safeTitle = (form.title || "Anket").replace(/</g, "&lt;");
-  const cssLink = `<link rel="stylesheet" href="/form.css?v=2">`;
+  // app.js (veya form.js) tarafında SSR olduğunu anlaması için window.__FORM basıyoruz
   return `<!doctype html>
 <html lang="tr">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>${safeTitle}</title>
-${cssLink}
+<link rel="preload" href="/form.css" as="style" fetchpriority="high">
+<link rel="stylesheet" href="/form.css?v=3" />
 </head>
 <body>
-  <h1 id="form-title"></h1>
-  <p id="form-desc" class="form-desc" style="display:none"></p>
-  <form id="f"></form>
-  <script>window.__FORM__ = ${JSON.stringify(form)};</script>
-  <script src="/form.js?v=ssr2"></script>
+  <div id="app">
+    ${renderFormBody(form)}
+  </div>
+  <script>window.__FORM = ${JSON.stringify(form)};</script>
+  <script>
+    // SSR BYPASS: Frontend skeleton/fetch akışını tamamen kapat
+    window.SSR_READY = true;
+  </script>
+  <script src="/app.js" defer></script>
 </body>
 </html>`;
 }
 
-// /form.html?slug=...
+// -------------------- routes --------------------
+
+// Health
+app.get("/health", (_req, res) => {
+  res.type("text/plain").send("ok");
+});
+
+// SSR: /form.html?slug=...
 app.get("/form.html", async (req, res, next) => {
-  const slug = (req.query.slug || "").toString().trim().toLowerCase();
-  if (!slug) return next();
   try {
-    const { rows } = await pool.query(
-      "SELECT slug, title, description, active, schema FROM forms WHERE slug=$1 LIMIT 1",
-      [slug]
-    );
-    if (!rows.length || rows[0].active === false) {
-      return res.status(404).send("Form bulunamadı veya pasif.");
-    }
-    const form = rows[0];
-    try {
-      if (typeof form.schema === "string") form.schema = JSON.parse(form.schema);
-    } catch {}
-    return res.status(200).send(ssrHtml(form));
+    const slug = String(req.query.slug || "").trim();
+    if (!slug) return res.status(400).send("slug gerekli");
+
+    const form = await getFormBySlug(slug);
+    if (!form) return res.status(404).send("Form bulunamadı");
+
+    res.status(200).type("html").send(ssrHtml(form));
   } catch (e) {
-    return res.status(500).send("Sunucu hatası.");
+    next(e);
   }
 });
 
-// /s/:code kısa link
-app.get("/s/:code", async (req, res) => {
-  const code = (req.params.code || "").trim();
-  if (!code) return res.status(404).send("Not found");
-  try {
-    const { rows } = await pool.query(
-      "SELECT slug, expires_at, max_visits, coalesce(visits,0) AS visits FROM shortlinks WHERE code=$1",
-      [code]
-    );
-    if (!rows.length) return res.status(404).send("Link bulunamadı");
+// İsteğe bağlı: JSON API (mevcut entegrasyonları bozmaz)
+app.get("/api/forms", async (req, res) => {
+  const slug = String(req.query.slug || "").trim();
+  if (!slug) return res.status(400).json({ error: "slug gerekli" });
 
-    const sl = rows[0];
-    const now = new Date();
-    if (sl.expires_at && new Date(sl.expires_at) < now)
-      return res.status(410).send("Bu linkin süresi dolmuş.");
-    if (sl.max_visits != null && sl.visits >= sl.max_visits)
-      return res.status(410).send("Bu linkin ziyaret limiti dolmuş.");
+  const form = await getFormBySlug(slug);
+  if (!form) return res.status(404).json({ error: "Form bulunamadı" });
 
-    const fr = await pool.query(
-      "SELECT slug, title, description, active, schema FROM forms WHERE slug=$1 LIMIT 1",
-      [sl.slug]
-    );
-    if (!fr.rows.length || fr.rows[0].active === false)
-      return res.status(404).send("Form bulunamadı veya pasif.");
-
-    const form = fr.rows[0];
-    try {
-      if (typeof form.schema === "string") form.schema = JSON.parse(form.schema);
-    } catch {}
-
-    // ziyaret sayısını artır (arkaplan)
-    pool.query("UPDATE shortlinks SET visits = coalesce(visits,0)+1 WHERE code=$1", [code]).catch(() => {});
-
-    return res.status(200).send(ssrHtml(form));
-  } catch (e) {
-    return res.status(500).send("Sunucu hatası.");
-  }
+  res.json({ form });
 });
 
-// ----------------------------------------------------------------------------
-//                     STATİK SERVİS — EN SONA KOYDUK
-// ----------------------------------------------------------------------------
-app.use(express.static(path.join(__dirname, "public"), { index: false }));
+// -------------------- static (ROUTES'TAN SONRA!) --------------------
+app.use(express.static(path.join(__dirname, "public"), { index: false, immutable: true, maxAge: "1y" }));
 
-// Kök: host'a göre admin/index
-app.get("/", (req, res) => {
-  const host = getHost(req);
-  const file = host.startsWith("anket.")
-    ? path.join(__dirname, "public", "admin.html")
-    : path.join(__dirname, "public", "index.html");
-  res.sendFile(file);
+// -------------------- start --------------------
+app.use((err, _req, res, _next) => {
+  console.error(err);
+  res.status(500).type("text/plain").send("Internal Server Error");
 });
 
-// ---- Start
 app.listen(PORT, () => {
-  console.log(`MikroAR form server listening on :${PORT}`);
+  console.log(`Server started on :${PORT}`);
 });
