@@ -232,10 +232,15 @@ function openSlugPicker(){
   wrap.className='modal-backdrop';
   wrap.innerHTML=`
     <div class="modal">
-      <button class="close" aria-label="Kapat">&times;</button>
-      <h2>Bir form seçin</h2>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h2 style="margin:0">Bir form seçin</h2>
+        <div>
+          <button id="logout" class="close" title="Çıkış">↩︎</button>
+          <button class="close" aria-label="Kapat">&times;</button>
+        </div>
+      </div>
       <label style="display:block;margin:8px 0 6px;font-size:12px;opacity:.7">Listeden seç (ilk 200 kayıt)</label>
-      <select id="slugSelect" size="12"></select>
+      <select id="slugSelect" size="12" style="width:100%"></select>
       <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end">
         <button id="goBtn" style="padding:10px 14px;border:none;border-radius:10px;background:var(--g-primary);color:#fff;font-weight:600;cursor:pointer">Git</button>
       </div>
@@ -243,7 +248,8 @@ function openSlugPicker(){
   document.body.appendChild(wrap);
 
   const close = ()=>wrap.remove();
-  wrap.querySelector('.close').addEventListener('click', close);
+  wrap.querySelectorAll('.close').forEach(b=>b.addEventListener('click', close));
+  wrap.querySelector('#logout').addEventListener('click', ()=>{ clearTokenForList(); });
 
   const listEl = wrap.querySelector('#slugSelect');
   const go     = (slug)=>{ if(slug) location.href = `/form.html?slug=${encodeURIComponent(slug)}`; };
@@ -252,15 +258,17 @@ function openSlugPicker(){
   listEl.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); go(listEl.value); }});
   wrap.querySelector('#goBtn').addEventListener('click', ()=> go(listEl.value));
 
-  const render = (items)=>{
-    listEl.innerHTML = items.map(it=>`<option value="${it.slug}">${(it.title||it.slug)} — ${it.slug}</option>`).join('');
-    if(items.length) listEl.selectedIndex = 0;
-  };
+  const token = getTokenForList();
+  if(!token){ listEl.innerHTML='<option>Yetkisiz: Anahtar gerekli</option>'; listEl.disabled=true; return; }
 
-  fetch('/api/forms-list',{headers:{accept:'application/json'}})
-    .then(r=>r.json())
-    .then(j=> render(Array.isArray(j?.items) ? j.items.slice(0,200) : []))
-    .catch(()=>{ listEl.innerHTML='<option>Liste alınamadı</option>'; listEl.disabled=true; });
+  fetch('/api/forms-list', { headers:{ accept:'application/json', 'x-admin-token': token } })
+    .then(r=> r.ok ? r.json() : Promise.reject(new Error('Yetkisiz')))
+    .then(j=>{
+      const items = Array.isArray(j?.items) ? j.items.slice(0,200) : [];
+      listEl.innerHTML = items.map(it=>`<option value="${it.slug}">${(it.title||it.slug)} — ${it.slug}</option>`).join('');
+      if(items.length) listEl.selectedIndex = 0;
+    })
+    .catch(()=>{ listEl.innerHTML='<option>Yetkisiz veya liste alınamadı</option>'; listEl.disabled=true; });
 }
     // --- Başlat
     async function bootstrap(){
