@@ -3,27 +3,9 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <!-- İlk boyayı garanti eden bayrak + kritik CSS -->
-<script>
-  // slug varsa: <html data-slug> → skeleton; yoksa picker
-  if (new URLSearchParams(location.search).has('slug')) {
-    document.documentElement.setAttribute('data-slug','1');
-  }
-</script>
-<style>
-  /* CSS gelmeden bile arka plan ve ilk içerik görünsün */
-  html,body{background:#f7f7fb}
-  /* Varsayılan sakla; bayrakla aç */
-  #picker{display:none}
-  #skeleton{display:none}
-  /* slug yoksa picker, varsa skeleton ANINDA görünür (JS beklemeden) */
-  html:not([data-slug]) #picker{display:block}
-  html[data-slug] #skeleton{display:block}
-</style>
   <title>Anket</title>
   <link rel="preload" href="/form.css" as="style" fetchpriority="high">
   <link rel="stylesheet" href="/form.css?v=5"/>
-  <link rel="preconnect" href="https://<ivkbvnhjlvpadfkpspnx.supabase.co" crossorigin>
   <style>
     :root{ --g-pad:14px; --g-radius:12px; --g-primary:#1a73e8; --g-muted:#6b7280; --g-border:#e5e7eb; --g-bg:#f7f7fb; --g-shadow:0 6px 20px rgba(0,0,0,.06) }
     html,body{ background:var(--g-bg) }
@@ -57,21 +39,7 @@
     #goBtn{ padding:10px 14px; border:none; border-radius:10px; background:var(--g-primary); color:#fff; font-weight:600; cursor:pointer }
     #msg{ margin-top:8px; color:var(--g-muted) }
     #authBtn{ margin-left:auto; padding:8px 12px; border:1px solid var(--g-border); background:#f8f9fb; border-radius:10px; cursor:pointer }
-   
   </style>
-   <!-- Meta Pixel -->
-<script>
-!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
-n.push=n; n.loaded=!0; n.version='2.0'; n.queue=[]; t=b.createElement(e); t.async=!0;
-t.src=v; s=b.getElementsByTagName(e)[0]; s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
-fbq('init','753180591019866');
-fbq('track','PageView');
-</script>
-<noscript><img height="1" width="1" style="display:none"
-src="https://www.facebook.com/tr?id=PIXEL_ID&ev=PageView&noscript=1"
-/></noscript>
-<!-- /Meta Pixel -->
 </head>
 <body>
   <div id="app">
@@ -94,10 +62,10 @@ src="https://www.facebook.com/tr?id=PIXEL_ID&ev=PageView&noscript=1"
       <div id="msg"></div>
     </div>
 
-    <!-- Gerçek form </form>  -->
-   <form id="form" novalidate>
+    <!-- Gerçek form -->
+    <form id="form" novalidate></form>
 
-   <div id="skeleton" class="skeleton" aria-hidden="true">
+    <div id="skeleton" class="skeleton" aria-hidden="true" style="display:none">
       <div class="bar" style="width:50%"></div>
       <div class="bar" style="width:85%"></div>
       <div class="bar" style="width:70%"></div>
