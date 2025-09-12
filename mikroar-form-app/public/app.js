@@ -10,7 +10,21 @@
 
   const formEl = $("#form");
   if (!formEl) return;
-
+// Başlık & açıklamayı doldur
+function setHeaderFromForm(form) {
+  try {
+    const t = form?.title || window.__FORM?.title || "";
+    const d =
+      form?.description ||
+      window.__FORM?.description ||
+      form?.schema?.description ||
+      "";
+    const titleEl = document.getElementById("title");
+    if (titleEl && t) titleEl.textContent = t;
+    const descEl = document.getElementById("desc");
+    if (descEl) descEl.textContent = d || "";
+  } catch {}
+}
   // ---- Form serialize ----
   function serializeForm(form) {
     const data = {};
