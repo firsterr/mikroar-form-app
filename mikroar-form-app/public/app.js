@@ -168,6 +168,7 @@ try {
   // ---- Submit handler ----
   async function onSubmit(e) {
     e.preventDefault();
+    e.stopPropagation();
     const btn = $("#btnSend");
 try { if (window.fbq && event_id) window.fbq('track','Lead', { eventID: event_id }); } catch {}
     // Required kontrol
