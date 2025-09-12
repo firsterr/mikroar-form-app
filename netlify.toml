@@ -1,7 +1,4 @@
-# =========================
-# Netlify config — MIKROAR
-# =========================
-
+# ---------- Build ----------
 [build]
   publish  = "mikroar-form-app/public"
   command  = ""
@@ -9,7 +6,48 @@
 [functions]
   directory = "mikroar-form-app/netlify/functions"
 
-# ---------- ortak güvenlik / önbellek ----------
+# ---------- API (her iki host için) ----------
+[[redirects]]
+  from = "/api/*"
+  to   = "/.netlify/functions/:splat"
+  status = 200
+
+# ---------- form.mikroar.com ----------
+# /f/101010 gibi kısa URL'ler form.html'i 200 rewrite ile servis eder (URL değişmez)
+[[redirects]]
+  from = "/f/*"
+  to   = "/form.html"
+  status = 200
+  force  = true
+  conditions = { Host = ["form.mikroar.com"] }
+
+# kök ve diğerleri de form.html
+[[redirects]]
+  from = "/"
+  to   = "/form.html"
+  status = 200
+  conditions = { Host = ["form.mikroar.com"] }
+
+[[redirects]]
+  from = "/*"
+  to   = "/form.html"
+  status = 200
+  conditions = { Host = ["form.mikroar.com"] }
+
+# ---------- anket.mikroar.com ----------
+[[redirects]]
+  from = "/"
+  to   = "/admin.html"
+  status = 200
+  conditions = { Host = ["anket.mikroar.com"] }
+
+[[redirects]]
+  from = "/*"
+  to   = "/admin.html"
+  status = 200
+  conditions = { Host = ["anket.mikroar.com"] }
+
+# ---------- Güvenlik / Cache ----------
 [[headers]]
   for = "/*"
   [headers.values]
@@ -23,41 +61,7 @@
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
-# =========================
-# anket.mikroar.com  (admin)
-# =========================
-[[redirects]]
-  from = "/api/*"
-  to   = "/.netlify/functions/:splat"
-  status = 200
-  conditions = { Host = ["anket.mikroar.com"] }
-
-[[redirects]]
-  from = "/*"
-  to   = "/admin.html"
-  status = 200
-  conditions = { Host = ["anket.mikroar.com"] }
-
-# =========================
-# form.mikroar.com  (kamu formu)
-# =========================
-# API
-[[redirects]]
-  from = "/api/*"
-  to   = "/.netlify/functions/:splat"
-  status = 200
-  conditions = { Host = ["form.mikroar.com"] }
-
-# Kısa link: /f/101010  -> form.html (URL değişmeden)
-[[redirects]]
-  from = "/f/*"
-  to   = "/form.html"
-  status = 200
-  conditions = { Host = ["form.mikroar.com"] }
-
-# SPA fallback
-[[redirects]]
-  from = "/*"
-  to   = "/form.html"
-  status = 200
-  conditions = { Host = ["form.mikroar.com"] }
+[[headers]]
+  for = "/form.html"
+  [headers.values]
+    Cache-Control = "no-cache"
