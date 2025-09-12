@@ -2,6 +2,35 @@
 export default async (request, context) => {
   const url = new URL(request.url);
 
+  // Sadece form.mikroar.com için k->slug çöz (diğer hostlar admin'e yönleniyor)
+  if (url.hostname === "form.mikroar.com") {
+    const k = url.searchParams.get("k");
+    const slug = url.searchParams.get("slug");
+
+    // slug yok, k varsa: functions/forms ile çöz ve kanonik slug'a yönlendir
+    if (!slug && k) {
+      try {
+        const api = new URL("/.netlify/functions/forms?k=" + encodeURIComponent(k), url.origin);
+        const res = await fetch(api.toString());
+        const data = await res.json();
+        if (data?.ok && data?.form?.slug) {
+          url.searchParams.delete("k");
+          url.searchParams.set("slug", data.form.slug);
+          return Response.redirect(url.toString(), 302);
+        }
+      } catch (e) {
+        // sessiz geç
+      }
+    }
+  }
+
+  // Mevcut SSR içeriğin neyse ona devam (veya sadece passthrough)
+  return context.next();
+};
+// netlify/edge-functions/form-ssr.js
+export default async (request, context) => {
+  const url = new URL(request.url);
+
   // Yalnızca /form.html için çalışalım
   if (url.pathname !== "/form.html") return context.next();
 
