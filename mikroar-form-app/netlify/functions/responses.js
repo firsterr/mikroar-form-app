@@ -1,85 +1,127 @@
-async function sendMetaLead({ event_id, fbp, fbc, ua, url }) {
-  const PIXEL_ID = process.env.META_PIXEL_ID;
-  const ACCESS_TOKEN = process.env.META_CAPI_TOKEN;
-  if (!PIXEL_ID || !ACCESS_TOKEN || !event_id) return;
+// netlify/functions/responses.js
+const { createClient } = require("@supabase/supabase-js");
 
-  const payload = {
-    data: [{
-      event_name: "Lead",
-      event_time: Math.floor(Date.now()/1000),
-      event_id,
-      action_source: "website",
-      event_source_url: url,
-      user_data: {
-        client_user_agent: ua,
-        fbp: fbp || undefined,
-        fbc: fbc || undefined
-      }
-    }]
-  };
+const SUPABASE_URL = process.env.SUPABASE_URL;
+// Insert/duplicate kontrolü garanti olsun diye SERVICE ROLE kullanıyoruz
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE;
 
-  await fetch(`https://graph.facebook.com/v18.0/${PIXEL_ID}/events?access_token=${ACCESS_TOKEN}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-}
-const json = (code, obj) => ({
-  statusCode: code,
-  headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-  body: JSON.stringify(obj)
+// Opsiyonel: admin export kullanıyorsan istersen ANON ile GET de yaparız
+const ANON_KEY = process.env.SUPABASE_ANON_KEY;
+
+const dbWrite = createClient(SUPABASE_URL, SERVICE_KEY, {
+  auth: { persistSession: false }
 });
-const ipOf = (h) =>
-  h['x-nf-client-connection-ip'] ||
-  h['client-ip'] ||
-  (h['x-forwarded-for'] || '').split(',')[0] || null;
+const dbRead = createClient(SUPABASE_URL, ANON_KEY || SERVICE_KEY, {
+  auth: { persistSession: false }
+});
 
 exports.handler = async (event) => {
-  if (event.httpMethod !== 'POST') return json(405, { error: 'Method Not Allowed' });
+  try {
+    if (event.httpMethod === "POST") {
+      return await handlePost(event);
+    }
+    if (event.httpMethod === "GET") {
+      // (İsteğe bağlı) Admin export: ?slug=ASD&limit=100
+      return await handleGet(event);
+    }
+    return { statusCode: 405, body: "Method Not Allowed" };
+  } catch (err) {
+    console.error("responses fn fatal:", err);
+    return json(500, { ok: false, error: "Sunucu hatası" });
+  }
+};
 
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const KEY = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
-  if (!SUPABASE_URL || !KEY) return json(500, { error: 'supabase-env-missing' });
-
+// -------- POST: yeni cevap kaydı --------
+async function handlePost(event) {
   let body = {};
-  try { body = JSON.parse(event.body || '{}'); } catch { return json(400, { error: 'invalid-json' }); }
+  try { body = JSON.parse(event.body || "{}"); } catch {}
 
   const form_slug = body.form_slug || body.slug || null;
-  const answers = body.answers || null;
-  if (!form_slug || !answers) return json(400, { error: 'Eksik parametre' });
-
-  const row = { form_slug, answers, ip: ipOf(event.headers || {}) };
-  const resp = await fetch(`${SUPABASE_URL}/rest/v1/responses`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: KEY,
-      Authorization: `Bearer ${KEY}`,
-      Prefer: 'return=representation'
-    },
-    body: JSON.stringify(row)
-  });
-
-  const txt = await resp.text();
-  let payload = null; try { payload = JSON.parse(txt); } catch {}
-
-  // Duplicate/unique violation yakala
-  if (resp.status === 409 || (payload && /duplicate key|unique/i.test(JSON.stringify(payload)))) {
-    return json(409, { error: 'duplicate', message: 'Bu anketi daha önce doldurmuşsunuz.' });
+  const answers   = body.answers || null;
+  const metaIn    = body.meta || {};
+  if (!form_slug || !answers) {
+    return json(400, { ok: false, error: "Eksik parametre" });
   }
 
-  if (!resp.ok) {
-    return json(500, { error: 'Yanıt kaydedilemedi.', detail: payload || txt });
+  // IP yakala (Netlify)
+  const ip =
+    (event.headers["x-nf-client-connection-ip"] ||
+      (event.headers["x-forwarded-for"] || "").split(",")[0].trim() ||
+      event.headers["client-ip"] ||
+      event.headers["x-real-ip"] ||
+      "").toString();
+
+  // Duplicate kontrol (aynı ip + slug)
+  const { data: existed, error: selErr } = await dbRead
+    .from("responses")
+    .select("id")
+    .eq("form_slug", form_slug)
+    .eq("ip", ip)
+    .limit(1);
+
+  if (selErr) {
+    console.error("dup check error:", selErr);
+    // devam edelim; engellemeyi başaramazsak da insert deneriz
+  } else if (existed && existed.length) {
+    return json(409, { ok: false, code: "duplicate", error: "Bu anketi daha önce doldurmuşsunuz." });
+  }
+
+  // Kayıt
+  const payload = {
+    form_slug,
+    ip,
+    answers,                 // jsonb
+    created_at: new Date().toISOString(),
+    meta: {
+      ua: metaIn.ua || event.headers["user-agent"] || "",
+      href: metaIn.href || "",
+      ts: metaIn.ts || new Date().toISOString()
+    }
+  };
+
+  const { error: insErr } = await dbWrite.from("responses").insert([payload]);
+
+  if (insErr) {
+    console.error("responses insert error:", insErr);
+    // Tekrar duplicate olabilir; PGRST116 değil, unique violation ise user-friendly mesaj döndür.
+    if (String(insErr.message || "").toLowerCase().includes("duplicate") ||
+        String(insErr.details || "").toLowerCase().includes("duplicate")) {
+      return json(409, { ok: false, code: "duplicate", error: "Bu anketi daha önce doldurmuşsunuz." });
+    }
+    return json(500, { ok: false, error: "Yanıt kaydedilemedi." });
   }
 
   return json(200, { ok: true });
-};
-try {
-  await sendMetaLead({
-    event_id: body?.meta?.event_id,
-    fbp: body?.meta?.fbp,
-    fbc: body?.meta?.fbc,
-    ua: body?.meta?.ua,
-    url: body?.meta?.href
-  });
-} catch {}
+}
+
+// -------- (opsiyonel) GET: export/list --------
+async function handleGet(event) {
+  const qp = event.queryStringParameters || {};
+  const slug = (qp.slug || "").trim();
+  const limit = Math.min(parseInt(qp.limit || "100", 10) || 100, 500);
+
+  if (!slug) return json(400, { ok: false, error: "slug gerekli" });
+
+  const { data, error } = await dbRead
+    .from("responses")
+    .select("created_at, ip, answers")
+    .eq("form_slug", slug)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error("responses get error:", error);
+    return json(500, { ok: false, error: "Liste alınamadı" });
+  }
+
+  return json(200, { ok: true, items: data || [] });
+}
+
+// -------- helpers --------
+function json(code, obj) {
+  return {
+    statusCode: code,
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: JSON.stringify(obj)
+  };
+}
