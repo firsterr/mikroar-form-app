@@ -6,35 +6,31 @@
 [functions]
   directory = "mikroar-form-app/netlify/functions"
 
-# ---------- API (her iki host için) ----------
+# ---------- API (iki host için de) ----------
 [[redirects]]
   from = "/api/*"
   to   = "/.netlify/functions/:splat"
   status = 200
 
-# ---------- form.mikroar.com ----------
-# /f/101010 gibi kısa URL'ler form.html'i 200 rewrite ile servis eder (URL değişmez)
+# ---------- Kısa URL: /f/101010 → form.html (URL değişmeden, 200 rewrite) ----------
 [[redirects]]
   from = "/f/*"
   to   = "/form.html"
   status = 200
   force  = true
-  conditions = { Host = ["form.mikroar.com"] }
 
-# kök ve diğerleri de form.html
+# ---------- form.mikroar.com genel ----------
 [[redirects]]
   from = "/"
   to   = "/form.html"
   status = 200
-  conditions = { Host = ["form.mikroar.com"] }
 
 [[redirects]]
   from = "/*"
   to   = "/form.html"
   status = 200
-  conditions = { Host = ["form.mikroar.com"] }
 
-# ---------- anket.mikroar.com ----------
+# ---------- anket.mikroar.com (admin) ----------
 [[redirects]]
   from = "/"
   to   = "/admin.html"
