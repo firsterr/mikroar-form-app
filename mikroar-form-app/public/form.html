@@ -225,7 +225,10 @@
 
       show($('#skeleton'));
       try {
-        const r = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`, { headers:{ 'accept':'application/json' } });
+       const code = params.get('k');
+const q = slug ? `slug=${encodeURIComponent(slug)}` : (code ? `code=${encodeURIComponent(code)}` : "");
+if (!q) throw new Error('slug veya kısa kod (k) gerekli');
+const r = await fetch(`/api/forms?${q}`, { headers:{ 'accept':'application/json' } });
         if (!r.ok) throw new Error('Form bulunamadı');
         const j = await r.json().catch(()=>null);
         const form = (j && (j.form || j.data)) ? (j.form || j.data) : j;
