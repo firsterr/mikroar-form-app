@@ -10,6 +10,47 @@
 
   const formEl = $("#form");
   if (!formEl) return;
+  // --- SLUG bulucu: ?slug=... yoksa /f/:code desteği ---
+async function resolveSlug() {
+  const url = new URL(location.href);
+
+  // 1) URL parametresiyle geldiyse aynen kullan
+  let slug = url.searchParams.get('slug');
+  if (slug) return slug;
+
+  // 2) Kısa kod ile geldiyse (/f/101010)
+  const m = location.pathname.match(/^\/f\/([^/?#]+)/);
+  if (m) {
+    const code = m[1];
+    try {
+      const r = await fetch(`/.netlify/functions/go?code=${encodeURIComponent(code)}`);
+      if (r.ok) {
+        const j = await r.json();
+        if (j.ok && j.slug) return j.slug;
+      }
+      throw new Error("Geçersiz kısa kod");
+    } catch (e) {
+      alert("Geçersiz veya süresi dolmuş bağlantı.");
+      throw e;
+    }
+  }
+
+  // 3) Hiçbiri değilse kullanıcıya seçim modal’ını gösteren mevcut akış çalışsın
+  return null;
+}
+
+// Sayfa yüklenince:
+(async () => {
+  const slug = await resolveSlug();
+  if (slug) {
+    // Buradan itibaren mevcut "slug ile formu getir" akışını çağır.
+    // Örn: loadForm(slug) gibi.
+    await loadForm(slug);   // <-- Senin var olan fonksiyonun (ismi sende farklı olabilir)
+    return;
+  }
+
+  // slug yoksa mevcut "liste/ara" arayüzün çalışsın (hiç dokunma)
+})();
 // Başlık & açıklamayı doldur
 function setHeaderFromForm(form) {
   try {
