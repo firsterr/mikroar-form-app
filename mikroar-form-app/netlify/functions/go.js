@@ -1,36 +1,46 @@
-// GET /.netlify/functions/go?code=XXXX  ->  { ok:true, slug:"..." }
-import { createClient } from '@supabase/supabase-js';
+// mikrorar-form-app/netlify/functions/go.js
+const { createClient } = require('@supabase/supabase-js');
 
-const URL  = process.env.SUPABASE_URL;
-const ANON = process.env.SUPABASE_ANON_KEY;
+const SUPABASE_URL  = process.env.SUPABASE_URL;
+const SERVICE_ROLE  = process.env.SUPABASE_SERVICE_ROLE;
 
-export async function handler(event) {
+exports.handler = async (event) => {
   try {
-    const code = event.queryStringParameters?.code || "";
-    if (!code) {
-      return resp(400, { ok:false, error:"missing-code" });
-    }
+    const code = event.queryStringParameters?.code;
+    if (!code) return json(400, { ok:false, error:'missing-code' });
 
-    const supa = createClient(URL, ANON);
-    const { data, error } = await supa
+    const sb = createClient(SUPABASE_URL, SERVICE_ROLE);
+
+    const { data, error } = await sb
       .from('shortlinks')
-      .select('slug')
+      .select('slug, expires_at, max_visits, visits')
       .eq('code', code)
       .maybeSingle();
 
-    if (error) throw error;
-    if (!data?.slug) return resp(404, { ok:false, error:"not-found" });
+    if (error || !data) return json(404, { ok:false, error:'not-found' });
 
-    return resp(200, { ok:true, slug: data.slug });
+    const now = new Date();
+    if (data.expires_at && new Date(data.expires_at) < now)
+      return json(410, { ok:false, error:'expired' });
+
+    if (data.max_visits && (data.visits || 0) >= data.max_visits)
+      return json(429, { ok:false, error:'visit-limit' });
+
+    // Sayaç
+    await sb.from('shortlinks')
+      .update({ visits: (data.visits || 0) + 1 })
+      .eq('code', code);
+
+    return json(200, { ok:true, slug: data.slug });
   } catch (e) {
-    return resp(500, { ok:false, error:"server", detail: String(e?.message || e) });
+    return json(500, { ok:false, error:'server', detail: String(e.message||e) });
   }
-}
+};
 
-function resp(status, body) {
+function json(status, body) {
   return {
     statusCode: status,
-    headers: { 'content-type': 'application/json; charset=utf-8' },
+    headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
     body: JSON.stringify(body),
   };
 }
