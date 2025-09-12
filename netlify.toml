@@ -1,29 +1,33 @@
 # =========================
-# Netlify config — MIKROAR (temiz)
+# Netlify config — MIKROAR
 # =========================
 
 [build]
-  publish  = "mikroar-form-app/public"
-  command  = ""
+  publish     = "mikroar-form-app/public"
+  command     = ""
+  functions   = "mikroar-form-app/netlify/functions"
+  edge_functions = "mikroar-form-app/netlify/edge-functions"
 
-[functions]
-  directory = "mikroar-form-app/netlify/functions"
-
-# ---- Edge Function (SSR + shortlink resolution) ----
+# ---- Edge Function: form.mikroar.com /form.html SSR & k->slug redirect ----
 [[edge_functions]]
   function = "form-ssr"
   path     = "/form.html"
 
-# ---- API / Functions ----
+# ---- Global API (her iki domain) ----
 [[redirects]]
-  from = "/api/*"
-  to   = "/.netlify/functions/:splat"
+  from   = "/api/*"
+  to     = "/.netlify/functions/:splat"
   status = 200
 
-# Kısa link JSON API (opsiyonel; Edge içerden çağıracak)
+# ---- Kısa link & share (opsiyonel) ----
 [[redirects]]
-  from = "/api/go"
-  to   = "/.netlify/functions/go"
+  from   = "/s/:code"
+  to     = "/.netlify/functions/go?code=:code"
+  status = 200
+
+[[redirects]]
+  from   = "/share/:slug"
+  to     = "/.netlify/functions/share?slug=:slug"
   status = 200
 
 # ---- Güvenlik / Önbellek ----
@@ -46,55 +50,55 @@
     Cache-Control = "no-cache"
 
 # =========================
-# anket.mikroar.com → /admin.html
+# anket.mikroar.com  → admin.html
 # =========================
 [[redirects]]
-  from = "/api/*"
-  to   = "/.netlify/functions/:splat"
-  status = 200
+  from       = "/"
+  to         = "/admin.html"
+  status     = 200
   conditions = { Host = ["anket.mikroar.com"] }
 
 [[redirects]]
-  from = "/form.html"
-  to   = "/admin.html"
-  status = 301
+  from       = "/admin"
+  to         = "/admin.html"
+  status     = 200
   conditions = { Host = ["anket.mikroar.com"] }
 
 [[redirects]]
-  from = "/admin"
-  to   = "/admin.html"
-  status = 200
+  from       = "/form.html"
+  to         = "/admin.html"
+  status     = 301
   conditions = { Host = ["anket.mikroar.com"] }
 
 [[redirects]]
-  from = "/"
-  to   = "/admin.html"
-  status = 200
-  conditions = { Host = ["anket.mikroar.com"] }
-
-[[redirects]]
-  from = "/*"
-  to   = "/admin.html"
-  status = 200
+  from       = "/*"
+  to         = "/admin.html"
+  status     = 200
   conditions = { Host = ["anket.mikroar.com"] }
 
 # =========================
-# form.mikroar.com → /form.html
+# form.mikroar.com  → form.html
 # =========================
 [[redirects]]
-  from = "/api/*"
-  to   = "/.netlify/functions/:splat"
-  status = 200
+  from       = "/"
+  to         = "/form.html"
+  status     = 200
   conditions = { Host = ["form.mikroar.com"] }
 
 [[redirects]]
-  from = "/"
-  to   = "/form.html"
-  status = 200
+  from       = "/admin"
+  to         = "/form.html"
+  status     = 301
   conditions = { Host = ["form.mikroar.com"] }
 
 [[redirects]]
-  from = "/*"
-  to   = "/form.html"
-  status = 200
+  from       = "/admin.html"
+  to         = "/form.html"
+  status     = 301
+  conditions = { Host = ["form.mikroar.com"] }
+
+[[redirects]]
+  from       = "/*"
+  to         = "/form.html"
+  status     = 200
   conditions = { Host = ["form.mikroar.com"] }
