@@ -10,10 +10,9 @@
     .replace(/&/g,"&amp;").replace(/</g,"&lt;")
     .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 
-  const appEl  = $("#app");
-  const formEl = $("#form");
+ const formEl = $("#form"); // Sayfada form olmayabilir (liste ekranı)
   if (!formEl) return;
-// --- Tüm sorularda q.options değerini string'e çevir (UI string bekliyor)
+// Tüm sorularda q.options değerini UI'nin beklediği "string"e çevirir
 function normalizeFormOptions(form) {
   if (!form) return form;
 
@@ -27,22 +26,61 @@ function normalizeFormOptions(form) {
     const opt = q?.options;
 
     if (Array.isArray(opt)) {
-      // ["EVET","HAYIR"] -> "EVET, HAYIR"
       q.options = opt.map(v => String(v).trim()).filter(Boolean).join(", ");
     } else if (opt && typeof opt === "object") {
-      // {a:"EVET", b:"HAYIR"} -> "EVET, HAYIR"
       q.options = Object.values(opt).map(v => String(v).trim()).filter(Boolean).join(", ");
     } else if (typeof opt === "string") {
-      // " EVET , HAYIR " -> "EVET, HAYIR"
       q.options = opt.split(",").map(s => s.trim()).filter(Boolean).join(", ");
     } else {
-      q.options = ""; // yoksa boş
+      q.options = "";
     }
   });
 
   return form;
 }
   // ----------------- Slug / Shortlink çözümleyici -----------------
+  async function resolveSlug() {
+  const url = new URL(location.href);
+
+  // 1) ?slug=... varsa aynen kullan
+  let slug = url.searchParams.get('slug');
+  if (slug) return slug;
+
+  // 2) /f/:code desteği
+  const m = location.pathname.match(/^\/f\/([^/?#]+)/);
+  if (m) {
+    const code = m[1];
+    const r = await fetch(`/.netlify/functions/go?code=${encodeURIComponent(code)}`);
+    if (r.ok) {
+      const j = await r.json();
+      if (j.ok && j.slug) return j.slug;
+    }
+    alert("Geçersiz veya süresi dolmuş bağlantı.");
+    throw new Error("Shortlink not found");
+  }
+  return null;
+}
+
+// Sayfa yüklenince kısa kodu çöz ve formu YÜKLE
+(async () => {
+  const slug = await resolveSlug();
+  if (slug) {
+    // Burada mevcut form yükleme akışını çağır
+    // Örn: await loadForm(slug) gibi. Eğer loadForm yoksa:
+    const res = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`);
+    const { form } = await res.json();
+    window.__FORM = normalizeFormOptions(form);
+
+    // Header ve açıklamayı doldur (senin yardımcı fonksiyonun)
+    try { setHeaderFromForm(window.__FORM); } catch {}
+
+    // Buradan itibaren sende formu sorularla basan fonksiyon neyse onu çağır
+    // (ör: renderQuestions(window.__FORM) vb.)
+    if (typeof renderQuestions === "function") {
+      renderQuestions(window.__FORM);
+    }
+  }
+})();
   async function resolveSlug() {
     const url = new URL(location.href);
 
