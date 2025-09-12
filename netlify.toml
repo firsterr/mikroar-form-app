@@ -3,43 +3,31 @@
 # =========================
 
 [build]
-  publish = "mikroar-form-app/public"
-  command = ""
+  publish     = "mikroar-form-app/public"
+  command     = ""
+  functions   = "mikroar-form-app/netlify/functions"
+  edge_functions = "mikroar-form-app/netlify/edge-functions"
 
-[functions]
-  directory = "mikroar-form-app/netlify/functions"
-
-# ---- Edge Function routing (TEK tip deklarasyon) ----
-# Burada SADECE routes var; global [edge_functions] tablosu YOK.
+# ---- Edge Function: form.mikroar.com /form.html SSR & k->slug redirect ----
 [[edge_functions]]
   function = "form-ssr"
-  path = "/form.html"
+  path     = "/form.html"
 
-# ---- API / Functions ----
+# ---- Global API (her iki domain) ----
 [[redirects]]
-  from = "/api/forms"
-  to   = "/.netlify/functions/forms"
+  from   = "/api/*"
+  to     = "/.netlify/functions/:splat"
+  status = 200
+
+# ---- Kısa link & share (opsiyonel) ----
+[[redirects]]
+  from   = "/s/:code"
+  to     = "/.netlify/functions/go?code=:code"
   status = 200
 
 [[redirects]]
-  from = "/api/admin/forms"
-  to   = "/.netlify/functions/forms-admin"
-  status = 200
-
-[[redirects]]
-  from = "/api/*"
-  to   = "/.netlify/functions/:splat"
-  status = 200
-
-# ---- Kısa link fonksiyonları ----
-[[redirects]]
-  from = "/s/:code"
-  to   = "/.netlify/functions/go?code=:code"
-  status = 200
-
-[[redirects]]
-  from = "/share/:slug"
-  to   = "/.netlify/functions/share?slug=:slug"
+  from   = "/share/:slug"
+  to     = "/.netlify/functions/share?slug=:slug"
   status = 200
 
 # ---- Güvenlik / Önbellek ----
@@ -62,95 +50,55 @@
     Cache-Control = "no-cache"
 
 # =========================
-# anket.mikroar.com → /admin.html
+# anket.mikroar.com  → admin.html
 # =========================
 [[redirects]]
-  from = "/api/*"
-  to   = "/.netlify/functions/:splat"
-  status = 200
+  from       = "/"
+  to         = "/admin.html"
+  status     = 200
   conditions = { Host = ["anket.mikroar.com"] }
 
 [[redirects]]
-  from = "/form.html"
-  to   = "/admin.html"
-  status = 301
+  from       = "/admin"
+  to         = "/admin.html"
+  status     = 200
   conditions = { Host = ["anket.mikroar.com"] }
 
 [[redirects]]
-  from = "/admin"
-  to   = "/admin.html"
-  status = 200
+  from       = "/form.html"
+  to         = "/admin.html"
+  status     = 301
   conditions = { Host = ["anket.mikroar.com"] }
 
 [[redirects]]
-  from = "/"
-  to   = "/admin.html"
-  status = 200
-  conditions = { Host = ["anket.mikroar.com"] }
-
-[[redirects]]
-  from = "/*"
-  to   = "/admin.html"
-  status = 200
+  from       = "/*"
+  to         = "/admin.html"
+  status     = 200
   conditions = { Host = ["anket.mikroar.com"] }
 
 # =========================
-# form.mikroar.com → /form.html
+# form.mikroar.com  → form.html
 # =========================
 [[redirects]]
-  from = "/api/*"
-  to   = "/.netlify/functions/:splat"
-  status = 200
+  from       = "/"
+  to         = "/form.html"
+  status     = 200
   conditions = { Host = ["form.mikroar.com"] }
 
 [[redirects]]
-  from = "/admin"
-  to   = "/form.html"
-  status = 301
+  from       = "/admin"
+  to         = "/form.html"
+  status     = 301
   conditions = { Host = ["form.mikroar.com"] }
 
 [[redirects]]
-  from = "/admin.html"
-  to   = "/form.html"
-  status = 301
+  from       = "/admin.html"
+  to         = "/form.html"
+  status     = 301
   conditions = { Host = ["form.mikroar.com"] }
 
 [[redirects]]
-  from = "/"
-  to   = "/form.html"
-  status = 200
+  from       = "/*"
+  to         = "/form.html"
+  status     = 200
   conditions = { Host = ["form.mikroar.com"] }
-
-[[redirects]]
-  from = "/*"
-  to   = "/form.html"
-  status = 200
-  conditions = { Host = ["form.mikroar.com"] }
-
-  [[redirects]]
-from = "/admin"
-to   = "/admin.html"
-status = 200
-force  = true
-
-# API çağrılarını Netlify Functions'a yönlendir
-[[redirects]]
-from = "/api/*"
-to   = "/.netlify/functions/:splat"
-status = 200
-force = true
-
-# form.html için SSR
-[[edge_functions]]
-path = "/form.html"
-function = "form-ssr"
-
-[[redirects]]
-  from = "/api/responses"
-  to = "/.netlify/functions/responses"
-  status = 200
-  
-  [[redirects]]
-  from = "/api/*"
-  to   = "/.netlify/functions/:splat"
-  status = 200
