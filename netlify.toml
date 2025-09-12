@@ -132,8 +132,3 @@ from = "/admin"
 to   = "/admin.html"
 status = 200
 force  = true
-
-[[redirects]]
-from = "/api/submit-form"
-to   = "/.netlify/functions/submit-form"
-status = 200
