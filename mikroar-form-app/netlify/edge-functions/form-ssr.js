@@ -1,39 +1,36 @@
-// Edge: /form.html isteklerini karşılar.
-// - ?k=CODE varsa kısa kodu slug'a çevirir ve /form.html?slug=…'a 302 yönlendirir
-// - ?slug=.. varsa devam (SSR iskelet + preload); yoksa mevcut sayfa devam eder.
+// form-ssr.js — k (short code) -> slug çöz ve kanonik URL'ye yönlendir.
+// Tek bir default export olmalı!
 
 export default async (request, context) => {
-  try {
-    const url = new URL(request.url);
-    const isFormHost = url.hostname === "form.mikroar.com";
+  const url = new URL(request.url);
 
-    // 1) Shortlink: ?k=CODE -> slug bul ve redirect
+  // Sadece form sitesi için k->slug çöz
+  if (url.hostname === "form.mikroar.com") {
     const k = url.searchParams.get("k");
-    const hasSlug = url.searchParams.has("slug");
+    const slug = url.searchParams.get("slug");
 
-    if (isFormHost && k && !hasSlug) {
-      const origin = `${url.protocol}//${url.host}`;
-      const r = await fetch(`${origin}/.netlify/functions/go?code=${encodeURIComponent(k)}`, {
-        headers: { "accept": "application/json" }
-      });
+    // slug yoksa ve k varsa: functions/forms ile çöz
+    if (k && !slug) {
+      try {
+        const api = new URL(
+          "/.netlify/functions/forms?k=" + encodeURIComponent(k),
+          url.origin
+        );
+        const res = await fetch(api.toString());
+        const data = await res.json();
 
-      if (r.ok) {
-        const json = await r.json();
-        if (json?.ok && json?.slug) {
+        if (data?.ok && data?.form?.slug) {
           url.searchParams.delete("k");
-          url.searchParams.set("slug", json.slug);
+          url.searchParams.set("slug", data.form.slug);
+          // Short code'u kanonik slug URL'sine 302 ile yönlendir
           return Response.redirect(url.toString(), 302);
         }
+      } catch {
+        // Sessiz geç; sayfa normal akışa düşsün
       }
-      // Kod bulunamadıysa normal akış (liste sayfası) devam etsin:
-      return context.next();
     }
-
-    // 2) slug varsa; SSR tarafında hafif bir iskelet iyileştirmesi yapılabilir
-    // (İçerik fetch'ini client zaten yapıyor; beyaz ekran süresini kısaltıyoruz.)
-    return context.next();
-  } catch (e) {
-    // Hata durumunda sayfayı bozmayalım
-    return context.next();
   }
+
+  // Başka işlem yoksa normal akış
+  return context.next();
 };
