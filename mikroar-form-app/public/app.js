@@ -1,28 +1,12 @@
-// public/app.js — FULL REPLACE
-
+// public/app.js — CLEAN & STABLE
 (function () {
   "use strict";
-// --- Meta attrib helpers ---
-function getCookie(name){
-  return document.cookie.split('; ').find(r=>r.startsWith(name+'='))?.split('=')[1] || null;
-}
-function getUTM(){
-  const p = new URLSearchParams(location.search);
-  const o = {}; p.forEach((v,k)=>o[k]=v);
-  return o;
-}
-function getFbpFbc(){
-  const fbp = getCookie('_fbp');
-  const fbclid = new URLSearchParams(location.search).get('fbclid');
-  const fbc = fbclid ? `fb.1.${Date.now()}.${fbclid}` : null;
-  return { fbp, fbc };
-}
-  // ---- Yardımcılar ----
+
+  // ---------- Helpers ----------
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
   const show = (el) => el && (el.style.display = "block");
   const hide = (el) => el && (el.style.display = "none");
-
   const esc = (s) =>
     String(s ?? "")
       .replace(/&/g, "&amp;")
@@ -30,122 +14,83 @@ function getFbpFbc(){
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
 
-  // SSR tespiti: SSR ile gelmiş form, DOM'da data-ssr="1" olarak bulunur
-  const formEl = $("#form");
-  const SSR_READY =
-    !!(window.__FORM && formEl && formEl.getAttribute("data-ssr") === "1");
+  function getCookie(name){
+    return document.cookie.split("; ").find(r=>r.startsWith(name+"="))?.split("=")[1] || null;
+  }
+  function getUTM(){
+    const p = new URLSearchParams(location.search);
+    const o = {}; p.forEach((v,k)=>o[k]=v);
+    return o;
+  }
+  function getFbpFbc(){
+    const fbp = getCookie("_fbp");
+    const fbclid = new URLSearchParams(location.search).get("fbclid");
+    const fbc = fbclid ? `fb.1.${Date.now()}.${fbclid}` : null;
+    return { fbp, fbc };
+  }
 
-  // Submit endpoint konfigürasyonu (gerekirse window.__SUBMIT_URL ile override edebilirsin)
+  // ---------- SSR tespiti ----------
+  const formEl = $("#form");
+  const SSR_READY = !!(window.__FORM && formEl && formEl.getAttribute("data-ssr") === "1");
+
+  // ---------- Endpoint ----------
   const SUBMIT_URL =
     (typeof window.__SUBMIT_URL === "string" && window.__SUBMIT_URL) ||
     "/api/responses";
 
-  // ---- Formu serileştir ----
+  // ---------- Form serialize ----------
   function serializeForm(form) {
     const data = {};
-    // Tekrarlı alanları gruplayacağız (checkbox vb.)
     const groups = {};
 
     $$("input, select, textarea", form).forEach((el) => {
       if (el.disabled || !el.name) return;
-
       const name = el.name;
       const type = (el.type || "").toLowerCase();
 
-      // Checkbox grupları dizi toplar
       if (type === "checkbox") {
         if (!groups[name]) groups[name] = [];
         if (el.checked) groups[name].push(el.value);
         return;
       }
-
-      // Radio: sadece seçili olan
       if (type === "radio") {
         if (el.checked) data[name] = el.value;
         return;
       }
-
-      // Select/Textarea/Input
       data[name] = el.value;
     });
 
-    // Checkbox gruplarını ekle
-    Object.keys(groups).forEach((k) => {
-      data[k] = groups[k];
-    });
-
+    Object.keys(groups).forEach((k) => (data[k] = groups[k]));
     return data;
   }
 
-  // ---- Zorunlu alan kontrolü (hafif) ----
+  // ---------- Required kontrol ----------
   function validateRequired(form) {
     const missing = [];
-    $$("input[required], select[required], textarea[required]", form).forEach(
-      (el) => {
-        const type = (el.type || "").toLowerCase();
-        if (type === "checkbox") {
-          // checkbox group: en az bir tanesi işaretli olmalı
-          const group = $$(`input[type="checkbox"][name="${el.name}"]`, form);
-          if (!group.some((g) => g.checked)) missing.push(el);
-        } else if (type === "radio") {
-          const group = $$(`input[type="radio"][name="${el.name}"]`, form);
-          if (!group.some((g) => g.checked)) missing.push(el);
-        } else if (!el.value || el.value.trim() === "") {
-          missing.push(el);
-        }
+    $$("input[required], select[required], textarea[required]", form).forEach((el) => {
+      const type = (el.type || "").toLowerCase();
+      if (type === "checkbox") {
+        const group = $$(`input[type="checkbox"][name="${el.name}"]`, form);
+        if (!group.some((g) => g.checked)) missing.push(el);
+      } else if (type === "radio") {
+        const group = $$(`input[type="radio"][name="${el.name}"]`, form);
+        if (!group.some((g) => g.checked)) missing.push(el);
+      } else if (!el.value || el.value.trim() === "") {
+        missing.push(el);
       }
-    );
+    });
     return missing;
   }
-// KAYIT BAŞARILI OLDUKTAN SONRA:
-if (window.fbq) fbq('track', 'Lead', { content_name: (window.__FORM?.slug || '') });
 
-  // ---- FACEBOOK LEAD (Browser + CAPI) ----
-try {
-  // Aynı event_id hem Pixel hem CAPI'de kullanılacak → dedup
-  const eventId =
-    (crypto.randomUUID && crypto.randomUUID()) ||
-    ("lead_" + Date.now() + "_" + Math.random().toString(36).slice(2));
-
-  const slug = payload.slug || (window.__FORM && window.__FORM.slug) || "";
-
-  // 1) Pixel (tarayıcı)
-  if (window.fbq) {
-    fbq(
-      "track",
-      "Lead",
-      { content_name: slug, value: 1, currency: "TRY" },
-      { eventID: eventId }
-    );
-  }
-
-  // 2) CAPI (sunucu) – Netlify Function
-  const testCode = new URLSearchParams(location.search).get("fb_test");
-  fetch("/.netlify/functions/fb", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      event_id: eventId,
-      event_name: "Lead",
-      form_slug: slug,
-      event_source_url: location.href,
-      test_event_code: testCode || undefined,
-    }),
-  }).catch(() => {});
-} catch (err) {
-  console.debug("FB Lead skip:", err);
-}
-// ---- /FACEBOOK LEAD ----
-  // ---- Başarı ekranı (Google Forms tarzı) ----
+  // ---------- Başarı ekranı ----------
   function showSuccessView() {
     const app = $("#app");
     if (!app) return;
-
-    // Başlığı al (varsa)
     const titleEl = $("#title");
-    const titleText = titleEl && titleEl.textContent.trim().length
-      ? titleEl.textContent.trim()
-      : (window.__FORM?.title || "Anket");
+    const titleText =
+      (titleEl && titleEl.textContent.trim()) ||
+      window.__FORM?.title ||
+      "Anket";
 
     app.innerHTML = `
       <div class="success-wrap" style="max-width:720px;margin:40px auto;padding:24px">
@@ -156,12 +101,11 @@ try {
         <div class="center" style="margin-top:22px;opacity:.8">
           Bu form <strong>mikroar.com</strong> alanında oluşturuldu.
         </div>
-      </div>
-    `;
+      </div>`;
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  // ---- Hata gösterimi ----
+  // ---------- Hata göstergesi ----------
   function showError(msg) {
     const el = $("#alertBottom");
     if (el) {
@@ -173,36 +117,41 @@ try {
     }
   }
 
-  // ---- Submit handler ----
+  // ---------- Submit ----------
   async function onSubmit(e) {
     e.preventDefault();
     e.stopPropagation();
+
     const btn = $("#btnSend");
-try { if (window.fbq && event_id) window.fbq('track','Lead', { eventID: event_id }); } catch {}
+
     // Required kontrol
     const missing = validateRequired(formEl);
     if (missing.length > 0) {
-      // İlk eksik alana odaklan
-      try {
-        const first = missing[0];
-        first.focus({ preventScroll: false });
-      } catch {}
+      try { missing[0].focus({ preventScroll: false }); } catch {}
       showError("Lütfen zorunlu alanları doldurun.");
       return;
     }
-const event_id = (crypto?.randomUUID?.() || (Date.now()+'-'+Math.random().toString(16).slice(2)));
-const { fbp, fbc } = getFbpFbc();
-    // Veriyi derle
+
+    // Dedupe/event meta
+    const event_id =
+      (crypto && crypto.randomUUID && crypto.randomUUID()) ||
+      ("lead_" + Date.now() + "_" + Math.random().toString(36).slice(2));
+    const { fbp, fbc } = getFbpFbc();
+
+    // Payload
+    const form_slug = window.__FORM?.slug || new URLSearchParams(location.search).get("slug") || null;
     const payload = {
-  form_slug: window.__FORM?.slug || new URLSearchParams(location.search).get("slug") || null,
-  answers: serializeForm(formEl),
-  ip: null, // backend IP ekleyebilir
-  meta: {
-    ua: navigator.userAgent,
-    ts: new Date().toISOString(),
-    href: location.href
-  }
-};
+      form_slug,
+      answers: serializeForm(formEl),
+      meta: {
+        ua: navigator.userAgent,
+        ts: new Date().toISOString(),
+        href: location.href,
+        event_id,
+        fbp, fbc,
+        utm: getUTM()
+      }
+    };
 
     // UI kilidi
     if (btn) {
@@ -212,29 +161,48 @@ const { fbp, fbc } = getFbpFbc();
     }
 
     try {
+      // DB kaydı
       const r = await fetch(SUBMIT_URL, {
-  method: "POST",
-  headers: { "content-type": "application/json", accept: "application/json" },
-  body: JSON.stringify(payload)
-});
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify(payload)
+      });
 
-if (r.status === 409) {
-  showError("Bu anketi daha önce doldurmuşsunuz.");
-  // butonları eski haline getir
-  if (btn) { btn.disabled = false; btn.removeAttribute("aria-busy"); btn.textContent = "Gönder"; }
-  return;
-}
+      if (r.status === 409) {
+        // IP duplicate
+        showError("Bu anketi daha önce doldurmuşsunuz.");
+        if (btn) { btn.disabled = false; btn.removeAttribute("aria-busy"); btn.textContent = "Gönder"; }
+        return;
+      }
+      if (!r.ok) {
+        const r2 = await fetch("/api/answers", {
+          method: "POST",
+          headers: { "content-type": "application/json", accept: "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (!r2.ok) throw new Error("Yanıt kaydedilemedi.");
+      }
 
-if (!r.ok) {
-  const r2 = await fetch("/api/answers", {
-    method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json" },
-    body: JSON.stringify(payload)
-  });
-  if (!r2.ok) throw new Error("Yanıt kaydedilemedi.");
-}
+      // Pixel + CAPI (dedupe için aynı event_id)
+      try {
+        if (window.fbq) {
+          fbq("track", "Lead", { content_name: form_slug, value: 1, currency: "TRY" }, { eventID: event_id });
+        }
+        const testCode = new URLSearchParams(location.search).get("fb_test");
+        fetch("/.netlify/functions/fb", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            event_id,
+            event_name: "Lead",
+            form_slug,
+            event_source_url: location.href,
+            test_event_code: testCode || undefined
+          })
+        }).catch(()=>{});
+      } catch {}
 
-showSuccessView();
+      showSuccessView();
     } catch (err) {
       showError(err?.message || "Bir hata oluştu.");
       if (btn) {
@@ -244,28 +212,18 @@ showSuccessView();
       }
     }
   }
-meta: {
-  ua: navigator.userAgent,
-  ts: new Date().toISOString(),
-  href: location.href,
-  event_id,          // <— dedupe anahtarı
-  fbp, fbc,          // <— attribution kalitesi
-  utm: getUTM()      // <— kampanya analitiği
-}
-  // ---- Başlat ----
+
+  // ---------- Başlat ----------
   function bootstrap() {
     if (!formEl) return;
 
-    // SSR varsa: sadece submit event bağla, render akışına karışma
     if (SSR_READY) {
       formEl.addEventListener("submit", onSubmit);
-      // SSR ile gelmiş başlık/açıklama görünürlüğünü form.html ayarlıyor; burada sadece garanti olsun
       show(formEl);
       return;
     }
 
-    // SSR yoksa: form.html içindeki script render'ı üstleniyor.
-    // Yine de submit'i bağlayalım (render sonrası da bağlanabilsin diye küçük bekleme)
+    // Render gecikmesine karşı bağla
     const tryBind = () => {
       const f = $("#form");
       if (f && !f.__bound) {
@@ -273,9 +231,7 @@ meta: {
         f.__bound = true;
       }
     };
-    // İlk dene
     tryBind();
-    // Render gecikmesine karşı birkaç kısa tekrar
     let retries = 20;
     const iv = setInterval(() => {
       tryBind();
