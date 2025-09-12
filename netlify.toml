@@ -102,3 +102,11 @@
   to         = "/form.html"
   status     = 200
   conditions = { Host = ["form.mikroar.com"] }
+
+  # form.mikroar.com → /f/:code adresine istek gelirse
+# tarayıcı adresi DEĞİŞMEDEN form.html içeriğini sun
+[[redirects]]
+  from = "/f/*"
+  to   = "/form.html"
+  status = 200
+  conditions = { Host = ["form.mikroar.com"] }
