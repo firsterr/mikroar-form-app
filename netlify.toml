@@ -3,34 +3,13 @@
 # =========================
 
 [build]
-  publish     = "mikroar-form-app/public"
-  command     = ""
-  functions   = "mikroar-form-app/netlify/functions"
-  edge_functions = "mikroar-form-app/netlify/edge-functions"
+  publish  = "mikroar-form-app/public"
+  command  = ""
 
-# ---- Edge Function: form.mikroar.com /form.html SSR & k->slug redirect ----
-[[edge_functions]]
-  function = "form-ssr"
-  path     = "/form.html"
+[functions]
+  directory = "mikroar-form-app/netlify/functions"
 
-# ---- Global API (her iki domain) ----
-[[redirects]]
-  from   = "/api/*"
-  to     = "/.netlify/functions/:splat"
-  status = 200
-
-# ---- Kısa link & share (opsiyonel) ----
-[[redirects]]
-  from   = "/s/:code"
-  to     = "/.netlify/functions/go?code=:code"
-  status = 200
-
-[[redirects]]
-  from   = "/share/:slug"
-  to     = "/.netlify/functions/share?slug=:slug"
-  status = 200
-
-# ---- Güvenlik / Önbellek ----
+# ---------- ortak güvenlik / önbellek ----------
 [[headers]]
   for = "/*"
   [headers.values]
@@ -44,69 +23,41 @@
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
-[[headers]]
-  for = "/form.html"
-  [headers.values]
-    Cache-Control = "no-cache"
-
 # =========================
-# anket.mikroar.com  → admin.html
+# anket.mikroar.com  (admin)
 # =========================
 [[redirects]]
-  from       = "/"
-  to         = "/admin.html"
-  status     = 200
+  from = "/api/*"
+  to   = "/.netlify/functions/:splat"
+  status = 200
   conditions = { Host = ["anket.mikroar.com"] }
 
 [[redirects]]
-  from       = "/admin"
-  to         = "/admin.html"
-  status     = 200
-  conditions = { Host = ["anket.mikroar.com"] }
-
-[[redirects]]
-  from       = "/form.html"
-  to         = "/admin.html"
-  status     = 301
-  conditions = { Host = ["anket.mikroar.com"] }
-
-[[redirects]]
-  from       = "/*"
-  to         = "/admin.html"
-  status     = 200
+  from = "/*"
+  to   = "/admin.html"
+  status = 200
   conditions = { Host = ["anket.mikroar.com"] }
 
 # =========================
-# form.mikroar.com  → form.html
+# form.mikroar.com  (kamu formu)
 # =========================
+# API
 [[redirects]]
-  from       = "/"
-  to         = "/form.html"
-  status     = 200
+  from = "/api/*"
+  to   = "/.netlify/functions/:splat"
+  status = 200
   conditions = { Host = ["form.mikroar.com"] }
 
-[[redirects]]
-  from       = "/admin"
-  to         = "/form.html"
-  status     = 301
-  conditions = { Host = ["form.mikroar.com"] }
-
-[[redirects]]
-  from       = "/admin.html"
-  to         = "/form.html"
-  status     = 301
-  conditions = { Host = ["form.mikroar.com"] }
-
-[[redirects]]
-  from       = "/*"
-  to         = "/form.html"
-  status     = 200
-  conditions = { Host = ["form.mikroar.com"] }
-
-  # form.mikroar.com → /f/:code adresine istek gelirse
-# tarayıcı adresi DEĞİŞMEDEN form.html içeriğini sun
+# Kısa link: /f/101010  -> form.html (URL değişmeden)
 [[redirects]]
   from = "/f/*"
+  to   = "/form.html"
+  status = 200
+  conditions = { Host = ["form.mikroar.com"] }
+
+# SPA fallback
+[[redirects]]
+  from = "/*"
   to   = "/form.html"
   status = 200
   conditions = { Host = ["form.mikroar.com"] }
