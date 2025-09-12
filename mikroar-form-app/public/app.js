@@ -13,7 +13,35 @@
   const appEl  = $("#app");
   const formEl = $("#form");
   if (!formEl) return;
+// --- Tüm sorularda q.options değerini string'e çevir (UI string bekliyor)
+function normalizeFormOptions(form) {
+  if (!form) return form;
 
+  const list =
+    form.questions ||
+    form.schema?.questions ||
+    form.schema?.fields ||
+    [];
+
+  list.forEach((q) => {
+    const opt = q?.options;
+
+    if (Array.isArray(opt)) {
+      // ["EVET","HAYIR"] -> "EVET, HAYIR"
+      q.options = opt.map(v => String(v).trim()).filter(Boolean).join(", ");
+    } else if (opt && typeof opt === "object") {
+      // {a:"EVET", b:"HAYIR"} -> "EVET, HAYIR"
+      q.options = Object.values(opt).map(v => String(v).trim()).filter(Boolean).join(", ");
+    } else if (typeof opt === "string") {
+      // " EVET , HAYIR " -> "EVET, HAYIR"
+      q.options = opt.split(",").map(s => s.trim()).filter(Boolean).join(", ");
+    } else {
+      q.options = ""; // yoksa boş
+    }
+  });
+
+  return form;
+}
   // ----------------- Slug / Shortlink çözümleyici -----------------
   async function resolveSlug() {
     const url = new URL(location.href);
@@ -34,7 +62,8 @@
       alert("Geçersiz veya süresi dolmuş bağlantı.");
       throw new Error("invalid-short-code");
     }
-
+// ör: const { form } = await r.json();
+window.__FORM = normalizeFormOptions(form);
     // 3) Eski stil: ?k=101010 desteği (geriye uyumluluk)
     const k = url.searchParams.get("k");
     if (k) {
