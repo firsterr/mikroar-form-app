@@ -149,3 +149,8 @@ function = "form-ssr"
   from = "/api/responses"
   to = "/.netlify/functions/responses"
   status = 200
+  
+  [[redirects]]
+  from = "/api/*"
+  to   = "/.netlify/functions/:splat"
+  status = 200
