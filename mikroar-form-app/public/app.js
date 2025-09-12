@@ -34,9 +34,9 @@
   const SSR_READY = !!(window.__FORM && formEl && formEl.getAttribute("data-ssr") === "1");
 
   // ---------- Endpoint ----------
-  const SUBMIT_URL =
-    (typeof window.__SUBMIT_URL === "string" && window.__SUBMIT_URL) ||
-    "/api/responses";
+ const SUBMIT_URL =
+  (typeof window.__SUBMIT_URL === "string" && window.__SUBMIT_URL) ||
+  "/api/submit-form"; 
 
   // ---------- Form serialize ----------
   function serializeForm(form) {
@@ -175,11 +175,11 @@
         return;
       }
       if (!r.ok) {
-        const r2 = await fetch("/api/answers", {
-          method: "POST",
-          headers: { "content-type": "application/json", accept: "application/json" },
-          body: JSON.stringify(payload)
-        });
+       const r2 = await fetch("/.netlify/functions/submit-form", {
+  method: "POST",
+  headers: { "content-type": "application/json", accept: "application/json" },
+  body: JSON.stringify(payload)
+});
         if (!r2.ok) throw new Error("Yanıt kaydedilemedi.");
       }
 
