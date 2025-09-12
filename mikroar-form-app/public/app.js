@@ -103,7 +103,36 @@ if (window.fbq) fbq('track', 'Lead', { content_name: (window.__FORM?.slug || '')
   function showSuccessView() {
     const app = $("#app");
     if (!app) return;
+// ---- FACEBOOK LEAD (Browser + CAPI) ----
+try {
+  // Aynı event_id hem tarayıcı hem sunucuda kullanılır → dedup
+  const eventId =
+    (crypto.randomUUID && crypto.randomUUID()) ||
+    ("lead_" + Date.now() + "_" + Math.random().toString(36).slice(2));
 
+  const slug = payload.slug || window.__FORM?.slug || "";
+
+  // 1) Browser Pixel
+  if (window.fbq) {
+    fbq("track", "Lead", { content_name: slug, value: 1, currency: "TRY" }, { eventID: eventId });
+  }
+
+  // 2) Server (CAPI) – Netlify Function'a gönder
+  const testCode = new URLSearchParams(location.search).get("fb_test"); // Test Events kodu girerseniz
+
+  fetch("/.netlify/functions/fb", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      event_id: eventId,
+      event_name: "Lead",
+      form_slug: slug,
+      event_source_url: location.href,
+      test_event_code: testCode || undefined,
+    }),
+  }).catch(() => {});
+} catch {}
+// ---- /FACEBOOK LEAD ----
     // Başlığı al (varsa)
     const titleEl = $("#title");
     const titleText = titleEl && titleEl.textContent.trim().length
