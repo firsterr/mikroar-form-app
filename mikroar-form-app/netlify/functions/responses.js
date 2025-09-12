@@ -1,13 +1,14 @@
-// Netlify Function: /api/responses
-// Supabase REST ile insert + anlamlı hata kodları (409 duplicate vs)
+// Netlify Function: /.netlify/functions/responses  (redirect: /api/responses)
+// Tablonun gerçek kolonlarına göre INSERT: form_slug, answers, (ip), meta
 
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type'
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
 };
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
+// Yazma için Service Role tercih; yoksa ANON (RLS'a takılabilir)
 const KEY =
   process.env.SUPABASE_SERVICE_ROLE ||
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
@@ -15,69 +16,85 @@ const KEY =
 
 exports.handler = async (event) => {
   try {
-    if (event.httpMethod === 'OPTIONS') {
-      return { statusCode: 204, headers: CORS, body: '' };
+    if (event.httpMethod === "OPTIONS") {
+      return { statusCode: 204, headers: CORS, body: "" };
     }
-    if (event.httpMethod !== 'POST') {
-      return { statusCode: 405, headers: { ...CORS, Allow: 'POST, OPTIONS' }, body: 'Method Not Allowed' };
+    if (event.httpMethod !== "POST") {
+      return { statusCode: 405, headers: { ...CORS, Allow: "POST, OPTIONS" }, body: "Method Not Allowed" };
     }
     if (!SUPABASE_URL || !KEY) {
-      return { statusCode: 500, headers: CORS, body: JSON.stringify({ ok:false, error:'supabase-env-missing' }) };
+      return resp(500, { ok: false, error: "supabase-env-missing" });
     }
 
-    // --- Body
+    // ---- Body
     let body = {};
-    try { body = JSON.parse(event.body || '{}'); }
-    catch { return { statusCode: 400, headers: CORS, body: JSON.stringify({ ok:false, error:'invalid-json' }) }; }
+    try { body = JSON.parse(event.body || "{}"); }
+    catch { return resp(400, { ok:false, error:"invalid-json" }); }
 
-    const slug = (body.slug || '').trim();
-    const answers = body.answers && typeof body.answers === 'object' ? body.answers : null;
-    const form_id = body.form_id || null;
-    if (!slug || !answers) {
-      return { statusCode: 400, headers: CORS, body: JSON.stringify({ ok:false, error:'missing-fields' }) };
+    // UI şu alanları gönderiyor: { form_id?, slug?, answers, meta? }
+    // DB'de kolon: form_slug, answers, ip, meta
+    const form_slug = (body.form_slug || body.slug || "").trim();
+    const answers   = (body.answers && typeof body.answers === "object") ? body.answers : null;
+    const metaIn    = body.meta || {};
+    if (!form_slug || !answers) {
+      return resp(400, { ok:false, error:"missing-fields" });
     }
 
-    // --- Meta/IP
-    const h = event.headers || {};
-    const ip =
-      (h['x-forwarded-for'] || h['client-ip'] || '').split(',')[0].trim() ||
-      h['x-nf-client-connection-ip'] || null;
-    const ua = (body.meta && body.meta.ua) || h['user-agent'] || '';
-    const href = (body.meta && body.meta.href) || h['referer'] || '';
+    // ---- IP/UA/HREF
+    const h = lower(event.headers || {});
+    const ip = pickIp(h);                 // inet kolonu boş string almaz → sadece geçerliyse yaz
+    const ua = metaIn.ua || h["user-agent"] || "";
+    const href = metaIn.href || h["referer"] || "";
 
+    // ---- INSERT gövdesi (Tablo kolonlarına birebir)
     const row = {
-      form_id,
-      slug,
+      form_slug,
       answers,
-      ip,
-      ua,
-      meta: { ...(body.meta||{}), ip, ua, href, ts: new Date().toISOString() }
+      meta: { ...metaIn, ua, href, ts: new Date().toISOString(), ip: ip || undefined },
+      // ip kolonu varsa ve null kabul ediyorsa eklemeyebiliriz; varsa ve doluysa yaz:
+      ...(ip ? { ip } : {})
     };
 
-    // --- Insert
-    const url = `${SUPABASE_URL}/rest/v1/responses`;
-    const r = await fetch(url, {
-      method: 'POST',
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/responses`, {
+      method: "POST",
       headers: {
         apikey: KEY,
         Authorization: `Bearer ${KEY}`,
-        'content-type': 'application/json',
-        // duplicate unique index varsa 409 döner
-        Prefer: 'return=minimal'
+        "content-type": "application/json",
+        Prefer: "return=minimal" // minimal body; unique ihlalinde 409
       },
       body: JSON.stringify(row)
     });
 
     if (r.status === 409) {
-      return { statusCode: 409, headers: CORS, body: JSON.stringify({ ok:false, error:'duplicate' }) };
+      return resp(409, { ok:false, error:"duplicate", message:"Bu anketi daha önce doldurmuşsunuz." });
     }
     if (!r.ok) {
-      const txt = await r.text().catch(()=> '');
-      return { statusCode: 500, headers: CORS, body: JSON.stringify({ ok:false, error:'save-failed', detail: txt.slice(0,200) }) };
+      const txt = await r.text().catch(()=> "");
+      return resp(500, { ok:false, error:"save-failed", detail: txt.slice(0,300) });
     }
 
-    return { statusCode: 200, headers: CORS, body: JSON.stringify({ ok:true }) };
+    return resp(200, { ok:true });
   } catch (err) {
-    return { statusCode: 500, headers: CORS, body: JSON.stringify({ ok:false, error:String(err) }) };
+    return resp(500, { ok:false, error:String(err && err.message || err) });
   }
 };
+
+// ---------- helpers ----------
+function resp(code, json) {
+  return { statusCode: code, headers: CORS, body: JSON.stringify(json) };
+}
+
+function lower(h) {
+  const o = {}; for (const k in h) o[k.toLowerCase()] = h[k]; return o;
+}
+function pickIp(h) {
+  // Sadece geçerliyse döndür (inet uyumlu)
+  let cand = (h["x-nf-client-connection-ip"] ||
+              (h["x-forwarded-for"]||"").split(",")[0].trim() ||
+              h["client-ip"] || h["x-real-ip"] || "").trim();
+  if (!cand) return null;
+  const ipv4 = /^(25[0-5]|2[0-4]\d|[01]?\d?\d)(\.(25[0-5]|2[0-4]\d|[01]?\d?\d)){3}$/;
+  const ipv6 = /^[0-9a-f:]+$/i;
+  return (ipv4.test(cand) || ipv6.test(cand)) ? cand : null;
+}
