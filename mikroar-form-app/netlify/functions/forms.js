@@ -1,64 +1,69 @@
 // netlify/functions/forms.js
-// GET /api/forms?slug=ASD  → { form: {...} }
-const json = (code, obj) => ({
-  statusCode: code,
-  headers: {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*'
-  },
-  body: JSON.stringify(obj)
+const { createClient } = require("@supabase/supabase-js");
+
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY; // okuma için yeterli
+
+const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: false }
 });
 
 exports.handler = async (event) => {
+  if (event.httpMethod !== "GET") {
+    return { statusCode: 405, body: "Method Not Allowed" };
+  }
+
+  const qp = event.queryStringParameters || {};
+  const slug = (qp.slug || "").trim();
+  const list = qp.list === "1" || qp.list === "true";
+
   try {
-    if (event.httpMethod !== 'GET') return json(405, { error: 'Method Not Allowed' });
+    // Liste (index sayfasındaki açılır menü)
+    if (list) {
+      const { data, error } = await db
+        .from("forms")
+        .select("id, slug, title")
+        .eq("active", true)
+        .order("created_at", { ascending: false })
+        .limit(200);
 
-    const SUPABASE_URL = process.env.SUPABASE_URL;
-    const KEY =
-      process.env.SUPABASE_SERVICE_ROLE ||
-      process.env.SUPABASE_SERVICE_ROLE_KEY ||
-      process.env.SUPABASE_ANON_KEY;
-
-    const slug = (event.queryStringParameters?.slug || '').trim();
-    if (!slug) return json(400, { error: 'slug gerekli' });
-    if (!SUPABASE_URL || !KEY) return json(500, { error: 'supabase-env-missing' });
-
-    const select = encodeURIComponent('id,slug,title,schema,active,created_at');
-    const headers = { apikey: KEY, Authorization: `Bearer ${KEY}` };
-
-    // 1) Kesin eşleşme
-    let r = await fetch(
-      `${SUPABASE_URL}/rest/v1/forms?slug=eq.${encodeURIComponent(slug)}&select=${select}`,
-      { headers }
-    );
-    let rows = await r.json().catch(() => []);
-
-    if (!r.ok) {
-      // Supabase hata kodunu aynen geçir
-      return json(r.status || 500, { error: 'supabase-error', detail: rows });
+      if (error) throw error;
+      return respond(200, { ok: true, items: data || [] }, 60);
     }
 
-    // 2) Yoksa: case-insensitive fallback
-    if (!Array.isArray(rows) || rows.length === 0) {
-      r = await fetch(
-        `${SUPABASE_URL}/rest/v1/forms?slug=ilike.${encodeURIComponent(slug)}&select=${select}`,
-        { headers }
-      );
-      rows = await r.json().catch(() => []);
-      if (!r.ok) return json(r.status || 500, { error: 'supabase-error', detail: rows });
+    // Tek form (form.html ve SSR beklediği format)
+    if (!slug) return respond(400, { ok: false, error: "slug gerekli" });
+
+    const { data, error } = await db
+      .from("forms")
+      .select("id, slug, title, description, schema, active")
+      .eq("slug", slug)
+      .single();
+
+    if (error) {
+      if (error.code === "PGRST116" /* row not found */) {
+        return respond(404, { ok: false, error: "Form bulunamadı" });
+      }
+      throw error;
     }
 
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return json(404, { error: 'Form bulunamadı' });
+    if (!data?.active) {
+      return respond(404, { ok: false, error: "Form pasif" });
     }
 
-    const form = rows[0] || null;
-    if (form && typeof form.schema === 'string') {
-      try { form.schema = JSON.parse(form.schema); } catch { form.schema = {}; }
-    }
-
-    return json(200, { form });
-  } catch (e) {
-    return json(500, { error: 'internal', detail: String(e && e.message || e) });
+    // client { form } bekliyor
+    return respond(200, { ok: true, form: data }, 30);
+  } catch (err) {
+    console.error("forms fn error:", err);
+    return respond(500, { ok: false, error: "Sunucu hatası" });
   }
 };
+
+function respond(code, json, sMaxAgeSec = 0) {
+  const headers = { "content-type": "application/json; charset=utf-8" };
+  if (sMaxAgeSec > 0) {
+    // Netlify CDN cache (SSR olmayan çağrılar için hoş)
+    headers["cache-control"] = `public, s-maxage=${sMaxAgeSec}`;
+  }
+  return { statusCode: code, headers, body: JSON.stringify(json) };
+}
