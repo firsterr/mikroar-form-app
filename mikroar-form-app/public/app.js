@@ -97,7 +97,8 @@ function getFbpFbc(){
     );
     return missing;
   }
-
+// KAYIT BAŞARILI OLDUKTAN SONRA:
+if (window.fbq) fbq('track', 'Lead', { content_name: (window.__FORM?.slug || '') });
   // ---- Başarı ekranı (Google Forms tarzı) ----
   function showSuccessView() {
     const app = $("#app");
