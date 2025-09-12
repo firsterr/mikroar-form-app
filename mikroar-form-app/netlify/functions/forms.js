@@ -1,69 +1,69 @@
 // netlify/functions/forms.js
 const { createClient } = require("@supabase/supabase-js");
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE
+);
 
-const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: { persistSession: false },
+const json = (body, status = 200) => ({
+  statusCode: status,
+  headers: { "content-type": "application/json; charset=utf-8" },
+  body: JSON.stringify(body),
 });
 
-function respond(code, json, cacheSec = 0) {
-  const headers = { "content-type": "application/json; charset=utf-8" };
-  if (cacheSec > 0) headers["cache-control"] = `public, s-maxage=${cacheSec}`;
-  return { statusCode: code, headers, body: JSON.stringify(json) };
-}
-
 exports.handler = async (event) => {
-  if (event.httpMethod !== "GET") return respond(405, { ok: false, error: "Method Not Allowed" });
-
-  const qp = event.queryStringParameters || {};
-  const list = qp.list === "1" || qp.list === "true";
-  let slug = (qp.slug || "").trim();
-  const code = (qp.code || qp.k || "").trim();
-
   try {
-    // Liste (index'te açılır menü vs.)
-    if (list) {
-      const { data, error } = await db
-        .from("forms")
-        .select("id, slug, title")
-        .eq("active", true)
-        .order("created_at", { ascending: false })
-        .limit(250);
-      if (error) throw error;
-      return respond(200, { ok: true, items: data || [] }, 60);
-    }
+    const params = event.queryStringParameters || {};
+    let slug = params.slug || null;
+    const code = params.k || params.code || null;
 
-    // Kısa kod -> slug çöz
+    // k -> slug
     if (!slug && code) {
-      const { data: sl, error: e1 } = await db
+      const { data: short, error: e1 } = await supabase
         .from("shortlinks")
-        .select("slug, active")
+        .select("slug")
         .eq("code", code)
-        .single();
-      if (e1 || !sl?.slug || sl.active === false) return respond(404, { ok: false, error: "Kısa kod bulunamadı" });
-      slug = sl.slug;
+        .maybeSingle();
+      if (e1) throw e1;
+      slug = short?.slug || null;
     }
 
-    if (!slug) return respond(400, { ok: false, error: "slug gerekli" });
+    if (!slug) return json({ ok: false, error: "slug-required" }, 400);
 
-    // Formu getir (description dahil)
-    const { data, error } = await db
+    // Formu çek
+    const { data: form, error } = await supabase
       .from("forms")
-      .select("id, slug, title, description, schema, active")
+      .select("*")
       .eq("slug", slug)
-      .single();
+      .eq("active", true)
+      .maybeSingle();
 
-    if (error) {
-      if (error.code === "PGRST116") return respond(404, { ok: false, error: "Form bulunamadı" });
-      throw error;
-    }
-    if (!data?.active) return respond(404, { ok: false, error: "Form pasif" });
+    if (error) throw error;
+    if (!form) return json({ ok: false, error: "not-found" }, 404);
 
-    return respond(200, { ok: true, form: data }, 30);
+    // description farklı kolon/alanlarda olabilir -> normalize et
+    const description =
+      form.description ??
+      form.desc ??
+      form.schema?.description ??
+      form.schema?.desc ??
+      null;
+
+    const payload = {
+      id: form.id,
+      slug: form.slug,
+      title: form.title ?? form.schema?.title ?? "",
+      description,
+      active: !!form.active,
+      schema: form.schema ?? null,
+    };
+
+    return json({ ok: true, form: payload });
   } catch (err) {
-    console.error("forms fn error:", err);
-    return respond(500, { ok: false, error: "Sunucu hatası" });
+    return json(
+      { ok: false, error: "server-error", detail: err?.message || String(err) },
+      500
+    );
   }
 };
