@@ -1,16 +1,11 @@
 // netlify/edge-functions/form-ssr.js
-// Deno (Edge) ortamı. Formu SSR ile üretir ve app.js'ye devreder.
-
 export const config = { path: "/form.html" };
 
 const SUPABASE_URL  = Deno.env.get("SUPABASE_URL");
 const SUPABASE_KEY  = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE");
 
-// küçük yardımcılar
-const esc = (s="") =>
-  String(s)
-    .replaceAll("&","&amp;").replaceAll("<","&lt;")
-    .replaceAll(">","&gt;").replaceAll('"',"&quot;");
+const esc = (s = "") =>
+  String(s).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
 function asOptions(raw) {
   if (!raw) return [];
@@ -18,140 +13,86 @@ function asOptions(raw) {
   return String(raw).split(",").map(v => v.trim()).filter(Boolean);
 }
 
-function fieldHTML(q, idx) {
-  const name = q.name || `q_${idx+1}`;
-  const label = q.label || q.title || `SORU${idx+1}`;
+function fieldHTML(q, i) {
+  const name = q.name || `q_${i+1}`;
+  const label = q.label || q.title || `Soru ${i+1}`;
   const req = q.required ? " required" : "";
   const type = (q.type || "").toLowerCase();
   const opts = asOptions(q.options || q.choices || q.items);
 
-  if (type === "radio" || type === "tek" || type === "single") {
-    return `
-    <div class="card">
-      <div class="q-title">${esc(label)}${q.required ? ' <span class="req">*</span>' : ""}</div>
-      <div class="q-body">
-        ${opts.map((o,i)=>`
-          <label class="opt">
-            <input type="radio" name="${esc(name)}" value="${esc(o)}"${req}>
-            <span>${esc(o)}</span>
-          </label>`).join("")}
-      </div>
-    </div>`;
+  if (type === "radio" || type === "tek") {
+    return `<div class="row"><div class="q-title">${esc(label)}${q.required ? ' <span class="req">*</span>' : ""}</div>
+      <div class="options">${opts.map(o=>`
+        <label class="opt"><input type="radio" name="${esc(name)}" value="${esc(o)}"${req}><span>${esc(o)}</span></label>`).join("")}
+      </div></div>`;
   }
-
-  if (type === "checkbox" || type === "çoklu" || type === "multi") {
-    return `
-    <div class="card">
-      <div class="q-title">${esc(label)}${q.required ? ' <span class="req">*</span>' : ""}</div>
-      <div class="q-body">
-        ${opts.map((o,i)=>`
-          <label class="opt">
-            <input type="checkbox" name="${esc(name)}" value="${esc(o)}">
-            <span>${esc(o)}</span>
-          </label>`).join("")}
-      </div>
-    </div>`;
+  if (type === "checkbox" || type === "çoklu") {
+    return `<div class="row"><div class="q-title">${esc(label)}${q.required ? ' <span class="req">*</span>' : ""}</div>
+      <div class="options">${opts.map(o=>`
+        <label class="opt"><input type="checkbox" name="${esc(name)}" value="${esc(o)}"><span>${esc(o)}</span></label>`).join("")}
+      </div></div>`;
   }
-
   if (type === "select" || type === "açılır" || type === "dropdown") {
-    return `
-    <div class="card">
-      <div class="q-title">${esc(label)}${q.required ? ' <span class="req">*</span>' : ""}</div>
-      <div class="q-body">
-        <select name="${esc(name)}"${req} class="select">
-          ${opts.map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join("")}
-        </select>
-      </div>
-    </div>`;
+    return `<div class="row"><div class="q-title">${esc(label)}${q.required ? ' <span class="req">*</span>' : ""}</div>
+      <div class="options"><div class="opt"><select name="${esc(name)}"${req}>
+        ${opts.map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join("")}
+      </select></div></div></div>`;
   }
-
-  // default: kısa metin
-  return `
-  <div class="card">
-    <div class="q-title">${esc(label)}${q.required ? ' <span class="req">*</span>' : ""}</div>
-    <div class="q-body">
-      <input type="text" name="${esc(name)}"${req} class="input">
-    </div>
-  </div>`;
-}
-
-function pageHTML(form, slug) {
-  const title = form?.title || "Anket";
-  const desc  = form?.description || "";
-  const qs    = Array.isArray(form?.schema?.questions) ? form.schema.questions : [];
-
-  return `<!doctype html>
-<html lang="tr">
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(title)}</title>
-<link rel="stylesheet" href="/form.css">
-<body>
-  <div id="app">
-    <h1 id="title">${esc(title)}</h1>
-    ${desc ? `<p class="desc">${esc(desc)}</p>` : ""}
-
-    <form id="form" data-ssr="1">
-      ${qs.map((q,i)=>fieldHTML(q,i)).join("")}
-
-      <div class="actions">
-        <button id="btnSend" class="btn" type="submit">Gönder</button>
-      </div>
-    </form>
-
-    <div id="alertBottom" class="alert" style="display:none"></div>
-  </div>
-
-  <script>
-    // app.js'nin ihtiyacı olan minimal bilgi
-    window.__FORM = {
-      id: ${form?.id ? `"${esc(String(form.id))}"` : "null"},
-      slug: ${slug ? `"${esc(slug)}"` : "null"},
-      title: ${JSON.stringify(title)}
-    };
-  </script>
-  <script src="/app.js" defer></script>
-</body>
-</html>`;
+  return `<div class="row"><div class="q-title">${esc(label)}${q.required ? ' <span class="req">*</span>' : ""}</div>
+    <input type="text" name="${esc(name)}"${req} class="input"></div>`;
 }
 
 export default async (req) => {
   try {
     const url = new URL(req.url);
-    const slug = (url.searchParams.get("slug") || "").trim();
+    let slug = (url.searchParams.get("slug") || "").trim();
+    const code = (url.searchParams.get("k") || "").trim();
 
-    if (!slug) {
-      return new Response("Hata: Form bulunamadı (slug eksik).", { status: 400 });
+    if (!slug && code) {
+      // shortlinks → slug çöz
+      const slURL = `${SUPABASE_URL}/rest/v1/shortlinks?select=slug,active&code=eq.${encodeURIComponent(code)}&limit=1`;
+      const slR = await fetch(slURL, { headers:{ apikey: SUPABASE_KEY, authorization:`Bearer ${SUPABASE_KEY}` }});
+      const sl = (await slR.json())[0];
+      if (!sl?.slug || sl.active === false) return new Response("Hata: Geçersiz kısa kod.", { status: 404 });
+      slug = sl.slug;
     }
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return new Response("Sunucu yapılandırma hatası (Supabase env).", { status: 500 });
-    }
+    if (!slug) return new Response("Hata: slug veya kısa kod gerekli.", { status: 400 });
 
-    // Supabase REST ile formu al
-    const restURL = `${SUPABASE_URL}/rest/v1/forms?select=id,slug,title,description,active,schema&slug=eq.${encodeURIComponent(slug)}&limit=1`;
-    const r = await fetch(restURL, {
-      headers: {
-        apikey: SUPABASE_KEY,
-        authorization: `Bearer ${SUPABASE_KEY}`,
-        accept: "application/json"
-      }
-    });
+    // formu getir
+    const fURL = `${SUPABASE_URL}/rest/v1/forms?select=id,slug,title,description,schema,active&slug=eq.${encodeURIComponent(slug)}&limit=1`;
+    const fR = await fetch(fURL, { headers:{ apikey: SUPABASE_KEY, authorization:`Bearer ${SUPABASE_KEY}` }});
+    const form = (await fR.json())[0];
+    if (!form || form.active === false) return new Response("Hata: Form bulunamadı.", { status: 404 });
 
-    if (!r.ok) {
-      return new Response("Hata: Form alınamadı.", { status: 502 });
-    }
-    const rows = await r.json();
-    const form = Array.isArray(rows) && rows[0] ? rows[0] : null;
+    const title = form.title || form.slug || "Anket";
+    const desc  = (form.description || "").trim();
+    const qs = Array.isArray(form?.schema?.questions) ? form.schema.questions : [];
 
-    if (!form || form.active === false) {
-      return new Response("Hata: Form bulunamadı.", { status: 404 });
-    }
+    const html = `<!doctype html>
+<html lang="tr">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${esc(title)}</title>
+<link rel="stylesheet" href="/form.css">
+<body>
+  <div id="app">
+    <h1 id="title">${esc(title)}</h1>
+    ${desc ? `<p id="desc" class="form-desc">${esc(desc)}</p>` : `<p id="desc" class="form-desc" style="display:none"></p>`}
 
-    const html = pageHTML(form, slug);
-    return new Response(html, {
-      headers: { "content-type": "text/html; charset=utf-8" }
-    });
-  } catch (err) {
+    <form id="form" data-ssr="1">
+      ${qs.map((q,i)=>fieldHTML(q,i)).join("")}
+      <div class="actions"><button id="btnSend" type="submit">Gönder</button></div>
+    </form>
+    <p id="alertBottom" class="note center" style="display:none"></p>
+  </div>
+
+  <script>
+    window.__FORM = { id: ${form.id ? `"${String(form.id)}"` : "null"}, slug: "${esc(slug)}", title: ${JSON.stringify(title)} };
+  </script>
+  <script src="/app.js" defer></script>
+</body></html>`;
+
+    return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" }});
+  } catch (e) {
     return new Response("Beklenmeyen hata.", { status: 500 });
   }
 };
