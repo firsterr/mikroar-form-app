@@ -99,27 +99,28 @@ function getFbpFbc(){
   }
 // KAYIT BAŞARILI OLDUKTAN SONRA:
 if (window.fbq) fbq('track', 'Lead', { content_name: (window.__FORM?.slug || '') });
-  // ---- Başarı ekranı (Google Forms tarzı) ----
-  function showSuccessView() {
-    const app = $("#app");
-    if (!app) return;
-// ---- FACEBOOK LEAD (Browser + CAPI) ----
+
+  // ---- FACEBOOK LEAD (Browser + CAPI) ----
 try {
-  // Aynı event_id hem tarayıcı hem sunucuda kullanılır → dedup
+  // Aynı event_id hem Pixel hem CAPI'de kullanılacak → dedup
   const eventId =
     (crypto.randomUUID && crypto.randomUUID()) ||
     ("lead_" + Date.now() + "_" + Math.random().toString(36).slice(2));
 
-  const slug = payload.slug || window.__FORM?.slug || "";
+  const slug = payload.slug || (window.__FORM && window.__FORM.slug) || "";
 
-  // 1) Browser Pixel
+  // 1) Pixel (tarayıcı)
   if (window.fbq) {
-    fbq("track", "Lead", { content_name: slug, value: 1, currency: "TRY" }, { eventID: eventId });
+    fbq(
+      "track",
+      "Lead",
+      { content_name: slug, value: 1, currency: "TRY" },
+      { eventID: eventId }
+    );
   }
 
-  // 2) Server (CAPI) – Netlify Function'a gönder
-  const testCode = new URLSearchParams(location.search).get("fb_test"); // Test Events kodu girerseniz
-
+  // 2) CAPI (sunucu) – Netlify Function
+  const testCode = new URLSearchParams(location.search).get("fb_test");
   fetch("/.netlify/functions/fb", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -131,8 +132,15 @@ try {
       test_event_code: testCode || undefined,
     }),
   }).catch(() => {});
-} catch {}
+} catch (err) {
+  console.debug("FB Lead skip:", err);
+}
 // ---- /FACEBOOK LEAD ----
+  // ---- Başarı ekranı (Google Forms tarzı) ----
+  function showSuccessView() {
+    const app = $("#app");
+    if (!app) return;
+
     // Başlığı al (varsa)
     const titleEl = $("#title");
     const titleText = titleEl && titleEl.textContent.trim().length
