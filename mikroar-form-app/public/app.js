@@ -11,8 +11,7 @@
     .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 
   const appEl  = $("#app") || document.body;
-  const formEl = $("#form");          // form.html’de var; liste sayfasında da bulunuyor
-  if (!formEl) return;
+const formEl = $("#form"); // Yoksa da sorun değil; altta guard’lı kullanıyoruz
 
   // ---------- q.options normalize ----------
   function normalizeFormOptions(form) {
@@ -295,7 +294,7 @@
     }
   }
 
-  formEl.addEventListener("submit", onSubmit);
+ if (formEl) formEl.addEventListener("submit", onSubmit);
 
   // ---------- Açılış akışı ----------
   (async () => {
