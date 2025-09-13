@@ -11,7 +11,7 @@
     .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 
   const appEl  = $("#app") || document.body;
-const formEl = $("#form"); // Yoksa da sorun değil; altta guard’lı kullanıyoruz
+const formEl = $("#form"); // Yoksa da script çalışmaya devam edecek
 
   // ---------- q.options normalize ----------
   function normalizeFormOptions(form) {
@@ -37,7 +37,9 @@ const formEl = $("#form"); // Yoksa da sorun değil; altta guard’lı kullanıy
   }
 
   // ---------- Slug / shortlink çöz ----------
-  async function resolveSlug() {
+ + async function resolveSlug() {
++   // view.js tarafından enjekte edildiyse direkt kullan
++   if (window.__PRESET_SLUG) return window.__PRESET_SLUG;
     const url = new URL(location.href);
 
     // 1) ?slug=...
