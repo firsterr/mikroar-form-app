@@ -4,47 +4,45 @@
 [functions]
   directory = "mikroar-form-app/netlify/functions"
 
-# ---------- form.mikroar.com ----------
-# API -> Functions
+############################
+# form.mikroar.com
+############################
+
+# API -> Netlify Functions
 [[redirects]]
   from = "/api/*"
   to   = "/.netlify/functions/:splat"
   status = 200
   conditions = { Host = ["form.mikroar.com"] }
 
-# KISA LİNK: /f/101010  (URL SABİT KALSIN, form.html döndür)
-# Bu kural MUTLAKA genel kuraldan ÖNCE olacak.
+# Kısa link: /f/:code  (URL aynı kalsın, form.html içerik dönsün)
+# Bu kural mutlaka catch-all’dan ÖNCE olmalı.
 [[redirects]]
   from = "/f/*"
   to   = "/form.html"
   status = 200
   force  = true
   conditions = { Host = ["form.mikroar.com"] }
-# form.mikroar.com → kısa linkler
-[[redirects]]
-  from = "/f/*"
-  to   = "/form.html"
-  status = 200
-  conditions = { Host = ["form.mikroar.com"] }
-# Varsayılan: her şey form.html (GENEL kural)
+
+# Catch-all: her şey form.html
 [[redirects]]
   from = "/*"
   to   = "/form.html"
   status = 200
   conditions = { Host = ["form.mikroar.com"] }
 
-# (İstiyorsan)
-# [[edge_functions]]
-#   function = "form-ssr"
-#   path = "/form.html"
+############################
+# anket.mikroar.com
+############################
 
-# ---------- anket.mikroar.com ----------
+# API -> Netlify Functions
 [[redirects]]
   from = "/api/*"
   to   = "/.netlify/functions/:splat"
   status = 200
   conditions = { Host = ["anket.mikroar.com"] }
 
+# Tüm yollar admin arayüzüne
 [[redirects]]
   from = "/*"
   to   = "/admin.html"
