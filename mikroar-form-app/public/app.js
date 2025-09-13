@@ -296,7 +296,7 @@ const formEl = $("#form"); // Yoksa da script çalışmaya devam edecek
     }
   }
 
- if (formEl) formEl.addEventListener("submit", onSubmit);
+if (formEl) formEl.addEventListener("submit", onSubmit);
 
   // ---------- Açılış akışı ----------
   (async () => {
