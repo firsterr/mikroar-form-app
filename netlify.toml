@@ -1,35 +1,47 @@
 [build]
   publish = "mikroar-form-app/public"
-  command = ""
 
 [functions]
   directory = "mikroar-form-app/netlify/functions"
 
-# --- API → Netlify Functions
+# ---------- form.mikroar.com ----------
+# API -> Functions
 [[redirects]]
   from = "/api/*"
   to   = "/.netlify/functions/:splat"
   status = 200
-  force  = true
-  conditions = { Host = ["form.mikroar.com", "anket.mikroar.com"] }
+  conditions = { Host = ["form.mikroar.com"] }
 
-# --- Kısa URL → aynı HTML (form.html)
+# KISA LİNK: /f/101010  (URL SABİT KALSIN, form.html döndür)
+# Bu kural MUTLAKA genel kuraldan ÖNCE olacak.
 [[redirects]]
   from = "/f/*"
   to   = "/form.html"
   status = 200
+  force  = true
   conditions = { Host = ["form.mikroar.com"] }
 
-# --- form.mikroar.com varsayılanı
+# Varsayılan: her şey form.html (GENEL kural)
 [[redirects]]
-  from = "/"
+  from = "/*"
   to   = "/form.html"
   status = 200
   conditions = { Host = ["form.mikroar.com"] }
 
-# --- anket.mikroar.com varsayılanı (yönetim)
+# (İstiyorsan)
+# [[edge_functions]]
+#   function = "form-ssr"
+#   path = "/form.html"
+
+# ---------- anket.mikroar.com ----------
 [[redirects]]
-  from = "/"
+  from = "/api/*"
+  to   = "/.netlify/functions/:splat"
+  status = 200
+  conditions = { Host = ["anket.mikroar.com"] }
+
+[[redirects]]
+  from = "/*"
   to   = "/admin.html"
   status = 200
   conditions = { Host = ["anket.mikroar.com"] }
