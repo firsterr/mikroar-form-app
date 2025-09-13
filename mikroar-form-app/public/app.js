@@ -1,27 +1,43 @@
 (function () {
   "use strict";
 
-  // ----------------- Helpers -----------------
+  // ---------- Helpers ----------
   const $  = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
   const show = (el) => el && (el.style.display = "");
   const hide = (el) => el && (el.style.display = "none");
-  const esc = (s) => String(s ?? "")
+  const esc  = (s) => String(s ?? "")
     .replace(/&/g,"&amp;").replace(/</g,"&lt;")
     .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 
   const appEl  = $("#app") || document.body;
-  const formEl = $("#form"); // form.html’de var, liste sayfasında olmayabilir
+  const formEl = $("#form");          // form.html’de var; liste sayfasında da bulunuyor
+  if (!formEl) return;
 
-  // options alanını güvenle diziye çevir (string/array/object destek)
-  function toOptions(o) {
-    if (Array.isArray(o)) return o.map(v => String(v));
-    if (typeof o === "string") return o.split(",").map(s => s.trim()).filter(Boolean);
-    if (o && typeof o === "object") return Object.values(o).map(v => String(v));
-    return [];
+  // ---------- q.options normalize ----------
+  function normalizeFormOptions(form) {
+    if (!form) return form;
+    const list =
+      form.questions ||
+      form.schema?.questions ||
+      form.schema?.fields || [];
+
+    list.forEach((q) => {
+      const opt = q?.options;
+      if (Array.isArray(opt)) {
+        q.options = opt.map(v => String(v).trim()).filter(Boolean).join(", ");
+      } else if (opt && typeof opt === "object") {
+        q.options = Object.values(opt).map(v => String(v).trim()).filter(Boolean).join(", ");
+      } else if (typeof opt === "string") {
+        q.options = opt.split(",").map(s => s.trim()).filter(Boolean).join(", ");
+      } else {
+        q.options = "";
+      }
+    });
+    return form;
   }
 
-  // ----------------- Slug / Shortlink çözümleyici -----------------
+  // ---------- Slug / shortlink çöz ----------
   async function resolveSlug() {
     const url = new URL(location.href);
 
@@ -29,66 +45,61 @@
     const qsSlug = url.searchParams.get("slug");
     if (qsSlug) return qsSlug;
 
-    // 2) /f/:code  (kısa URL)
+    // 2) /f/:code  (kısa link)
     const m = location.pathname.match(/^\/f\/([^/?#]+)/);
     if (m) {
       const code = m[1];
-      const r = await fetch(`/.netlify/functions/go?code=${encodeURIComponent(code)}`, {
-        headers: { accept: "application/json" }
-      });
+      const r = await fetch(`/.netlify/functions/go?code=${encodeURIComponent(code)}`);
       if (r.ok) {
         const j = await r.json();
         if (j.ok && j.slug) return j.slug;
       }
-      alert("Bağlantı geçersiz ya da süresi dolmuş.");
+      alert("Geçersiz veya süresi dolmuş bağlantı.");
       throw new Error("invalid-short-code");
     }
 
-    // 3) Eski: ?k=101010 geriye uyumluluk
+    // 3) Eski stil ?k=...
     const k = url.searchParams.get("k");
     if (k) {
-      const r = await fetch(`/.netlify/functions/go?code=${encodeURIComponent(k)}`, {
-        headers: { accept: "application/json" }
-      });
+      const r = await fetch(`/.netlify/functions/go?code=${encodeURIComponent(k)}`);
       if (r.ok) {
         const j = await r.json();
         if (j.ok && j.slug) return j.slug;
       }
-      alert("Bağlantı geçersiz ya da süresi dolmuş.");
+      alert("Geçersiz veya süresi dolmuş bağlantı.");
       throw new Error("invalid-short-code");
     }
 
-    // 4) slug yok → seçim ekranı
+    // 4) slug yok -> liste/chooser akışı
     return null;
   }
 
-  // ----------------- Başlık & açıklama -----------------
+  // ---------- Başlık & açıklama ----------
   function setHeaderFromForm(form) {
     try {
-      const t = form?.title || window.__FORM?.title || "Anket";
-      const d = form?.description || window.__FORM?.description || form?.schema?.description || "";
+      const t = form?.title ||
+                window.__FORM?.title || "Anket";
+      const d = form?.description ||
+                window.__FORM?.description ||
+                form?.schema?.description || "";
 
       const titleEl = $("#title");
+      const descEl  = $("#desc");
       if (titleEl) titleEl.textContent = t;
-
-      const descEl = $("#desc");
-      if (descEl) descEl.textContent = d || "";
+      if (descEl)  descEl.textContent  = d;
     } catch {}
   }
 
-  // ----------------- Form render -----------------
+  // ---------- Soruları bas ----------
   function renderQuestions(questions = []) {
-    const host = $("#qwrap") || formEl;
-    if (!host) return;
-
-    host.innerHTML = ""; // temizle
+    const qWrap = $("#qwrap") || formEl;
+    qWrap.innerHTML = ""; // temizle
 
     questions.forEach((q, idx) => {
       const type  = (q.type || "").toLowerCase(); // radio | checkbox | select | text
       const name  = q.name || `q_${idx + 1}`;
       const label = q.label || name.toUpperCase();
       const req   = !!q.required;
-      const opts  = toOptions(q.options);
 
       const field = document.createElement("div");
       field.className = "q-item";
@@ -98,6 +109,8 @@
       h.className = "q-title";
       h.innerHTML = `<strong>${esc(label)}</strong>${req ? ' <span style="color:#d00">*</span>' : ""}`;
       field.appendChild(h);
+
+      const opts = (q.options || "").split(",").map(s => s.trim()).filter(Boolean);
 
       if (type === "radio") {
         opts.forEach((opt,i) => {
@@ -133,20 +146,19 @@
         field.appendChild(inp);
       }
 
-      formEl?.insertBefore(field, $("#formActions") || null);
+      const actions = $("#formActions") || null;
+      formEl.insertBefore(field, actions);
     });
   }
 
-  // ----------------- Form yükle -----------------
+  // ---------- Formu yükle ----------
   async function loadForm(slug) {
     const titleEl = $("#title");
     const descEl  = $("#desc");
     if (titleEl && !titleEl.textContent) titleEl.textContent = "Yükleniyor…";
-    if (descEl  && !descEl.textContent)  descEl.textContent  = "";
+    if (descEl) descEl.textContent = "";
 
-    const r = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`, {
-      headers: { accept: "application/json" }
-    });
+    const r = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`, { headers: { accept: "application/json" }});
     if (!r.ok) {
       const t = await r.text().catch(()=> "");
       throw new Error(t || "Form bulunamadı.");
@@ -154,25 +166,23 @@
     const j = await r.json();
     if (!j.ok || !j.form) throw new Error("Form bulunamadı.");
 
-    const form = j.form;
+    const form = normalizeFormOptions(j.form);
     window.__FORM = {
-      id: form.id,
-      slug: form.slug,
+      id:    form.id,
+      slug:  form.slug,
       title: form.title,
-      description: form.description
+      description: form.description,
+      schema: form.schema
     };
 
     setHeaderFromForm(form);
+    renderQuestions(form.schema?.questions || []);
 
-    const raw = form.schema?.questions || [];
-    const normalized = raw.map(q => ({ ...q, options: toOptions(q.options) }));
-    renderQuestions(normalized);
-
-    const actions = $("#formActions");
-    if (actions) show(actions);
+    show($("#formActions"));
+    return form;
   }
 
-  // ----------------- Serialize & Validasyon -----------------
+  // ---------- Serialize & validasyon ----------
   function serializeForm(form) {
     const data = {};
     const checks = {};
@@ -235,7 +245,7 @@
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  // ----------------- Submit -----------------
+  // ---------- Submit ----------
   async function onSubmit(e) {
     e.preventDefault();
     e.stopPropagation();
@@ -252,7 +262,7 @@
 
     const payload = {
       form_id: window.__FORM?.id || null,
-      slug: window.__FORM?.slug || null,
+      slug:    window.__FORM?.slug || null,
       answers: serializeForm(formEl),
       meta: {
         ua: navigator.userAgent,
@@ -285,15 +295,18 @@
     }
   }
 
-  if (formEl) formEl.addEventListener("submit", onSubmit);
+  formEl.addEventListener("submit", onSubmit);
 
-  // ----------------- Açılış -----------------
+  // ---------- Açılış akışı ----------
   (async () => {
     try {
       const slug = await resolveSlug();
-      if (slug) { await loadForm(slug); return; }
+      if (slug) {
+        await loadForm(slug);
+        return; // chooser'a düşme
+      }
 
-      // slug yoksa → basit liste (fallback)
+      // slug yoksa: basit chooser (admin token diyaloğu sende var, aynen kalsın)
       if (!$("#chooser")) {
         const box = document.createElement("div");
         box.id = "chooser";
