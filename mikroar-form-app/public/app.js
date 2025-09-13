@@ -13,7 +13,7 @@
   const appEl  = $("#app") || document.body;
   const formEl = $("#form"); // form.html’de var, liste sayfasında olmayabilir
 
-  // options alanını güvenle diziye çevir
+  // options alanını güvenle diziye çevir (string/array/object destek)
   function toOptions(o) {
     if (Array.isArray(o)) return o.map(v => String(v));
     if (typeof o === "string") return o.split(",").map(s => s.trim()).filter(Boolean);
@@ -29,7 +29,7 @@
     const qsSlug = url.searchParams.get("slug");
     if (qsSlug) return qsSlug;
 
-    // 2) /f/:code
+    // 2) /f/:code  (kısa URL)
     const m = location.pathname.match(/^\/f\/([^/?#]+)/);
     if (m) {
       const code = m[1];
@@ -44,7 +44,7 @@
       throw new Error("invalid-short-code");
     }
 
-    // 3) Eski: ?k=101010
+    // 3) Eski: ?k=101010 geriye uyumluluk
     const k = url.searchParams.get("k");
     if (k) {
       const r = await fetch(`/.netlify/functions/go?code=${encodeURIComponent(k)}`, {
@@ -58,7 +58,7 @@
       throw new Error("invalid-short-code");
     }
 
-    // 4) slug yok → seçim ekranı (liste modu)
+    // 4) slug yok → seçim ekranı
     return null;
   }
 
@@ -165,11 +165,9 @@
     setHeaderFromForm(form);
 
     const raw = form.schema?.questions || [];
-    // split hatasını önlemek için options’u normalize ederek gönder
     const normalized = raw.map(q => ({ ...q, options: toOptions(q.options) }));
     renderQuestions(normalized);
 
-    // Gönder butonu görünür olsun
     const actions = $("#formActions");
     if (actions) show(actions);
   }
@@ -293,12 +291,9 @@
   (async () => {
     try {
       const slug = await resolveSlug();
-      if (slug) {
-        await loadForm(slug);
-        return;
-      }
+      if (slug) { await loadForm(slug); return; }
 
-      // slug yoksa → varsa kendi liste komponentin çalışır; yoksa basit fallback:
+      // slug yoksa → basit liste (fallback)
       if (!$("#chooser")) {
         const box = document.createElement("div");
         box.id = "chooser";
