@@ -67,3 +67,12 @@ exports.handler = async (event) => {
     );
   }
 };
+// ... mevcut kodun json() fonksiyonu
+const json = (body, status = 200) => ({
+  statusCode: status,
+  headers: {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": status === 200 ? "public, max-age=30, must-revalidate" : "no-store"
+  },
+  body: JSON.stringify(body),
+});
