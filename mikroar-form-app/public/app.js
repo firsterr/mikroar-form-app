@@ -11,7 +11,7 @@
     .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 
   const appEl  = $("#app") || document.body;
-const formEl = $("#form"); // Yoksa da script çalışmaya devam edecek
+  const formEl = $("#form"); // Liste sayfasında olmayabilir
 
   // ---------- q.options normalize ----------
   function normalizeFormOptions(form) {
@@ -37,9 +37,10 @@ const formEl = $("#form"); // Yoksa da script çalışmaya devam edecek
   }
 
   // ---------- Slug / shortlink çöz ----------
- + async function resolveSlug() {
-+   // view.js tarafından enjekte edildiyse direkt kullan
-+   if (window.__PRESET_SLUG) return window.__PRESET_SLUG;
+  async function resolveSlug() {
+    // (Opsiyonel) SSR/edge view bir slug enjekte ettiyse
+    if (window.__PRESET_SLUG) return window.__PRESET_SLUG;
+
     const url = new URL(location.href);
 
     // 1) ?slug=...
@@ -78,12 +79,8 @@ const formEl = $("#form"); // Yoksa da script çalışmaya devam edecek
   // ---------- Başlık & açıklama ----------
   function setHeaderFromForm(form) {
     try {
-      const t = form?.title ||
-                window.__FORM?.title || "Anket";
-      const d = form?.description ||
-                window.__FORM?.description ||
-                form?.schema?.description || "";
-
+      const t = form?.title || window.__FORM?.title || "Anket";
+      const d = form?.description || window.__FORM?.description || form?.schema?.description || "";
       const titleEl = $("#title");
       const descEl  = $("#desc");
       if (titleEl) titleEl.textContent = t;
@@ -94,7 +91,7 @@ const formEl = $("#form"); // Yoksa da script çalışmaya devam edecek
   // ---------- Soruları bas ----------
   function renderQuestions(questions = []) {
     const qWrap = $("#qwrap") || formEl;
-    qWrap.innerHTML = ""; // temizle
+    qWrap.innerHTML = "";
 
     questions.forEach((q, idx) => {
       const type  = (q.type || "").toLowerCase(); // radio | checkbox | select | text
@@ -148,7 +145,7 @@ const formEl = $("#form"); // Yoksa da script çalışmaya devam edecek
       }
 
       const actions = $("#formActions") || null;
-      formEl.insertBefore(field, actions);
+      formEl && formEl.insertBefore(field, actions);
     });
   }
 
@@ -159,11 +156,10 @@ const formEl = $("#form"); // Yoksa da script çalışmaya devam edecek
     if (titleEl && !titleEl.textContent) titleEl.textContent = "Yükleniyor…";
     if (descEl) descEl.textContent = "";
 
-    const r = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`, { headers: { accept: "application/json" }});
-    if (!r.ok) {
-      const t = await r.text().catch(()=> "");
-      throw new Error(t || "Form bulunamadı.");
-    }
+    const r = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`, {
+      headers: { accept: "application/json" }
+    });
+    if (!r.ok) throw new Error((await r.text().catch(()=> "")) || "Form bulunamadı.");
     const j = await r.json();
     if (!j.ok || !j.form) throw new Error("Form bulunamadı.");
 
@@ -178,7 +174,6 @@ const formEl = $("#form"); // Yoksa da script çalışmaya devam edecek
 
     setHeaderFromForm(form);
     renderQuestions(form.schema?.questions || []);
-
     show($("#formActions"));
     return form;
   }
@@ -265,11 +260,7 @@ const formEl = $("#form"); // Yoksa da script çalışmaya devam edecek
       form_id: window.__FORM?.id || null,
       slug:    window.__FORM?.slug || null,
       answers: serializeForm(formEl),
-      meta: {
-        ua: navigator.userAgent,
-        href: location.href,
-        ts: new Date().toISOString()
-      }
+      meta: { ua: navigator.userAgent, href: location.href, ts: new Date().toISOString() }
     };
 
     try {
@@ -284,10 +275,7 @@ const formEl = $("#form"); // Yoksa da script çalışmaya devam edecek
         if (btn) { btn.disabled = false; btn.removeAttribute("aria-busy"); btn.textContent = "Gönder"; }
         return;
       }
-      if (!r.ok) {
-        const t = await r.text().catch(()=> "");
-        throw new Error(t || "Yanıt kaydedilemedi.");
-      }
+      if (!r.ok) throw new Error((await r.text().catch(()=> "")) || "Yanıt kaydedilemedi.");
 
       showSuccessView();
     } catch (err) {
@@ -296,18 +284,15 @@ const formEl = $("#form"); // Yoksa da script çalışmaya devam edecek
     }
   }
 
-if (formEl) formEl.addEventListener("submit", onSubmit);
+  if (formEl) formEl.addEventListener("submit", onSubmit);
 
-  // ---------- Açılış akışı ----------
+  // ---------- Açılış ----------
   (async () => {
     try {
       const slug = await resolveSlug();
-      if (slug) {
-        await loadForm(slug);
-        return; // chooser'a düşme
-      }
+      if (slug) { await loadForm(slug); return; }
 
-      // slug yoksa: basit chooser (admin token diyaloğu sende var, aynen kalsın)
+      // slug yoksa basit chooser (senin yönetici token akışın varsa aynen kalsın)
       if (!$("#chooser")) {
         const box = document.createElement("div");
         box.id = "chooser";
