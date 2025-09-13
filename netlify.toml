@@ -20,7 +20,12 @@
   status = 200
   force  = true
   conditions = { Host = ["form.mikroar.com"] }
-
+# form.mikroar.com → kısa linkler
+[[redirects]]
+  from = "/f/*"
+  to   = "/form.html"
+  status = 200
+  conditions = { Host = ["form.mikroar.com"] }
 # Varsayılan: her şey form.html (GENEL kural)
 [[redirects]]
   from = "/*"
