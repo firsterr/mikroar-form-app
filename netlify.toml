@@ -1,70 +1,35 @@
-# ---------- Build ----------
 [build]
-  publish  = "mikroar-form-app/public"
-  command  = ""
+  publish = "mikroar-form-app/public"
+  command = ""
 
 [functions]
   directory = "mikroar-form-app/netlify/functions"
 
-# ---------- API (iki host için de) ----------
+# --- API → Netlify Functions
 [[redirects]]
   from = "/api/*"
   to   = "/.netlify/functions/:splat"
   status = 200
+  force  = true
+  conditions = { Host = ["form.mikroar.com", "anket.mikroar.com"] }
 
-# ---------- Kısa URL: /f/101010 → form.html (URL değişmeden, 200 rewrite) ----------
+# --- Kısa URL → aynı HTML (form.html)
 [[redirects]]
   from = "/f/*"
   to   = "/form.html"
   status = 200
-  force  = true
-
-# ---------- form.mikroar.com genel ----------
-[[redirects]]
-  from = "/"
-  to   = "/form.html"
-  status = 200
-
-[[redirects]]
-  from = "/*"
-  to   = "/form.html"
-  status = 200
-
-# ---------- anket.mikroar.com (admin) ----------
-[[redirects]]
-  from = "/"
-  to   = "/admin.html"
-  status = 200
-  conditions = { Host = ["anket.mikroar.com"] }
-
-[[redirects]]
-  from = "/*"
-  to   = "/admin.html"
-  status = 200
-  conditions = { Host = ["anket.mikroar.com"] }
-
-# ---------- Güvenlik / Cache ----------
-[[headers]]
-  for = "/*"
-  [headers.values]
-    X-Frame-Options = "DENY"
-    X-Content-Type-Options = "nosniff"
-    Referrer-Policy = "strict-origin-when-cross-origin"
-    Permissions-Policy = "geolocation=(), microphone=(), camera=()"
-
-[[headers]]
-  for = "/form.css"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
-
-[[headers]]
-  for = "/form.html"
-  [headers.values]
-    Cache-Control = "no-cache"
-    # form.mikroar.com → /f/* yolu form.html dosyasını SERVİS ETSİN (URL değişmeden)
-[[redirects]]
-  from = "/f/*"
-  to   = "/form.html"
-  status = 200
-  force  = true
   conditions = { Host = ["form.mikroar.com"] }
+
+# --- form.mikroar.com varsayılanı
+[[redirects]]
+  from = "/"
+  to   = "/form.html"
+  status = 200
+  conditions = { Host = ["form.mikroar.com"] }
+
+# --- anket.mikroar.com varsayılanı (yönetim)
+[[redirects]]
+  from = "/"
+  to   = "/admin.html"
+  status = 200
+  conditions = { Host = ["anket.mikroar.com"] }
