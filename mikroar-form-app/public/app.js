@@ -1,7 +1,6 @@
 (function () {
   "use strict";
 
-  // ---------- Helpers ----------
   const $  = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
   const show = (el) => el && (el.style.display = "");
@@ -11,43 +10,29 @@
     .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 
   const appEl  = $("#app") || document.body;
-  const formEl = $("#form"); // Liste sayfasında olmayabilir
+  const formEl = $("#form");
 
-  // ---------- q.options normalize ----------
   function normalizeFormOptions(form) {
     if (!form) return form;
-    const list =
-      form.questions ||
-      form.schema?.questions ||
-      form.schema?.fields || [];
-
+    const list = form.questions || form.schema?.questions || form.schema?.fields || [];
     list.forEach((q) => {
       const opt = q?.options;
-      if (Array.isArray(opt)) {
-        q.options = opt.map(v => String(v).trim()).filter(Boolean).join(", ");
-      } else if (opt && typeof opt === "object") {
-        q.options = Object.values(opt).map(v => String(v).trim()).filter(Boolean).join(", ");
-      } else if (typeof opt === "string") {
-        q.options = opt.split(",").map(s => s.trim()).filter(Boolean).join(", ");
-      } else {
-        q.options = "";
-      }
+      if (Array.isArray(opt)) q.options = opt.map(v=>String(v).trim()).filter(Boolean).join(", ");
+      else if (opt && typeof opt==="object") q.options = Object.values(opt).map(v=>String(v).trim()).filter(Boolean).join(", ");
+      else if (typeof opt==="string") q.options = opt.split(",").map(s=>s.trim()).filter(Boolean).join(", ");
+      else q.options = "";
     });
     return form;
   }
 
-  // ---------- Slug / shortlink çöz ----------
   async function resolveSlug() {
-    // (Opsiyonel) SSR/edge view bir slug enjekte ettiyse
     if (window.__PRESET_SLUG) return window.__PRESET_SLUG;
 
     const url = new URL(location.href);
 
-    // 1) ?slug=...
     const qsSlug = url.searchParams.get("slug");
     if (qsSlug) return qsSlug;
 
-    // 2) /f/:code  (kısa link)
     const m = location.pathname.match(/^\/f\/([^/?#]+)/);
     if (m) {
       const code = m[1];
@@ -60,7 +45,6 @@
       throw new Error("invalid-short-code");
     }
 
-    // 3) Eski stil ?k=...
     const k = url.searchParams.get("k");
     if (k) {
       const r = await fetch(`/.netlify/functions/go?code=${encodeURIComponent(k)}`);
@@ -72,11 +56,9 @@
       throw new Error("invalid-short-code");
     }
 
-    // 4) slug yok -> liste/chooser akışı
     return null;
   }
 
-  // ---------- Başlık & açıklama ----------
   function setHeaderFromForm(form) {
     try {
       const t = form?.title || window.__FORM?.title || "Anket";
@@ -88,13 +70,13 @@
     } catch {}
   }
 
-  // ---------- Soruları bas ----------
   function renderQuestions(questions = []) {
+    if (!formEl) return;
     const qWrap = $("#qwrap") || formEl;
     qWrap.innerHTML = "";
 
     questions.forEach((q, idx) => {
-      const type  = (q.type || "").toLowerCase(); // radio | checkbox | select | text
+      const type  = (q.type || "").toLowerCase();
       const name  = q.name || `q_${idx + 1}`;
       const label = q.label || name.toUpperCase();
       const req   = !!q.required;
@@ -114,7 +96,7 @@
         opts.forEach((opt,i) => {
           const id = `${name}_${i}`;
           const w = document.createElement("label");
-          w.style.display = "flex"; w.style.alignItems = "center"; w.style.gap="8px"; w.style.margin="6px 0";
+          w.style.display="flex"; w.style.alignItems="center"; w.style.gap="8px"; w.style.margin="6px 0";
           w.innerHTML = `<input type="radio" name="${esc(name)}" id="${esc(id)}" value="${esc(opt)}" ${req?'required':''} /> <span>${esc(opt)}</span>`;
           field.appendChild(w);
         });
@@ -122,8 +104,8 @@
         opts.forEach((opt,i) => {
           const id = `${name}_${i}`;
           const w = document.createElement("label");
-          w.style.display = "flex"; w.style.alignItems = "center"; w.style.gap="8px"; w.style.margin="6px 0";
-          w.innerHTML = `<input type="checkbox" name="${esc(name)}" id="${esc(id)}" value="${esc(opt)}" ${i===0 && req?'required':''} /> <span>${esc(opt)}</span>`;
+          w.style.display="flex"; w.style.alignItems="center"; w.style.gap="8px"; w.style.margin="6px 0";
+          w.innerHTML = `<input type="checkbox" name="${esc(name)}" id="${esc(id)}" value="${esc(opt)}" ${i===0&&req?'required':''} /> <span>${esc(opt)}</span>`;
           field.appendChild(w);
         });
       } else if (type === "select") {
@@ -145,56 +127,37 @@
       }
 
       const actions = $("#formActions") || null;
-      formEl && formEl.insertBefore(field, actions);
+      formEl.insertBefore(field, actions);
     });
   }
 
-  // ---------- Formu yükle ----------
   async function loadForm(slug) {
     const titleEl = $("#title");
     const descEl  = $("#desc");
     if (titleEl && !titleEl.textContent) titleEl.textContent = "Yükleniyor…";
     if (descEl) descEl.textContent = "";
 
-    const r = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`, {
-      headers: { accept: "application/json" }
-    });
+    const r = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`, { headers:{accept:"application/json"} });
     if (!r.ok) throw new Error((await r.text().catch(()=> "")) || "Form bulunamadı.");
     const j = await r.json();
     if (!j.ok || !j.form) throw new Error("Form bulunamadı.");
 
     const form = normalizeFormOptions(j.form);
-    window.__FORM = {
-      id:    form.id,
-      slug:  form.slug,
-      title: form.title,
-      description: form.description,
-      schema: form.schema
-    };
+    window.__FORM = { id:form.id, slug:form.slug, title:form.title, description:form.description, schema:form.schema };
 
     setHeaderFromForm(form);
     renderQuestions(form.schema?.questions || []);
     show($("#formActions"));
-    return form;
   }
 
-  // ---------- Serialize & validasyon ----------
   function serializeForm(form) {
-    const data = {};
-    const checks = {};
-    $$("input, select, textarea", form).forEach((el) => {
+    const data = {}, checks = {};
+    $$( "input, select, textarea", form).forEach((el) => {
       if (el.disabled || !el.name) return;
       const name = el.name;
       const type = (el.type || "").toLowerCase();
-      if (type === "checkbox") {
-        if (!checks[name]) checks[name] = [];
-        if (el.checked) checks[name].push(el.value);
-        return;
-      }
-      if (type === "radio") {
-        if (el.checked) data[name] = el.value;
-        return;
-      }
+      if (type === "checkbox") { (checks[name] ||= []); if (el.checked) checks[name].push(el.value); return; }
+      if (type === "radio")    { if (el.checked) data[name] = el.value; return; }
       data[name] = el.value;
     });
     Object.assign(data, checks);
@@ -220,13 +183,8 @@
 
   function showError(msg) {
     const el = $("#alertBottom");
-    if (el) {
-      el.textContent = msg;
-      show(el);
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-    } else {
-      alert(msg);
-    }
+    if (el) { el.textContent = msg; show(el); el.scrollIntoView({ behavior:"smooth", block:"center" }); }
+    else alert(msg);
   }
 
   function showSuccessView() {
@@ -241,17 +199,11 @@
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  // ---------- Submit ----------
   async function onSubmit(e) {
     e.preventDefault();
     e.stopPropagation();
-
     const missing = validateRequired(formEl);
-    if (missing.length > 0) {
-      try { missing[0].focus({ preventScroll: false }); } catch {}
-      showError("Lütfen zorunlu alanları doldurun.");
-      return;
-    }
+    if (missing.length) { try { missing[0].focus(); } catch {} showError("Lütfen zorunlu alanları doldurun."); return; }
 
     const btn = $("#btnSend");
     if (btn) { btn.disabled = true; btn.setAttribute("aria-busy","true"); btn.textContent = "Gönderiliyor…"; }
@@ -260,39 +212,27 @@
       form_id: window.__FORM?.id || null,
       slug:    window.__FORM?.slug || null,
       answers: serializeForm(formEl),
-      meta: { ua: navigator.userAgent, href: location.href, ts: new Date().toISOString() }
+      meta: { ua:navigator.userAgent, href:location.href, ts:new Date().toISOString() }
     };
 
     try {
-      const r = await fetch("/api/responses", {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      if (r.status === 409) {
-        showError("Bu anketi daha önce doldurmuşsunuz.");
-        if (btn) { btn.disabled = false; btn.removeAttribute("aria-busy"); btn.textContent = "Gönder"; }
-        return;
-      }
+      const r = await fetch("/api/responses", { method:"POST", headers:{ "content-type":"application/json", accept:"application/json" }, body: JSON.stringify(payload) });
+      if (r.status === 409) { showError("Bu anketi daha önce doldurmuşsunuz."); if (btn) { btn.disabled=false; btn.removeAttribute("aria-busy"); btn.textContent="Gönder"; } return; }
       if (!r.ok) throw new Error((await r.text().catch(()=> "")) || "Yanıt kaydedilemedi.");
-
       showSuccessView();
     } catch (err) {
       showError(err?.message || "Yanıt kaydedilemedi.");
-      if (btn) { btn.disabled = false; btn.removeAttribute("aria-busy"); btn.textContent = "Gönder"; }
+      if (btn) { btn.disabled=false; btn.removeAttribute("aria-busy"); btn.textContent="Gönder"; }
     }
   }
 
   if (formEl) formEl.addEventListener("submit", onSubmit);
 
-  // ---------- Açılış ----------
   (async () => {
     try {
       const slug = await resolveSlug();
       if (slug) { await loadForm(slug); return; }
 
-      // slug yoksa basit chooser (senin yönetici token akışın varsa aynen kalsın)
       if (!$("#chooser")) {
         const box = document.createElement("div");
         box.id = "chooser";
@@ -307,15 +247,12 @@
         appEl.prepend(box);
 
         const sel = $("#formSelect");
-        const res = await fetch("/api/forms?list=1", { headers: { accept:"application/json"}});
+        const res = await fetch("/api/forms?list=1", { headers:{accept:"application/json"}});
         const js  = res.ok ? await res.json() : { ok:false };
         const items = (js.ok && js.forms) ? js.forms : [];
         sel.innerHTML = `<option value="">Seçiniz</option>` +
           items.map(f => `<option value="${esc(f.slug)}">${esc(f.title)} — ${esc(f.slug)}</option>`).join("");
-        $("#goBtn").onclick = () => {
-          const v = sel.value;
-          if (v) loadForm(v);
-        };
+        $("#goBtn").onclick = () => { const v = sel.value; if (v) loadForm(v); };
       }
     } catch (err) {
       showError(err?.message || "Bir hata oluştu.");
