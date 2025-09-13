@@ -1,22 +1,9 @@
 [build]
-  publish = "mikroar-form-app/public"
+  publish   = "mikroar-form-app/public"
+  functions = "mikroar-form-app/netlify/functions"
 
-[functions]
-  directory = "mikroar-form-app/netlify/functions"
-
-############################
-# form.mikroar.com
-############################
-
-# API -> Netlify Functions
-[[redirects]]
-  from = "/api/*"
-  to   = "/.netlify/functions/:splat"
-  status = 200
-  conditions = { Host = ["form.mikroar.com"] }
-
-# Kısa link: /f/:code  (URL aynı kalsın, form.html içerik dönsün)
-# Bu kural mutlaka catch-all’dan ÖNCE olmalı.
+# ---------- form.mikroar.com ----------
+# Kısa link: /f/:code -> form.html  (genel kuraldan önce)
 [[redirects]]
   from = "/f/*"
   to   = "/form.html"
@@ -24,27 +11,61 @@
   force  = true
   conditions = { Host = ["form.mikroar.com"] }
 
-# Catch-all: her şey form.html
+# API -> Functions
+[[redirects]]
+  from = "/api/*"
+  to   = "/.netlify/functions/:splat"
+  status = 200
+  conditions = { Host = ["form.mikroar.com"] }
+
+# SPA catch-all (form akışı)
 [[redirects]]
   from = "/*"
   to   = "/form.html"
   status = 200
   conditions = { Host = ["form.mikroar.com"] }
 
-############################
-# anket.mikroar.com
-############################
-
-# API -> Netlify Functions
+# ---------- anket.mikroar.com ----------
+# API -> Functions (admin işlemleri burada)
 [[redirects]]
   from = "/api/*"
   to   = "/.netlify/functions/:splat"
   status = 200
   conditions = { Host = ["anket.mikroar.com"] }
 
-# Tüm yollar admin arayüzüne
+# Admin UI catch-all (AMA KİLİTLEYECEĞİZ)
 [[redirects]]
   from = "/*"
   to   = "/admin.html"
   status = 200
   conditions = { Host = ["anket.mikroar.com"] }
+
+# ---------- HTTP Headers ----------
+# HTML: kısa cache
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=60, must-revalidate"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Permissions-Policy = "geolocation=(), microphone=(), camera=()"
+    Content-Security-Policy = "default-src 'self'; img-src 'self' data: https:; font-src 'self' https: data:; connect-src 'self' https://*.supabase.co https://*.supabase.in; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; base-uri 'self'; frame-ancestors 'none'"
+
+# Statik varlıklar: uzun ömür
+[[headers]]
+  for = "/*.{js,css,woff,woff2,png,jpg,jpeg,gif,svg,webp,avif}"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Health endpoint (cron ping)
+[[redirects]]
+  from = "/health"
+  to = "/health.txt"
+  status = 200
+
+# ---------- Edge Functions mapping ----------
+# /form.html isteklerinde k → slug çöz ve kanonik URL'ye yönlendir
+[[edge_functions]]
+  function = "form-ssr"
+  path = "/form.html"
