@@ -61,3 +61,10 @@
   for = "/form.html"
   [headers.values]
     Cache-Control = "no-cache"
+    # form.mikroar.com → /f/* yolu form.html dosyasını SERVİS ETSİN (URL değişmeden)
+[[redirects]]
+  from = "/f/*"
+  to   = "/form.html"
+  status = 200
+  force  = true
+  conditions = { Host = ["form.mikroar.com"] }
