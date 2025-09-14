@@ -9,15 +9,17 @@
     .wrap{max-width:720px;margin:0 auto;padding:40px}
     .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
     .muted{color:#6b7280;font-size:12px;line-height:1.5;margin-top:12px}
-    .btn{display:inline-block;margin-top:12px;padding:10px 16px;border-radius:8px;border:1px solid #ddd;background:#111;color:#fff;text-decoration:none}
+    .badge{display:inline-block;margin-top:8px;padding:4px 8px;border-radius:999px;font-size:12px;border:1px solid #e5e7eb}
+    .ok{background:#ecfdf5;border-color:#a7f3d0}
+    .dup{background:#fff7ed;border-color:#fed7aa}
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
-      <h1>Teşekkürler!</h1>
-      <p>Yanıtınız kaydedildi.</p>
-      <a id="back" class="btn" href="/">Formu tekrar aç</a>
+      <h1 id="title">Teşekkürler!</h1>
+      <p id="msg">Yanıtınız kaydedildi.</p>
+      <div id="badge" class="badge ok">Kayıt başarılı</div>
       <div class="muted">
         Bu form mikroar.com alanında oluşturuldu.<br>
         iletisim@mikroar.com<br>
@@ -28,8 +30,18 @@
   <script>
     (function(){
       const u = new URL(location.href);
-      const slug = u.searchParams.get("slug");
-      if (slug) document.getElementById("back").href = `/form.html?slug=${encodeURIComponent(slug)}`;
+      const reason = u.searchParams.get("reason");
+      const status = Number(u.searchParams.get("status")||200);
+      const title = document.getElementById("title");
+      const msg   = document.getElementById("msg");
+      const badge = document.getElementById("badge");
+
+      if (status === 409 || reason === "duplicate") {
+        title.textContent = "Daha önce yanıt vermişsiniz";
+        msg.textContent   = "Bu formu aynı bağlantıdan daha önce göndermiş olduğunuz için yeni kayıt alınmadı (IP kontrolü).";
+        badge.textContent = "Tekrarlı gönderim";
+        badge.className = "badge dup";
+      }
     })();
   </script>
 </body>
