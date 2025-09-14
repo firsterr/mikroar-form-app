@@ -1,15 +1,32 @@
 <!doctype html>
-<meta charset="utf-8">
-<title>Yönlendiriliyor…</title>
-<script>
-  (function () {
-    var h = location.hostname;
-    // anket.mikroar.com → admin
-    if (/^anket\.mikroar\.com$/i.test(h)) {
-      location.replace("/admin.html");
-      return;
-    }
-    // form.mikroar.com (veya diğerleri) → form
-    location.replace("/form.html");
-  })();
-</script>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MikroAR — Form Listesi</title>
+  <style>
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f8fafc}
+    .wrap{max-width:860px;margin:0 auto;padding:24px}
+    input,button{padding:10px;border:1px solid #e5e7eb;border-radius:8px}
+    .row{display:flex;gap:8px;margin-bottom:12px}
+    .list{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:8px}
+    .item{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f1f5f9;padding:10px}
+    .item:last-child{border-bottom:none}
+    .muted{color:#6b7280}
+    .btn{background:#111;color:#fff;cursor:pointer}
+    .link{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Form Listesi (Anahtarlı)</h1>
+    <div class="row">
+      <input id="token" type="password" placeholder="ADMIN_TOKEN" style="flex:1" />
+      <button id="load" class="btn">Listeyi Yükle</button>
+    </div>
+    <div id="err" class="muted" style="display:none"></div>
+    <div id="list" class="list"></div>
+  </div>
+  <script src="/index.js" defer></script>
+</body>
+</html>
