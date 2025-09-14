@@ -16,7 +16,7 @@ export default async (request, context) => {
   let meta = {
     title: "Mikroar Anket",
     description: "Ankete katılın.",
-    image: origin + "/og/default.jpg", // public/og/default.jpg dosyasını koy
+    image: origin + "https://www.emturkey.com.tr/wp-content/uploads/2022/03/em-nedir-resim.jpg", // public/og/default.jpg dosyasını koy
     url: origin + url.pathname
   };
 
