@@ -67,7 +67,7 @@
       .btn { padding:10px 16px; border-radius:10px; border:1px solid #111; background:#111; color:#fff; }
       .btn.loading { opacity:.8; pointer-events:none }
       .toast { position:sticky; top:0; background:#fff7f7; border:1px solid #ffd3d3; color:#b00020; padding:10px 12px; border-radius:10px; margin-bottom:10px; display:none }
-      .q { padding:12px; border-radius:12px; transition: background 200ms, box-shadow 200ms; scroll-margin-top: 100px; }
+      .q { padding:12px; border-radius:12px; transition: background 200ms, box-shadow 200ms; scroll-margin-top: 120px; }
       .q.focus { background:#f9fafb; box-shadow: inset 0 0 0 2px #e5e7eb; }
       .q.checked { background:#fffef2; box-shadow: inset 0 0 0 2px #fde68a; }
       label { display:block; margin:6px 0; cursor:pointer; }
@@ -86,6 +86,7 @@
       const name = attr(id);
       const reqAttr = required ? "required" : "";
 
+      // tabindex=-1 → mobilde programatik odak
       h.push(`<div class="q" tabindex="-1" data-index="${i}" data-required="${required ? "1" : ""}" data-name="${name}">
                 <div class="field"><div><strong>${esc(label)}</strong></div>`);
 
@@ -156,10 +157,23 @@
   function onSubmit(formSlug) {
     return async (e) => {
       e.preventDefault();
+      const formEl = e.currentTarget;
       const btn = document.getElementById("submitBtn");
       setLoading(btn, true);
 
-      // Zorunlu kontrol + toast + kesin odak
+      // 1) Tarayıcının yerleşik geçerlilik kontrolü (mobilde en güvenilir)
+      if (!formEl.checkValidity()) {
+        formEl.reportValidity(); // iOS/Android: ilk geçersiz inputa doğal odak
+        const invalidEl = formEl.querySelector(":invalid");
+        const block = invalidEl ? invalidEl.closest(".q") : findFirstInvalid();
+        toast("Lütfen zorunlu soruları doldurun.");
+        if (block) smoothFocus(block, true);
+        setLoading(btn, false);
+        try { if (navigator.vibrate) navigator.vibrate(40); } catch {}
+        return;
+      }
+
+      // 2) Koruyucu — özel doğrulama (grup kontroller)
       const invalid = findFirstInvalid();
       if (invalid) {
         toast("Lütfen zorunlu soruları doldurun.");
@@ -170,7 +184,8 @@
         return;
       }
 
-      const fd = new FormData(e.currentTarget);
+      // 3) Gönderim
+      const fd = new FormData(formEl);
       const answers = {};
       for (const [k, v] of fd.entries()) {
         if (answers[k] !== undefined) {
@@ -235,18 +250,37 @@
     return null;
   }
 
+  // 🔒 Mobil-güvenilir odak + kaydırma (ilk soru için scrollIntoView)
   function smoothFocus(block, focusInput){
-    const y = Math.max(0, block.getBoundingClientRect().top + window.scrollY - 100);
-    try { window.scrollTo({ top: y, behavior: "smooth" }); } catch { window.scrollTo(0, y); }
+    if (!block) return;
+    // önce mevcut odağı bırak (iOS sanal klavye davranışı)
+    try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch {}
+
+    const idx = parseInt(block.dataset.index || "0", 10) || 0;
+    try {
+      if (idx === 0) {
+        // ilk soru: en stabil yöntem
+        block.scrollIntoView({ behavior:"smooth", block:"start" });
+      } else {
+        const y = Math.max(0, block.getBoundingClientRect().top + window.scrollY - 120);
+        window.scrollTo({ top: y, behavior: "smooth" });
+      }
+    } catch {
+      // fallback
+      const y = Math.max(0, block.offsetTop - 120);
+      window.scrollTo(0, y);
+    }
+
+    // odak görselini ikinci fazda ver
     requestAnimationFrame(() => {
       setTimeout(() => {
-        block.focus({ preventScroll: true });
+        try { block.focus({ preventScroll:true }); } catch {}
         const el = block.querySelector(".ctl");
-        if (focusInput && el && typeof el.focus === "function") el.focus({ preventScroll: true });
+        if (focusInput && el && typeof el.focus === "function") { try { el.focus({ preventScroll:true }); } catch {} }
         const blocks = Array.from(app.querySelectorAll(".q"));
         blocks.forEach(x=>x.classList.remove("focus"));
         block.classList.add("focus");
-      }, 80);
+      }, 90);
     });
   }
 
