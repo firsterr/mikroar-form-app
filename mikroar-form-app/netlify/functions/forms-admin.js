@@ -1,79 +1,69 @@
-// Netlify Function — admin upsert — return shape: { ok: true, schema }
-const ALLOWED_TYPES = ['text', 'email', 'textarea', 'radio', 'checkbox', 'select'];
-const norm = (v) => (v ?? '').toString().trim();
-
-function normalizeQuestion(q, idx) {
-  const t = norm(q.type).toLowerCase();
-  const type = ALLOWED_TYPES.includes(t) ? t : 'text';
-  let name = norm(q.name).toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
-  if (!name) name = `q${idx + 1}`;
-  const out = { type, name, label: norm(q.label) || `Soru ${idx + 1}`, required: !!q.required };
-  if (['radio', 'checkbox', 'select'].includes(type)) {
-    let opts = [];
-    if (Array.isArray(q.options)) opts = q.options.map(norm).filter(Boolean);
-    else if (q.options != null) opts = norm(q.options).split(',').map(s => s.trim()).filter(Boolean);
-    out.options = Array.from(new Set(opts));
-  }
-  return out;
-}
+// /.netlify/functions/forms-admin
+const { createClient } = require("@supabase/supabase-js");
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, X-Admin-Token"
+};
 
 exports.handler = async (event) => {
-  if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
+  if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers: CORS, body: "" };
 
-  const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const KEY =
-    process.env.SUPABASE_SERVICE_ROLE ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.SUPABASE_ANON_KEY;
+  try {
+    const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "";
+    const hdr = event.headers || {};
+    const token = hdr["x-admin-token"] || hdr["X-Admin-Token"] || (event.queryStringParameters?.token || "");
+    if (!ADMIN_TOKEN || token !== ADMIN_TOKEN) {
+      return { statusCode: 401, headers: CORS, body: JSON.stringify({ error: "unauthorized" }) };
+    }
 
-  const token = event.headers['x-admin-token'] || event.headers['X-Admin-Token'];
-  if (!token || (ADMIN_TOKEN && token !== ADMIN_TOKEN)) {
-    return { statusCode: 401, body: JSON.stringify({ ok: false, error: 'unauthorized' }) };
+    const url = process.env.SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_ANON_KEY;
+    const sb  = createClient(url, key, { auth: { persistSession: false } });
+
+    if (event.httpMethod === "GET") {
+      const slug = event.queryStringParameters?.slug || "";
+      if (!slug) return resp(400, { error:"slug-required" });
+      const { data, error } = await sb.from("forms").select("*").eq("slug", slug).maybeSingle();
+      if (error) return resp(500, { error:error.message });
+      return resp(200, { form: data });
+    }
+
+    if (event.httpMethod !== "POST") {
+      return resp(405, { error:"method-not-allowed" }, { Allow: "GET, POST, OPTIONS" });
+    }
+
+    let body = {};
+    try { body = JSON.parse(event.body || "{}"); } catch { return resp(400, { error:"invalid-json" }); }
+
+    const payload = {
+      slug:  (body.slug || "").trim(),
+      title: (body.title || "").trim(),
+      active: !!body.active,
+      description: body.description ?? null,
+      schema: body.schema || { questions: [] }
+    };
+    if (!payload.slug)  return resp(400, { error:"slug-required" });
+    if (!payload.title) return resp(400, { error:"title-required" });
+
+    // upsert
+    const { data, error } = await sb
+      .from("forms")
+      .upsert(payload, { onConflict: "slug" })
+      .select("*")
+      .maybeSingle();
+    if (error) return resp(500, { error: error.message });
+
+    return resp(200, { ok:true, form: data });
+  } catch (e) {
+    return resp(500, { error: String(e.message || e) });
   }
-  if (!SUPABASE_URL || !KEY) {
-    return { statusCode: 500, body: JSON.stringify({ ok: false, error: 'supabase-env-missing' }) };
-  }
-
-  let body = {};
-  try { body = JSON.parse(event.body || '{}'); }
-  catch { return { statusCode: 400, body: JSON.stringify({ ok:false, error:'invalid-json' }) }; }
-
-  const slug = norm(body.slug);
-  if (!slug) return { statusCode: 400, body: JSON.stringify({ ok:false, error:'slug-required' }) };
-
-  const rawQs =
-    (body.schema && Array.isArray(body.schema.questions)) ? body.schema.questions :
-    (body.schema && Array.isArray(body.schema.fields)) ? body.schema.fields : [];
-
-  const questions = rawQs.map((q, i) => normalizeQuestion(q, i));
-  const schema = {
-    title: norm(body.title),
-    description: norm(body.description),     // forms tablonuzda “description” kolonu yok — schema içinde tutuyoruz
-    active: body.active === true || body.active === 'Aktif',
-    questions
-  };
-
-  // forms tablosunda yazılan alanlar
-  const row = { slug, title: schema.title || slug, active: !!schema.active, schema };
-
-  const resp = await fetch(`${SUPABASE_URL}/rest/v1/forms?on_conflict=slug`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: KEY,
-      Authorization: `Bearer ${KEY}`,
-      Prefer: 'resolution=merge-duplicates,return=representation'
-    },
-    body: JSON.stringify(row)
-  });
-
-  const data = await resp.json().catch(() => null);
-  if (!resp.ok) {
-    const msg = (data && (data.message || data.error)) || `supabase-${resp.status}`;
-    return { statusCode: 500, body: JSON.stringify({ ok:false, error: msg, detail: data }) };
-  }
-
-  const saved = Array.isArray(data) ? data[0] : data;
-  return { statusCode: 200, body: JSON.stringify({ ok:true, schema: saved.schema }) };
 };
+
+function resp(code, json, extra = {}) {
+  return {
+    statusCode: code,
+    headers: { ...CORS, ...extra, "content-type":"application/json; charset=utf-8" },
+    body: JSON.stringify(json)
+  };
+}
