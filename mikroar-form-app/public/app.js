@@ -5,6 +5,7 @@
 
   window.addEventListener("DOMContentLoaded", boot);
 
+  // /form.html parametresiz ise form yüklemeye çalışma (liste modu var)
   function hasIdent(){
     const u = new URL(location.href);
     if (u.searchParams.get("slug") || u.searchParams.get("k")) return true;
@@ -13,7 +14,6 @@
   }
 
   async function boot() {
-    // parametresiz /form.html: liste modu var → formu yükleme
     if (!hasIdent()) {
       skeleton.style.display = "none";
       errorBox.style.display = "none";
@@ -63,6 +63,7 @@
     const q = Array.isArray(s.questions) ? s.questions : [];
 
     const h = [];
+    // Stil — ripple + sticky submit bar + kart davranışları
     h.push(`<style>
       .btn { padding:10px 16px; border-radius:10px; border:1px solid #111; background:#111; color:#fff; }
       .btn.loading { opacity:.8; pointer-events:none }
@@ -71,6 +72,22 @@
       .q.focus { background:#f9fafb; box-shadow: inset 0 0 0 2px #e5e7eb; }
       .q.checked { background:#fffef2; box-shadow: inset 0 0 0 2px #fde68a; }
       label { display:block; margin:6px 0; cursor:pointer; }
+
+      /* Ripple */
+      .ripple { position: relative; overflow: hidden; }
+      .ripple span.rip { position:absolute; border-radius:50%; transform:scale(0);
+        opacity:.35; background:#fff; pointer-events:none; animation:rip .6s ease-out; }
+      @keyframes rip { to { transform:scale(12); opacity:0; } }
+
+      /* Sticky submit bar */
+      .submit-bar{
+        position:fixed; left:0; right:0; bottom:0;
+        padding:10px max(16px, env(safe-area-inset-left)) calc(10px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-right));
+        background:linear-gradient(to top, rgba(250,250,250,.98), rgba(250,250,250,.88));
+        border-top:1px solid #e5e7eb; backdrop-filter:saturate(1.2) blur(6px);
+        display:flex; justify-content:center; z-index:50;
+      }
+      body { padding-bottom: 84px; } /* altta buton için yer */
     </style>`);
 
     h.push(`<div id="toast" class="toast"></div>`);
@@ -86,7 +103,7 @@
       const name = attr(id);
       const reqAttr = required ? "required" : "";
 
-      // tabindex=-1 → mobilde programatik odak
+      // tabindex=-1 → mobilde programatik odaklanabilir
       h.push(`<div class="q" tabindex="-1" data-index="${i}" data-required="${required ? "1" : ""}" data-name="${name}">
                 <div class="field"><div><strong>${esc(label)}</strong></div>`);
 
@@ -121,7 +138,14 @@
       h.push(`</div></div>`);
     }
 
-    h.push(`<div class="field"><button id="submitBtn" class="btn" type="submit">Gönder</button></div>`);
+    h.push(`</form>`); // form kapanış
+
+    // Sticky bar: form dışı buton (form="f" ile o formu gönderir)
+    h.push(`<div class="submit-bar">
+      <button id="submitBtn" class="btn ripple" type="submit" form="f">Gönder</button>
+    </div>`);
+
+    // Dipnot
     h.push(`
       <div style="margin-top:12px; color:#6b7280; font-size:12px; line-height:1.4">
         Bu form mikroar.com alanında oluşturuldu.<br>
@@ -129,7 +153,7 @@
         Mikroar Formlar
       </div>
     `);
-    h.push(`</form>`);
+
     app.innerHTML = h.join("");
 
     // “Seçince aşağı kay” + hafif vurgu
@@ -151,7 +175,11 @@
       });
     });
 
+    // Submit akışı
     document.getElementById("f").addEventListener("submit", onSubmit(form.slug));
+
+    // Ripple bağla
+    attachRipple(document.getElementById("submitBtn"));
   }
 
   function onSubmit(formSlug) {
@@ -161,9 +189,9 @@
       const btn = document.getElementById("submitBtn");
       setLoading(btn, true);
 
-      // 1) Tarayıcının yerleşik geçerlilik kontrolü (mobilde en güvenilir)
+      // 1) Tarayıcı geçerlilik kontrolü (ilk geçersiz inputa doğal odak)
       if (!formEl.checkValidity()) {
-        formEl.reportValidity(); // iOS/Android: ilk geçersiz inputa doğal odak
+        formEl.reportValidity();
         const invalidEl = formEl.querySelector(":invalid");
         const block = invalidEl ? invalidEl.closest(".q") : findFirstInvalid();
         toast("Lütfen zorunlu soruları doldurun.");
@@ -173,7 +201,7 @@
         return;
       }
 
-      // 2) Koruyucu — özel doğrulama (grup kontroller)
+      // 2) Ek koruma: radyo/checkbox grup kontrolü
       const invalid = findFirstInvalid();
       if (invalid) {
         toast("Lütfen zorunlu soruları doldurun.");
@@ -203,7 +231,7 @@
         body: JSON.stringify({ form_slug: formSlug, answers, meta })
       }).catch(()=>null);
 
-      // Teşekkür: slug gizli (sessionStorage)
+      // Teşekkür (slug gizli)
       const reason = res && res.status === 409 ? "duplicate" : (res && res.ok ? "ok" : "error");
       sessionStorage.setItem("mikroar_thanks", JSON.stringify({ reason }));
       if (res && (res.ok || res.status === 409)) { location.href = "/thanks.html"; return; }
@@ -213,7 +241,7 @@
     };
   }
 
-  // --------- helpers ----------
+  // ----- yardımcılar -----
   function toast(msg){
     const t = document.getElementById("toast");
     t.textContent = msg; t.style.display = "block";
@@ -250,28 +278,24 @@
     return null;
   }
 
-  // 🔒 Mobil-güvenilir odak + kaydırma (ilk soru için scrollIntoView)
+  // Mobil-güvenilir odak + kaydırma (ilk soruya özel yöntem)
   function smoothFocus(block, focusInput){
     if (!block) return;
-    // önce mevcut odağı bırak (iOS sanal klavye davranışı)
     try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch {}
 
     const idx = parseInt(block.dataset.index || "0", 10) || 0;
     try {
       if (idx === 0) {
-        // ilk soru: en stabil yöntem
         block.scrollIntoView({ behavior:"smooth", block:"start" });
       } else {
         const y = Math.max(0, block.getBoundingClientRect().top + window.scrollY - 120);
         window.scrollTo({ top: y, behavior: "smooth" });
       }
     } catch {
-      // fallback
       const y = Math.max(0, block.offsetTop - 120);
       window.scrollTo(0, y);
     }
 
-    // odak görselini ikinci fazda ver
     requestAnimationFrame(() => {
       setTimeout(() => {
         try { block.focus({ preventScroll:true }); } catch {}
@@ -289,4 +313,21 @@
   function esc(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
   function attr(s){ return String(s).replace(/"/g, "&quot;"); }
   function cssEscape(s){ return s.replace(/["\\]/g, "\\$&"); }
+
+  // Ripple efektini bağla
+  function attachRipple(btn){
+    if (!btn) return;
+    btn.addEventListener("pointerdown", (e)=>{
+      const r = btn.getBoundingClientRect();
+      const d = Math.max(r.width, r.height);
+      const x = e.clientX - r.left, y = e.clientY - r.top;
+      const s = document.createElement("span");
+      s.className = "rip";
+      s.style.width = s.style.height = d + "px";
+      s.style.left = (x - d/2) + "px";
+      s.style.top  = (y - d/2) + "px";
+      btn.appendChild(s);
+      s.addEventListener("animationend", ()=> s.remove());
+    });
+  }
 })();
