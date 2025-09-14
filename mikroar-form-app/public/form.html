@@ -58,7 +58,52 @@
   </div>
 
   <script src="/app.js" defer></script>
+<script>
+(function(){
+  function uuid() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = Math.random()*16|0, v = c=='x'?r:(r&0x3|0x8); return v.toString(16);
+    });
+  }
+  function getCookie(n){
+    const m = document.cookie.match(new RegExp('(^| )'+n+'=([^;]+)')); return m?decodeURIComponent(m[2]):undefined;
+  }
 
+  async function sendCAPI({ eventName='Lead' } = {}) {
+    const eventId = uuid();
+    // Tarayıcı pikseline aynı event_id ile gönder → dedup
+    try { if (typeof fbq === 'function') fbq('track', eventName, {}, { eventID: eventId }); } catch(e){}
+
+    // Sunucuya bildir
+    try {
+      await fetch('/.netlify/functions/fb-capi-lead', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({
+          event_id: eventId,
+          event_name: eventName,
+          event_source_url: window.location.href,
+          client_user_agent: navigator.userAgent,
+          fbp: getCookie('_fbp'),
+          fbc: getCookie('_fbc')
+        })
+      });
+    } catch(e){}
+  }
+
+  // Mevcut submit yakalama (SPA içinde #app altı)
+  document.addEventListener('submit', function(e){
+    const form = e.target;
+    if (form && form.closest('#app')) {
+      setTimeout(() => sendCAPI({ eventName:'Lead' }), 100);
+    }
+  }, true);
+
+  // Kayıt başarı sinyali aldıktan sonra CompleteRegistration da yollamak istersen:
+  // window.dispatchEvent(new CustomEvent('form:completed')); // app.js içinde tetikle
+  window.addEventListener('form:completed', () => sendCAPI({ eventName:'CompleteRegistration' }));
+})();
+</script>
   <!-- Pasif izleme: form submit ve başarılı kayıt için Lead/CompleteRegistration -->
   <script>
   (function(){
