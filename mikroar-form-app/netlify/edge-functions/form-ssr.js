@@ -1,33 +1,29 @@
-// Netlify Edge (Deno). /f/* ve /form.html isteklerinde <head>'e OG/Twitter meta ekler.
+// Netlify Edge (Deno) – /f/* ve /form.html sayfalarında OG/Twitter meta'ları tekilleştirir ve doğru görseli enjekte eder.
 export default async (request, context) => {
   const url = new URL(request.url);
   const origin = `${url.protocol}//${url.host}`;
 
-  // Kimlik çöz: /f/:code veya ?slug= / ?k=
+  // Kimlik çöz
   let slug = url.searchParams.get("slug") || null;
   let code = null;
   const m = url.pathname.match(/^\/f\/([^/?#]+)/);
   if (m && m[1]) code = m[1];
-  if (!slug && !code) {
-    // /form.html (liste modu) için de default meta enjekte edeceğiz
-  }
 
-  // Varsayılan meta (fallback)
- let meta = {
-  title: "Mikroar Anket",
-  description: "Ankete katılın.",
-  image: "https://www.emturkey.com.tr/wp-content/uploads/2022/03/em-nedir-resim.jpg", // ✅ harici URL, origin eklenmez
-  url: origin + url.pathname
-};
+  // Varsayılan meta
+  let meta = {
+    title: "Mikroar Anket",
+    description: "Ankete katılın.",
+    // Harici görsel: origin ekleme!
+    image: "https://www.emturkey.com.tr/wp-content/uploads/2022/03/em-nedir-resim.jpg",
+    url: origin + url.pathname
+  };
 
-  // Form başlığı/açıklamasıyla meta’yı zenginleştir
+  // Form başlığı/açıklaması varsa zenginleştir
   try {
-    const api = new URL(origin + "/api/forms");
-    if (slug) api.searchParams.set("slug", slug);
-    if (code) api.searchParams.set("k", code);
-
-    // slug/code varsa form çek; yoksa default meta kalır
     if (slug || code) {
+      const api = new URL(origin + "/api/forms");
+      if (slug) api.searchParams.set("slug", slug);
+      if (code) api.searchParams.set("k", code);
       const r = await fetch(api.toString());
       if (r.ok) {
         const data = await r.json();
@@ -38,35 +34,37 @@ export default async (request, context) => {
         }
       }
     }
-    meta.url = origin + url.pathname;
   } catch (_) {}
 
-  // Orijinal yanıtı al
+  // Orijinal HTML
   const resp = await context.next();
   const ct = (resp.headers.get("content-type") || "").toLowerCase();
   if (!ct.includes("text/html")) return resp;
 
-  // <head> içine meta'ları enjekte et
   const tags = `
     <meta property="og:title" content="${esc(meta.title)}" />
     <meta property="og:description" content="${esc(meta.description)}" />
     <meta property="og:image" content="${meta.image}" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
     <meta property="og:url" content="${meta.url}" />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${esc(meta.title)}" />
     <meta name="twitter:description" content="${esc(meta.description)}" />
     <meta name="twitter:image" content="${meta.image}" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
   `;
 
+  // Mevcut og:/twitter: meta'larını temizle, sonra kendi tag'larımızı ekle
   return new HTMLRewriter()
-    .on("head", { element(h) { h.append(tags, { html: true }); } })
+    .on('meta[property^="og:"]', { element(el){ el.remove(); } })
+    .on('meta[name^="twitter:"]', { element(el){ el.remove(); } })
+    .on("head", { element(h){ h.append(tags, { html: true }); } })
     .transform(resp);
 };
 
-function esc(s = "") { return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;"); }
-function absUrl(path, origin){ try { return new URL(path, origin).href; } catch { return origin + path; } }
+function esc(s=""){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;"); }
+function absUrl(p, origin){ try{ return new URL(p, origin).href; }catch{ return origin + p; } }
 
+// Edge eşleşmeleri
 export const config = { path: ["/f/*", "/form.html"] };
