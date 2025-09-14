@@ -12,6 +12,16 @@
     save:  document.getElementById("save")
   };
 
+  // "Yeni" butonu ekle
+  const newBtn = document.createElement("button");
+  newBtn.textContent = "Yeni";
+  newBtn.style.margin = "8px 0";
+  newBtn.addEventListener("click", () => {
+    els.slug.value = ""; els.title.value = "";
+    els.active.value = "true"; els.schema.value = JSON.stringify({ questions: [] }, null, 2);
+  });
+  document.querySelector(".col:nth-child(2)")?.prepend(newBtn);
+
   els.login.addEventListener("click", async () => {
     const ok = await refreshList(true);
     els.gate.style.display  = ok ? "none" : "block";
@@ -26,11 +36,10 @@
       schema: tryJson(els.schema.value) || { questions: [] }
     };
     if (!payload.slug || !payload.title) return alert("slug ve başlık zorunlu");
-
-    const token = els.token.value || "";
-    const res = await fetch(`/api/forms-admin?token=${encodeURIComponent(token)}`, {
+    const t = els.token.value || "";
+    const res = await fetch(`/api/forms-admin?token=${encodeURIComponent(t)}`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-admin-token": token },
+      headers: { "content-type": "application/json", "x-admin-token": t },
       body: JSON.stringify(payload)
     });
     const data = await res.json().catch(()=>({}));
@@ -40,15 +49,15 @@
   });
 
   async function refreshList(showErr) {
-    const token = els.token.value || "";
-    const res = await fetch(`/api/forms-list?token=${encodeURIComponent(token)}`, {
-      headers: { "x-admin-token": token }
+    const t = els.token.value || "";
+    const r = await fetch(`/api/forms-list?token=${encodeURIComponent(t)}`, {
+      headers: { "x-admin-token": t }
     });
-    if (!res.ok) {
-      if (showErr) alert("Admin yetkisi doğrulanamadı. (401) Netlify'da ADMIN_TOKEN ayarlı mı?");
+    if (!r.ok) {
+      if (showErr) alert("Admin yetkisi doğrulanamadı. (401)");
       return false;
     }
-    const data = await res.json();
+    const data = await r.json();
     renderList(data.items || []);
     return true;
   }
@@ -58,25 +67,31 @@
     for (const f of items) {
       const div = document.createElement("div");
       div.className = "item";
-      div.textContent = `${f.slug} — ${f.title} ${f.active ? "(aktif)" : "(pasif)"}`;
+      // Görüntüde UTF fix (DB’yi değiştirmez)
+      const title = fixUtf(f.title || "");
+      div.textContent = `${f.slug} — ${title} ${f.active ? "(aktif)" : "(pasif)"}`;
       div.addEventListener("click", () => loadForm(f.slug));
       els.list.appendChild(div);
     }
   }
 
   async function loadForm(slug) {
-    const token = els.token.value || "";
-    const res = await fetch(`/api/forms-admin?slug=${encodeURIComponent(slug)}&token=${encodeURIComponent(token)}`, {
-      headers: { "x-admin-token": token }
+    const t = els.token.value || "";
+    const r = await fetch(`/api/forms-admin?slug=${encodeURIComponent(slug)}&token=${encodeURIComponent(t)}`, {
+      headers: { "x-admin-token": t }
     });
-    const data = await res.json();
-    if (!res.ok) return alert("Hata: " + (data.error || res.status));
+    const data = await r.json();
+    if (!r.ok) return alert("Hata: " + (data.error || r.status));
 
     els.slug.value   = data.form.slug || "";
-    els.title.value  = data.form.title || "";
+    els.title.value  = fixUtf(data.form.title || "");
     els.active.value = data.form.active ? "true" : "false";
     els.schema.value = JSON.stringify(data.form.schema || { questions: [] }, null, 2);
   }
 
   function tryJson(s){ try{ return JSON.parse(s) } catch { return null } }
+  function fixUtf(str){
+    // moji-bozulma görüntü düzeltmesi (BalÄ±kesir → Balıkesir)
+    try { return decodeURIComponent(escape(str)); } catch { return str; }
+  }
 })();
