@@ -1,195 +1,79 @@
-// public/admin.js — FULL REPLACE (zorunlu token + dinamik Giriş/Çıkış + kilit)
-(function () {
-  "use strict";
-  const $  = (s,r=document)=>r.querySelector(s);
-  const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
-  const byIdOrName = id => document.getElementById(id) || document.querySelector(`[name="${id}"]`);
-
-  const TK = 'admintoken'; // sessionStorage — her yenilemede sıfırdan
-
-  // ----- Auth helpers
-  function hasToken(){ return !!sessionStorage.getItem(TK); }
-  function promptToken(){
-    const t = window.prompt('ADMIN_TOKEN (Netlify env):','');
-    if (t) sessionStorage.setItem(TK, t);
-    return !!t;
-  }
-  function clearToken(){ sessionStorage.removeItem(TK); }
-  function updateAuthUI(){
-    const btn = byIdOrName('btnAuth'); if (btn) btn.textContent = hasToken() ? 'Çıkış' : 'Giriş';
-    const lock = byIdOrName('lock'); if (lock) lock.style.display = hasToken() ? 'none' : 'flex';
-  }
-  function requireAuthInteractively(){
-    if (hasToken()) return true;
-    // isteğe bağlı prompt
-    if (promptToken()) { updateAuthUI(); return true; }
-    // iptal ettiyse kilitle
-    updateAuthUI();
-    return false;
-  }
-
-  // ----- UI refs
-  const el = {
-    slug:   ()=> byIdOrName("slug"),
-    title:  ()=> byIdOrName("title"),
-    desc:   ()=> byIdOrName("desc"),
-    status: ()=> byIdOrName("status"),
-    btnLoad:()=> byIdOrName("btnLoad"),
-    btnSave:()=> byIdOrName("btnSave"),
-    btnNew: ()=> byIdOrName("btnNew"),
-    btnAddQ:()=> byIdOrName("btnAddQ"),
-    toast:  ()=> byIdOrName("toast"),
-    btnAuth:()=> byIdOrName("btnAuth"),
-    btnUnlock:()=> byIdOrName("btnUnlock"),
-    box:    ()=> byIdOrName("questions"),
+(function(){
+  const els = {
+    gate:  document.getElementById("gate"),
+    panel: document.getElementById("panel"),
+    list:  document.getElementById("list"),
+    token: document.getElementById("token"),
+    login: document.getElementById("login"),
+    slug:  document.getElementById("slug"),
+    title: document.getElementById("title"),
+    active: document.getElementById("active"),
+    schema: document.getElementById("schema"),
+    save:  document.getElementById("save")
   };
 
-  // ----- Types & render
-  const TYPE_MAP = {
-    "tek seçim":"radio","radio":"radio","single":"radio","tek":"radio",
-    "çoklu seçim":"checkbox","checkbox":"checkbox","çoklu":"checkbox",
-    "açılır menü":"select","select":"select","dropdown":"select",
-    "metin":"text","text":"text","paragraf":"textarea","textarea":"textarea",
-    "e-posta":"email","email":"email","sayı":"number","number":"number"
-  };
-  const normType = t => TYPE_MAP[String(t||"").toLowerCase().trim()] || "text";
+  els.login.addEventListener("click", async () => {
+    const ok = await refreshList();
+    els.gate.style.display  = ok ? "none" : "block";
+    els.panel.style.display = ok ? "flex" : "none";
+  });
 
-  function toast(msg, err=false){
-    const t = el.toast(); if(!t) return alert(msg);
-    t.textContent = msg; t.style.display="block"; t.style.color = err ? "#b91c1c" : "#0f766e";
-    setTimeout(()=>{ t.style.display="none"; }, 2200);
-  }
-
-  function makeRow(q, i){
-    const row = document.createElement("div");
-    row.className = "qrow";
-    row.innerHTML = `
-      <div class="qgrid">
-        <select class="q-type">
-          <option value="radio"${q.type==="radio"?" selected":""}>Tek seçim</option>
-          <option value="checkbox"${q.type==="checkbox"?" selected":""}>Çoklu seçim</option>
-          <option value="select"${q.type==="select"?" selected":""}>Açılır menü</option>
-          <option value="text"${q.type==="text"?" selected":""}>Metin</option>
-          <option value="textarea"${q.type==="textarea"?" selected":""}>Paragraf</option>
-          <option value="email"${q.type==="email"?" selected":""}>E-posta</option>
-          <option value="number"${q.type==="number"?" selected":""}>Sayı</option>
-        </select>
-        <input class="q-name"  placeholder="alan adı" value="${q.name||`soru${i+1}`}" />
-        <input class="q-label" placeholder="Soru başlığı" value="${q.label||""}" />
-        <input class="q-opts"  placeholder="Seçenekler (virgülle)" value="${Array.isArray(q.options)? q.options.join(", "): ""}" />
-        <div class="reqbox"><input type="checkbox" class="q-req"${q.required?" checked":""}/> <span class="muted">Zorunlu</span></div>
-        <button class="q-del">Sil</button>
-      </div>`;
-    const typeSel = $(".q-type", row);
-    const optsInp = $(".q-opts", row);
-    const sync = ()=>{ const show = ["radio","checkbox","select"].includes(typeSel.value); optsInp.style.display = show?"block":"none"; if(!show) optsInp.value=""; };
-    typeSel.addEventListener("change", sync); sync();
-    $(".q-del", row).addEventListener("click", () => row.remove());
-    return row;
-  }
-  function renderQuestions(list){
-    const box = el.box(); if(!box) return;
-    box.innerHTML = ""; (list||[]).forEach((q,i)=> box.appendChild(makeRow(q,i)));
-  }
-  function collectQuestions(){
-    return $$("#questions .qrow").map((row,i)=>{
-      const type = $(".q-type",row).value;
-      const name = $(".q-name",row).value.trim() || `soru${i+1}`;
-      const label= $(".q-label",row).value.trim() || `Soru ${i+1}`;
-      const required = $(".q-req",row).checked;
-      let options = $(".q-opts",row).value;
-      if(["radio","checkbox","select"].includes(type)){
-        options = options.split(",").map(s=>s.trim()).filter(Boolean);
-      } else options = undefined;
-      return { type, name, label, required, options };
-    });
-  }
-
-  // ----- API
-  async function loadFormBySlug(slug){
-    if(!slug) throw new Error("Slug gerekli");
-    if(!hasToken()) throw new Error("Yetkisiz: Giriş yapın.");
-    const r = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`, { headers:{accept:"application/json"} });
-    const tx = await r.text();
-    let form=null; try{ const j=JSON.parse(tx||"{}"); form=j.form || j.data || (Array.isArray(j)?j[0]:null);}catch{}
-    if(!r.ok || !form) throw new Error(`Bulunamadı (HTTP ${r.status})`);
-    (el.slug()  ||{}).value = form.slug || "";
-    (el.title() ||{}).value = form.title || "";
-    (el.desc()  ||{}).value = (form.schema && form.schema.description) || "";
-    (el.status()||{}).value = form.active ? "Aktif" : "Pasif";
-    const raw = (form.schema && Array.isArray(form.schema.questions)) ? form.schema.questions : [];
-    const qs  = raw.map((qq,i)=>({
-      type: normType(qq.type),
-      name: qq.name || `soru${i+1}`,
-      label: qq.label || `Soru ${i+1}`,
-      required: !!qq.required,
-      options: Array.isArray(qq.options) ? qq.options
-            : qq.options!=null ? String(qq.options).split(",").map(s=>s.trim()).filter(Boolean) : []
-    }));
-    renderQuestions(qs);
-  }
-
-  async function saveForm(){
-    if(!hasToken()) throw new Error("Yetkisiz: Giriş yapın.");
+  els.save.addEventListener("click", async () => {
     const payload = {
-      slug  : (el.slug()?.value || "").trim(),
-      title : (el.title()?.value || "").trim(),
-      description: (el.desc()?.value || "").trim(),
-      active: (el.status()?.value || "Aktif")==="Aktif",
-      schema: { questions: collectQuestions() }
+      slug: (els.slug.value || "").trim(),
+      title: (els.title.value || "").trim(),
+      active: els.active.value === "true",
+      schema: tryJson(els.schema.value) || { questions: [] }
     };
-    if(!payload.slug) throw new Error("Slug gerekli");
-    const r = await fetch("/api/forms-admin",{
-      method:"POST",
-      headers:{ "content-type":"application/json", "x-admin-token": sessionStorage.getItem(TK), accept:"application/json" },
+    if (!payload.slug || !payload.title) return alert("slug ve başlık zorunlu");
+
+    const res = await fetch("/api/forms-admin", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-admin-token": els.token.value
+      },
       body: JSON.stringify(payload)
     });
-    const txt = await r.text();
-    if(!r.ok) throw new Error(txt || "Kaydedilemedi");
+    const data = await res.json().catch(()=>({}));
+    if (!res.ok) return alert("Hata: " + (data.error || res.status));
+    await refreshList();
+    alert("Kaydedildi.");
+  });
+
+  async function refreshList() {
+    const res = await fetch("/api/forms-list", {
+      headers: { "x-admin-token": els.token.value }
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    renderList(data.items || []);
     return true;
   }
 
-  // ----- Bindings
-  document.addEventListener("DOMContentLoaded", ()=>{
-    // İlk açılışta token iste — iptal edilirse ekran kilitli kalır
-    requireAuthInteractively();
+  function renderList(items) {
+    els.list.innerHTML = "";
+    for (const f of items) {
+      const div = document.createElement("div");
+      div.className = "item";
+      div.textContent = `${f.slug} — ${f.title} ${f.active ? "(aktif)" : "(pasif)"}`;
+      div.addEventListener("click", () => loadForm(f.slug));
+      els.list.appendChild(div);
+    }
+  }
 
-    el.btnUnlock()?.addEventListener("click", ()=>{
-      if (promptToken()) toast("Giriş yapıldı");
-      updateAuthUI();
+  async function loadForm(slug) {
+    const res = await fetch(`/api/forms-admin?slug=${encodeURIComponent(slug)}`, {
+      headers: { "x-admin-token": els.token.value }
     });
+    const data = await res.json();
+    if (!res.ok) return alert("Hata: " + (data.error || res.status));
 
-    el.btnAuth()?.addEventListener("click", ()=>{
-      if (hasToken()) { clearToken(); toast("Çıkış yapıldı"); }
-      else { if (promptToken()) toast("Giriş yapıldı"); }
-      updateAuthUI();
-    });
+    els.slug.value   = data.form.slug || "";
+    els.title.value  = data.form.title || "";
+    els.active.value = data.form.active ? "true" : "false";
+    els.schema.value = JSON.stringify(data.form.schema || { questions: [] }, null, 2);
+  }
 
-    el.btnLoad()?.addEventListener("click", async ()=>{
-      if(!hasToken()) { updateAuthUI(); return toast("Giriş gerekli", true); }
-      try{ await loadFormBySlug(el.slug()?.value.trim()); toast("Form yüklendi"); }
-      catch(e){ toast(e.message || "Bulunamadı", true); }
-    });
-
-    el.btnSave()?.addEventListener("click", async ()=>{
-      if(!hasToken()) { updateAuthUI(); return toast("Giriş gerekli", true); }
-      try{ await saveForm(); toast("Kaydedildi"); }
-      catch(e){ toast(e.message || "Kaydedilemedi", true); }
-    });
-
-    el.btnNew()?.addEventListener("click", ()=>{
-      if(!hasToken()) { updateAuthUI(); return toast("Giriş gerekli", true); }
-      (el.title()||{}).value=""; (el.desc()||{}).value=""; (el.status()||{}).value="Aktif";
-      renderQuestions([]);
-    });
-
-    el.btnAddQ()?.addEventListener("click", ()=>{
-      if(!hasToken()) { updateAuthUI(); return toast("Giriş gerekli", true); }
-      const cur = collectQuestions(); cur.push({type:"radio",name:"",label:"",required:false,options:[]});
-      renderQuestions(cur);
-    });
-
-    renderQuestions([]);
-    updateAuthUI();
-  });
+  function tryJson(s){ try{ return JSON.parse(s) } catch { return null } }
 })();
