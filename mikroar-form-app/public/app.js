@@ -22,6 +22,7 @@
       renderForm(form);
       skeleton.style.display="none"; app.classList.remove("hidden");
       focusFirstQuestion();
+      setupProgress();        // ⬅️ ilerleme çubuğunu başlat
     } catch {
       skeleton.style.display="none"; errorBox.textContent="Form bulunamadı veya bağlantı sorunu."; errorBox.style.display="block";
     }
@@ -52,7 +53,13 @@
       .btn.loading { opacity:.8; pointer-events:none }
       .btn.shake { animation:shake .4s }
       @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-6px)} 40%{transform:translateX(6px)} 60%{transform:translateX(-4px)} 80%{transform:translateX(4px)} }
-      .toast { position:sticky; top:0; background:#fff7f7; border:1px solid #ffd3d3; color:#b00020; padding:10px 12px; border-radius:10px; margin-bottom:10px; display:none }
+      .toast { position:sticky; top:0; background:#fff7f7; border:1px solid #ffd3d3; color:#b00020; padding:10px 12px; border-radius:10px; margin-bottom:10px; display:none; z-index:60 }
+
+      .progress-wrap{ position:sticky; top:0; z-index:40; background:#fff; padding:8px 0 6px; margin-bottom:8px }
+      .progress-meta{ display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#6b7280; margin-bottom:6px }
+      .progress{ height:6px; background:#e5e7eb; border-radius:999px; overflow:hidden }
+      #progressBar{ height:100%; width:0%; background:linear-gradient(90deg,#111,#555) }
+
       .q { padding:12px; border-radius:12px; transition:background .2s, box-shadow .2s; scroll-margin-top:120px; }
       .q.focus { background:#f9fafb; box-shadow: inset 0 0 0 2px #e5e7eb; }
       .q.checked { background:#fffef2; box-shadow: inset 0 0 0 2px #fde68a; }
@@ -74,11 +81,22 @@
       }
       .submit-meta{ color:#6b7280; font-size:12px; line-height:1.3; text-align:center }
       .submit-meta b{ font-weight:700 }
-      /* bar yüksekliği için gövde alt boşluğu */
       body { padding-bottom: 128px }
     </style>`);
 
     h.push(`<div id="toast" class="toast"></div>`);
+
+    /* İlerleme çubuğu + sayaç */
+    h.push(`
+      <div id="progressWrap" class="progress-wrap">
+        <div class="progress-meta">
+          <div><span id="qPos">1</span>/<span id="qTotal">0</span> soru</div>
+          <div><span id="qPct">0%</span> tamamlandı</div>
+        </div>
+        <div class="progress"><div id="progressBar"></div></div>
+      </div>
+    `);
+
     h.push(`<h1>${esc(form.title || "Anket")}</h1>`);
     if (form.description) h.push(`<p>${esc(form.description)}</p>`);
     h.push(`<form id="f" autocomplete="on">`);
@@ -125,17 +143,28 @@
     app.innerHTML=h.join("");
 
     // Etkileşimler
+    app.querySelectorAll(".q").forEach((b, idx) => {
+      b.addEventListener("click", () => setFocus(idx));
+      b.addEventListener("focusin", () => setFocus(idx));
+      b.addEventListener("focusout", () => b.classList.remove("focus"));
+    });
+
     app.querySelectorAll(".ctl").forEach(el=>{
       el.addEventListener("change",(e)=>{
         const b=e.target.closest(".q"); if(!b) return;
         b.classList.add("checked");
         const next=nextBlock(b); if(next) smoothFocus(next);
         const hint=b.querySelector(".hint"); if(hint) hint.style.display="none";
+        updateProgress(); // ⬅️ yanıt değiştikçe ilerleme güncelle
       });
+      el.addEventListener("input", updateProgress);
     });
 
     document.getElementById("f").addEventListener("submit", onSubmit(form.slug));
     attachRipple(document.getElementById("submitBtn"));
+
+    // Scroll ile de konum güncelle (hafif throttle)
+    window.addEventListener("scroll", throttle(updateProgress, 200), { passive:true });
   }
 
   function onSubmit(formSlug){
@@ -188,20 +217,63 @@
       const req = b.dataset.required==="1"; if (!req) continue;
       const name=b.dataset.name; if(!name) continue;
       const group=b.querySelectorAll(`[name="${cssEscape(name)}"]`); if(!group.length) continue;
-      let ok=false;
-      for (const el of group){
-        const tag=el.tagName.toLowerCase();
-        if (tag==="input"){
-          if (el.type==="radio") { if (el.checked){ ok=true; break; } }
-          else if (el.type==="checkbox"){ if (el.checked){ ok=true; } }
-          else { if (el.value && el.value.trim()!==""){ ok=true; } }
-        } else if (tag==="select" || tag==="textarea"){
-          if (el.value && el.value.trim()!=="") ok=true;
-        }
-      }
-      if (!ok) return b;
+      if (!isGroupAnswered(group)) return b;
     }
     return null;
+  }
+
+  // --- İlerleme çubuğu mantığı ---
+  function setupProgress(){
+    const total = app.querySelectorAll(".q").length;
+    const qTotal = document.getElementById("qTotal");
+    if (qTotal) qTotal.textContent = total;
+    updateProgress();
+  }
+
+  function updateProgress(){
+    const blocks = Array.from(app.querySelectorAll(".q"));
+    const answered = blocks.filter(b => isGroupAnswered(b.querySelectorAll(`[name="${cssEscape(b.dataset.name||"")}"]`))).length;
+    const total = blocks.length || 1;
+    const pct = Math.round((answered / total) * 100);
+
+    const bar = document.getElementById("progressBar");
+    if (bar) bar.style.width = pct + "%";
+    const qPct = document.getElementById("qPct");
+    if (qPct) qPct.textContent = pct + "%";
+
+    // Konum sayacı (odakta/ekranda olan soru)
+    const qPosEl = document.getElementById("qPos");
+    if (qPosEl) {
+      let idx = currentFocusedIndex();
+      if (idx < 0) {
+        // görünümdeki ilk blok
+        const topView = blocks.findIndex(b => b.getBoundingClientRect().top >= 0);
+        idx = topView >= 0 ? topView : 0;
+      }
+      qPosEl.textContent = (idx + 1);
+    }
+  }
+
+  function currentFocusedIndex(){
+    const blocks = Array.from(app.querySelectorAll(".q"));
+    const f = blocks.findIndex(b => b.classList.contains("focus"));
+    return f;
+  }
+
+  function isGroupAnswered(nodeList){
+    if (!nodeList || !nodeList.length) return true;
+    let ok=false;
+    for (const el of nodeList){
+      const tag=el.tagName.toLowerCase();
+      if (tag==="input"){
+        if (el.type==="radio") { if (el.checked){ ok=true; break; } }
+        else if (el.type==="checkbox"){ if (el.checked){ ok=true; } }
+        else { if (el.value && el.value.trim()!==""){ ok=true; } }
+      } else if (tag==="select" || tag==="textarea"){
+        if (el.value && el.value.trim()!=="") ok=true;
+      }
+    }
+    return ok;
   }
 
   // Mobil güvenilir odak + kaydırma
@@ -221,8 +293,15 @@
     requestAnimationFrame(()=>setTimeout(()=>{
       try { block.focus({ preventScroll:true }); } catch {}
       const el=block.querySelector(".ctl"); if (focusInput && el && typeof el.focus==="function"){ try{ el.focus({ preventScroll:true }); }catch{} }
-      const all=Array.from(app.querySelectorAll(".q")); all.forEach(x=>x.classList.remove("focus")); block.classList.add("focus");
+      setFocus(parseInt(block.dataset.index||"0",10)||0);
     },90));
+  }
+
+  // Odak görünürlüğünü ve sayaç konumunu güncel tut
+  function setFocus(i){
+    const blocks = Array.from(app.querySelectorAll(".q"));
+    blocks.forEach((b, ix)=> b.classList.toggle("focus", ix===i));
+    updateProgress();
   }
 
   function focusFirstQuestion(){ const first=app.querySelector(".q"); if (first) smoothFocus(first); }
@@ -236,6 +315,7 @@
   function esc(s){ return String(s).replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;' }[m])); }
   function attr(s){ return String(s).replace(/"/g,"&quot;"); }
   function cssEscape(s){ return s.replace(/["\\]/g,"\\$&"); }
+  function throttle(fn, wait){ let t=0; return (...a)=>{ const now=Date.now(); if (now-t>wait){ t=now; fn(...a); } }; }
 
   // Ripple
   function attachRipple(btn){
