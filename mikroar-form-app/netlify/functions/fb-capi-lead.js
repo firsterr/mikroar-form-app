@@ -1,4 +1,5 @@
 // netlify/functions/fb-capi-lead.js
+
 export default async (req, context) => {
   try {
     if (req.method !== 'POST') {
@@ -33,7 +34,33 @@ export default async (req, context) => {
     };
 
     const url = `https://graph.facebook.com/v17.0/${pixelId}/events?access_token=${encodeURIComponent(accessToken)}`;
+// ... mevcut kodun üstüne/yerine ilgili bölümlerde uygula
+const ip =
+  req.headers.get('x-nf-client-connection-ip') ||
+  req.headers.get('x-forwarded-for') ||
+  req.headers.get('client-ip') ||
+  undefined;
 
+const body = await req.json();
+const { event_id, event_name = 'Lead', event_source_url, fbp, fbc, client_user_agent } = body;
+
+const payload = {
+  data: [{
+    event_name,
+    event_time: Math.floor(Date.now()/1000),
+    event_id,
+    action_source: 'website',
+    event_source_url,
+    user_data: {
+      client_ip_address: ip,            // 🔥 zorunlu hale getir
+      client_user_agent,                // 🔥
+      fbp: fbp || undefined,            // varsa gönder
+      fbc: fbc || undefined
+      // İleride: em, ph (SHA-256 hash) eklenebilir
+    }
+  }]
+  // test_event_code: process.env.FB_TEST_CODE   // Test ekranı için opsiyonel
+};
     const fbRes = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type':'application/json' },
