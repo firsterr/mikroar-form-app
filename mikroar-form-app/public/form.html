@@ -6,7 +6,6 @@
   <title>MikroAR Anket</title>
   <meta name="description" content="Hızlı ve güvenli çevrimiçi anket deneyimi." />
   <link id="canonical" rel="canonical" href="https://form.mikroar.com/form.html" />
-
   <style>
     :root { --gap: 12px; }
     body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
@@ -21,32 +20,83 @@
     .field { margin: 18px 0; }
     .q { padding:12px; border-radius:12px; transition: background 200ms, box-shadow 200ms; }
     .q.focus { background:#f9fafb; box-shadow: inset 0 0 0 2px #e5e7eb; }
-    .q.checked { background:#fffef2; box-shadow: inset 0 0 0 2px #fde68a; } /* hafif efekt */
+    .q.checked { background:#fffef2; box-shadow: inset 0 0 0 2px #fde68a; }
     label { display:block; margin:6px 0; cursor:pointer; }
-    .kvkk-inline { margin-top: 16px; padding:12px; background:#f7f8fa; border:1px solid #e7eaf0; border-radius:8px; }
+    .muted{color:#6b7280}
   </style>
 </head>
 <body>
   <div class="wrap">
+    <!-- Liste modu (parametresiz) -->
+    <div id="listMode" class="hidden">
+      <h1>Form Seç</h1>
+      <div class="field">
+        <input id="admintoken" type="password" placeholder="ADMIN_TOKEN" style="width:100%;padding:10px;border:1px solid #e5e7eb;border-radius:8px">
+      </div>
+      <div class="field">
+        <select id="slugSelect" style="width:100%;padding:10px;border:1px solid #e5e7eb;border-radius:8px">
+          <option value="">Önce token girip “Listeyi Yükle”ye basın…</option>
+        </select>
+      </div>
+      <button id="loadList" class="btn">Listeyi Yükle</button>
+      <button id="openSlug" class="btn" style="margin-left:8px">Aç</button>
+      <div id="listErr" class="muted" style="margin-top:8px;display:none"></div>
+      <hr style="margin:24px 0">
+    </div>
+
+    <!-- Form modu -->
     <div id="skeleton" class="skel">
       <div class="sk big"></div>
       <div class="sk"></div><div class="sk"></div><div class="sk"></div>
     </div>
-
     <div id="error" class="error"></div>
     <div id="app" class="hidden"></div>
   </div>
 
   <script src="/app.js" defer></script>
   <script>
-    // Canonical'ı dinamik güncelle (slug/code geldiyse)
+    // Canonical'ı parametre varsa güncelle
     (function(){
       const u = new URL(location.href);
       const c = document.getElementById('canonical');
-      const slug = u.searchParams.get('slug');
-      const k = u.searchParams.get('k');
+      const slug = u.searchParams.get('slug'), k = u.searchParams.get('k');
       if (slug) c.href = `https://form.mikroar.com/form.html?slug=${encodeURIComponent(slug)}`;
       else if (k) c.href = `https://form.mikroar.com/form.html?k=${encodeURIComponent(k)}`;
+    })();
+
+    // Parametresizse liste modunu aç
+    (function(){
+      const u = new URL(location.href);
+      const hasIdent = u.searchParams.get('slug') || u.searchParams.get('k') || /^\/f\//.test(location.pathname);
+      if (!hasIdent) {
+        document.getElementById("listMode").classList.remove("hidden");
+        // Liste işlevleri
+        const t = document.getElementById("admintoken");
+        const s = document.getElementById("slugSelect");
+        const e = document.getElementById("listErr");
+
+        document.getElementById("loadList").addEventListener("click", async () => {
+          const token = t.value || "";
+          const r = await fetch(`/api/forms-list?token=${encodeURIComponent(token)}`, {
+            headers: { "x-admin-token": token }
+          });
+          if (!r.ok) { e.textContent = "Token doğrulanamadı."; e.style.display = "block"; return; }
+          e.style.display = "none";
+          const data = await r.json();
+          s.innerHTML = "";
+          for (const f of (data.items||[])) {
+            const opt = document.createElement("option");
+            opt.value = f.slug;
+            opt.textContent = `${f.slug} — ${(f.title||"")}`;
+            s.appendChild(opt);
+          }
+        });
+
+        document.getElementById("openSlug").addEventListener("click", () => {
+          const slug = s.value; if (!slug) return;
+          location.href = `/form.html?slug=${encodeURIComponent(slug)}`;
+        });
+      }
     })();
   </script>
 </body>
