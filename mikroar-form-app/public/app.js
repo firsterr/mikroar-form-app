@@ -21,7 +21,7 @@
       const form = await fetchForm({ slug, code });
       renderForm(form);
       skeleton.style.display="none"; app.classList.remove("hidden");
-      focusFirstQuestion();
+     
       setupProgress();        // ⬅️ ilerleme çubuğunu başlat
     } catch {
       skeleton.style.display="none"; errorBox.textContent="Form bulunamadı veya bağlantı sorunu."; errorBox.style.display="block";
