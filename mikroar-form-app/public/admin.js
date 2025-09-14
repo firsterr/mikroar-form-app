@@ -13,7 +13,7 @@
   };
 
   els.login.addEventListener("click", async () => {
-    const ok = await refreshList();
+    const ok = await refreshList(true);
     els.gate.style.display  = ok ? "none" : "block";
     els.panel.style.display = ok ? "flex" : "none";
   });
@@ -27,25 +27,27 @@
     };
     if (!payload.slug || !payload.title) return alert("slug ve başlık zorunlu");
 
-    const res = await fetch("/api/forms-admin", {
+    const token = els.token.value || "";
+    const res = await fetch(`/api/forms-admin?token=${encodeURIComponent(token)}`, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-admin-token": els.token.value
-      },
+      headers: { "content-type": "application/json", "x-admin-token": token },
       body: JSON.stringify(payload)
     });
     const data = await res.json().catch(()=>({}));
     if (!res.ok) return alert("Hata: " + (data.error || res.status));
-    await refreshList();
+    await refreshList(false);
     alert("Kaydedildi.");
   });
 
-  async function refreshList() {
-    const res = await fetch("/api/forms-list", {
-      headers: { "x-admin-token": els.token.value }
+  async function refreshList(showErr) {
+    const token = els.token.value || "";
+    const res = await fetch(`/api/forms-list?token=${encodeURIComponent(token)}`, {
+      headers: { "x-admin-token": token }
     });
-    if (!res.ok) return false;
+    if (!res.ok) {
+      if (showErr) alert("Admin yetkisi doğrulanamadı. (401) Netlify'da ADMIN_TOKEN ayarlı mı?");
+      return false;
+    }
     const data = await res.json();
     renderList(data.items || []);
     return true;
@@ -63,8 +65,9 @@
   }
 
   async function loadForm(slug) {
-    const res = await fetch(`/api/forms-admin?slug=${encodeURIComponent(slug)}`, {
-      headers: { "x-admin-token": els.token.value }
+    const token = els.token.value || "";
+    const res = await fetch(`/api/forms-admin?slug=${encodeURIComponent(slug)}&token=${encodeURIComponent(token)}`, {
+      headers: { "x-admin-token": token }
     });
     const data = await res.json();
     if (!res.ok) return alert("Hata: " + (data.error || res.status));
