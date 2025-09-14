@@ -1,260 +1,48 @@
 <!doctype html>
 <html lang="tr">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Anket</title>
-  <link rel="preload" href="/form.css" as="style" fetchpriority="high">
-  <link rel="stylesheet" href="/form.css?v=5"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MikroAR Anket</title>
+  <meta name="description" content="Hızlı ve güvenli çevrimiçi anket deneyimi." />
+  <link rel="canonical" href="https://form.mikroar.com/form.html" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="MikroAR Anket" />
+  <meta property="og:description" content="Hızlı ve güvenli çevrimiçi anket deneyimi." />
+  <meta property="og:url" content="https://form.mikroar.com/form.html" />
+
   <style>
-    :root{ --g-pad:14px; --g-radius:12px; --g-primary:#1a73e8; --g-muted:#6b7280; --g-border:#e5e7eb; --g-bg:#f7f7fb; --g-shadow:0 6px 20px rgba(0,0,0,.06) }
-    html,body{ background:var(--g-bg) }
-    #app{ max-width:900px; margin:24px auto; padding:0 12px }
-    #title{ font-size:28px; font-weight:700; margin:18px 0; display:none }
-    .form-desc{ margin:8px 0 18px; color:var(--g-muted); display:none }
-    form#form{ background:#fff; padding:8px; border-radius:16px; box-shadow:var(--g-shadow); display:none }
-    .row{ background:#fff; border:1px solid var(--g-border); border-radius:var(--g-radius); padding:var(--g-pad); margin:12px 0 }
-    .q-title{ font-weight:600; margin-bottom:6px; display:flex; align-items:center; gap:6px }
-    .q-title .req{ color:#d93025 }
-    .options{ display:grid; gap:10px }
-    .opt{ display:flex; gap:10px; align-items:center }
-    input[type="text"], input[type="email"], input[type="number"], select, textarea{ width:100%; border:1px solid var(--g-border); border-radius:10px; padding:10px 12px; outline:none }
-    input:focus, select:focus, textarea:focus{ border-color:var(--g-primary); box-shadow:0 0 0 3px rgba(26,115,232,.15) }
-    .actions{ display:flex; justify-content:flex-start; padding:8px 0 4px }
-    #btnSend{ background:var(--g-primary); color:#fff; border:none; border-radius:999px; padding:10px 18px; font-weight:600; cursor:pointer; box-shadow:0 4px 14px rgba(26,115,232,.25) }
-    #btnSend[aria-busy="true"]{ opacity:.75; cursor:progress }
-    .after.center{ color:var(--g-muted); margin:12px 0 4px; text-align:center }
-    .brand{ color:var(--g-muted); font-size:12px; margin:0 0 12px; text-align:left }
-    .note.center{ color:#b91c1c; text-align:center }
-
-    /* Skeleton */
-    .skeleton{ padding:16px }
-    .skeleton .bar{ height:14px; margin:10px 0; border-radius:6px; background:linear-gradient(90deg,#eee,#f5f5f5,#eee) }
-
-    /* --- Picker (slug yokken görünen tek alan) --- */
-    #picker{ display:none; background:#fff; border:1px solid var(--g-border); border-radius:16px; box-shadow:var(--g-shadow); padding:16px; }
-    #picker h2{ margin:0 0 8px }
-    #pickRow{ display:flex; gap:10px; align-items:center }
-    #slugSelect{ flex:1; border:1px solid var(--g-border); border-radius:10px; padding:10px 12px; min-width:0 }
-    #goBtn{ padding:10px 14px; border:none; border-radius:10px; background:var(--g-primary); color:#fff; font-weight:600; cursor:pointer }
-    #msg{ margin-top:8px; color:var(--g-muted) }
-    #authBtn{ margin-left:auto; padding:8px 12px; border:1px solid var(--g-border); background:#f8f9fb; border-radius:10px; cursor:pointer }
+    :root { --gap: 12px; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 24px; }
+    .skel { display: grid; gap: var(--gap); }
+    .sk { background: #eee; height: 16px; border-radius: 8px; animation: p 1.2s infinite; }
+    .sk.big { height: 44px; }
+    @keyframes p { 0%{opacity:.6} 50%{opacity:1} 100%{opacity:.6} }
+    .error { background:#fff7f7; border:1px solid #ffd3d3; color:#b00020; padding:12px; border-radius:8px; display:none; }
+    .hidden { display:none; }
+    .btn { padding:10px 16px; border-radius:8px; border:1px solid #ddd; background:#111; color:#fff; cursor:pointer; }
+    .field { margin: 16px 0; }
+    .kvkk { background:#f7f8fa; border:1px solid #e7eaf0; padding:12px; border-radius:8px; margin-bottom:16px; }
   </style>
 </head>
 <body>
-  <div id="app">
-    <!-- Başlık/alt başlık -->
-    <h1 id="title"></h1>
-    <p id="desc" class="form-desc"></p>
-<!-- başlık h1'in olduğu yerin hemen altına ekleyin -->
-<p id="desc" style="margin:-8px 0 18px 0; color:#555; font-size:15px;"></p>
-    <!-- SLUG YOKSA sadece bu kutu görünecek -->
-    <div id="picker">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <h2>Bir form seçin</h2>
-        <button id="authBtn">Giriş</button>
-      </div>
-      <div id="pickRow" style="margin-top:8px">
-        <select id="slugSelect">
-          <option value="">Seçiniz</option>
-        </select>
-        <button id="goBtn">Git</button>
-      </div>
-      <div id="msg"></div>
+  <div class="wrap">
+    <div id="kvkk" class="kvkk hidden">
+      Bu formda toplanan veriler yalnızca araştırma amaçlıdır. KVKK kapsamında aydınlatma metnini okuyup onaylayınız.
+      <label><input type="checkbox" id="consent"> Onaylıyorum</label>
     </div>
 
-    <!-- Gerçek form -->
-    <form id="form" novalidate></form>
-
-    <div id="skeleton" class="skeleton" aria-hidden="true" style="display:none">
-      <div class="bar" style="width:50%"></div>
-      <div class="bar" style="width:85%"></div>
-      <div class="bar" style="width:70%"></div>
-      <div class="bar" style="width:40%"></div>
+    <div id="skeleton" class="skel">
+      <div class="sk big"></div>
+      <div class="sk"></div><div class="sk"></div><div class="sk"></div>
     </div>
 
-    <p id="alertBottom" class="note center" style="display:none"></p>
+    <div id="error" class="error"></div>
+    <div id="app" class="hidden"></div>
   </div>
 
-  <script>
-    // ===== Helpers
-    const $ = s => document.querySelector(s);
-    const show = el => el && (el.style.display = 'block');
-    const hide = el => el && (el.style.display = 'none');
-    const esc = s => String(s ?? '')
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-
-    // --- Token (liste için) — admin ile aynı mantık / sessionStorage
-    const TOKEN_KEY = 'admintoken';
-    const hasToken = () => !!sessionStorage.getItem(TOKEN_KEY);
-    const promptToken = () => {
-      const t = prompt('ADMIN_TOKEN (liste için):','');
-      if (t) sessionStorage.setItem(TOKEN_KEY, t);
-      return !!t;
-    };
-    const clearToken = () => sessionStorage.removeItem(TOKEN_KEY);
-
-    // --- SSR tespiti
-    const SSR_READY = !!(window.__FORM && document.querySelector('#form[data-ssr="1"]'));
-
-    // --- Soru renderer
-    function qHTML(q){
-      const type = (q.type||'text').toLowerCase();
-      const name = q.name || q.label || 'q';
-      const req  = q.required ? ' required' : '';
-      const ph   = q.placeholder ? ` placeholder="${esc(q.placeholder)}"` : '';
-      const desc = q.description ? `<div class="muted">${esc(q.description)}</div>` : '';
-      let inner = '';
-
-      if (type==='radio' || type==='checkbox') {
-        const opts = Array.isArray(q.options)? q.options : [];
-        inner = `<div class="options">` + opts.map(v=>{
-          const val = esc(String(v));
-          const id  = `f_${name}_${val.replace(/\\W+/g,'_')}`;
-          return `<label class="opt" for="${id}">
-                    <input type="${type}" id="${id}" name="${esc(name)}" value="${val}">
-                    <span>${val}</span>
-                  </label>`;
-        }).join('') + `</div>`;
-      } else if (type==='select') {
-        const opts = Array.isArray(q.options)? q.options : [];
-        inner = `<div class="options"><div class="opt">
-                  <select id="f_${esc(name)}" name="${esc(name)}"${req}>
-                    <option value="" disabled selected>Seçiniz</option>
-                    ${opts.map(v=>`<option value="${esc(String(v))}">${esc(String(v))}</option>`).join('')}
-                  </select>
-                 </div></div>`;
-      } else if (type==='textarea') {
-        inner = `<textarea id="f_${esc(name)}" name="${esc(name)}"${req}${ph}></textarea>`;
-      } else {
-        const itype = (type==='email' ? 'email' : type==='number' ? 'number' : 'text');
-        inner = `<input type="${itype}" id="f_${esc(name)}" name="${esc(name)}"${req}${ph}/>`;
-      }
-
-      return `<div class="row">
-                <div class="q-title">
-                  <label for="f_${esc(name)}">${esc(q.label||'')}</label>
-                  ${q.required ? `<span class="req">*</span>` : ``}
-                </div>
-                ${desc}
-                ${inner}
-              </div>`;
-    }
-
-    function renderClient(form){
-      const t = $('#title'); t.textContent = form.title || (form.slug ? `Form: ${form.slug}` : 'Anket'); show(t);
-      const d = $('#desc'); const descText = (form.description || '').trim();
-      if (descText) { d.textContent = descText; d.style.display='block'; } else { d.style.display='none'; }
-
-      const schema = typeof form.schema==='string' ? JSON.parse(form.schema||'{}') : (form.schema||{});
-      const qs = Array.isArray(schema.questions) ? schema.questions : [];
-      $('#form').innerHTML =
-        qs.map(qHTML).join('') +
-        `<div class="actions"><button type="submit" id="btnSend">Gönder</button></div>
-         <p class="after">Bu form <strong>mikroar.com</strong> alanında oluşturuldu.</p>
-         <p class="brand">mikroAR</p>`;
-      show($('#form'));
-    }
-
-    // --- Picker (drop-down) ---
-    let listLoaded = false;
-    function setAuthUI(){ $('#authBtn').textContent = hasToken() ? 'Çıkış' : 'Giriş'; }
-    function ensureToken(){ if (hasToken()) return true; if (promptToken()){ setAuthUI(); return true; } return false; }
-
-    async function loadListOnce(){
-      if (listLoaded) return;
-      if (!ensureToken()){
-        $('#msg').textContent = 'Yetkisiz: Liste için ADMIN_TOKEN gerekli.';
-        $('#slugSelect').disabled = true;
-        return;
-      }
-      $('#msg').textContent = 'Yükleniyor…';
-      try{
-        const r = await fetch('/api/forms-list', { headers:{ accept:'application/json', 'x-admin-token': sessionStorage.getItem(TOKEN_KEY) } });
-        if (!r.ok) throw 0;
-        const j = await r.json();
-        const items = Array.isArray(j?.items) ? j.items.slice(0,200) : [];
-        const sel = $('#slugSelect');
-        sel.innerHTML = `<option value="">Seçiniz</option>` + items.map(it=>`<option value="${esc(it.slug)}">${esc(it.title || it.slug)} — ${esc(it.slug)}</option>`).join('');
-        sel.disabled = items.length===0;
-        $('#msg').textContent = items.length ? '' : 'Kayıt yok.';
-        listLoaded = true;
-      }catch{
-        $('#msg').textContent = 'Yetkisiz veya liste alınamadı.';
-        $('#slugSelect').disabled = true;
-      }
-    }
-
-    // --- Başlat ---
-    async function bootstrap(){
-      const params = new URLSearchParams(location.search);
-      const slug = params.get('slug');
-
-      // slug YOKSA → sadece picker görünsün
-      if (!slug) {
-        show($('#picker'));
-        setAuthUI();
-
-        // Giriş/Çıkış
-        $('#authBtn').addEventListener('click', ()=>{
-          if (hasToken()) clearToken(); else promptToken();
-          setAuthUI(); listLoaded=false; $('#slugSelect').innerHTML = `<option value="">Seçiniz</option>`; $('#slugSelect').disabled=false; $('#msg').textContent='';
-        });
-
-        // Kullanıcı seçeneğe tıklayınca listeyi o an yükle
-        $('#slugSelect').addEventListener('focus', loadListOnce);
-        $('#slugSelect').addEventListener('mousedown', loadListOnce);
-
-        // Seçildiğinde git
-        $('#slugSelect').addEventListener('change', ()=>{ const v = $('#slugSelect').value; if (v) location.href = `/form.html?slug=${encodeURIComponent(v)}`; });
-        $('#goBtn').addEventListener('click', ()=>{ const v = $('#slugSelect').value; if (v) location.href = `/form.html?slug=${encodeURIComponent(v)}`; });
-
-        return;
-      }
-
-      // slug VARSA → SSR varsa sadece göster, yoksa fetch et
-      if (SSR_READY) {
-        try {
-          const f = window.__FORM || {};
-          const t = $('#title'); t.textContent = (f.title || (f.slug ? `Form: ${f.slug}` : 'Anket')); show(t);
-          const d = $('#desc'); const txt = (f.description || '').trim();
-          if (txt) { d.textContent = txt; d.style.display='block'; } else { d.style.display='none'; }
-        } catch {}
-        show($('#form'));
-        return;
-      }
-
-      show($('#skeleton'));
-      try {
-       const code = params.get('k');
-const q = slug ? `slug=${encodeURIComponent(slug)}` : (code ? `code=${encodeURIComponent(code)}` : "");
-if (!q) throw new Error('slug veya kısa kod (k) gerekli');
-const r = await fetch(`/api/forms?${q}`, { headers:{ 'accept':'application/json' } });
-        if (!r.ok) throw new Error('Form bulunamadı');
-        const j = await r.json().catch(()=>null);
-        const form = (j && (j.form || j.data)) ? (j.form || j.data) : j;
-        if (!form || typeof form !== 'object') throw new Error('Geçersiz yanıt (form verisi yok).');
-
-        form.slug = form.slug || slug;
-        form.title = form.title || `Form: ${form.slug}`;
-        form.description = form.description || '';
-        if (typeof form.schema === 'string') { try { form.schema = JSON.parse(form.schema); } catch { form.schema = {}; } }
-        if (!form.schema || typeof form.schema !== 'object') form.schema = {};
-        if (!Array.isArray(form.schema.questions)) form.schema.questions = [];
-
-        window.__FORM = form;
-        hide($('#skeleton'));
-        renderClient(form);
-      } catch (e) {
-        hide($('#skeleton'));
-        $('#app').innerHTML = `<p class="center">Hata: ${esc(e.message || e)}</p>`;
-      }
-    }
-
-    bootstrap();
-  </script>
-
-  <!-- Submit/teşekkür ekranı vb. için app.js -->
   <script src="/app.js" defer></script>
 </body>
 </html>
