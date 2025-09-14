@@ -57,20 +57,25 @@
       .q.focus { background:#f9fafb; box-shadow: inset 0 0 0 2px #e5e7eb; }
       .q.checked { background:#fffef2; box-shadow: inset 0 0 0 2px #fde68a; }
       label { display:block; margin:6px 0; cursor:pointer; }
+
       /* Ripple */
       .ripple { position:relative; overflow:hidden }
       .ripple span.rip { position:absolute; border-radius:50%; transform:scale(0);
         opacity:.35; background:#fff; pointer-events:none; animation:rip .6s ease-out }
       @keyframes rip { to { transform:scale(12); opacity:0 } }
-      /* Sticky submit bar */
+
+      /* Sticky submit bar (buton + dipnot birlikte) */
       .submit-bar{
         position:fixed; left:0; right:0; bottom:0;
         padding:10px max(16px, env(safe-area-inset-left)) calc(10px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-right));
         background:linear-gradient(to top, rgba(250,250,250,.98), rgba(250,250,250,.88));
         border-top:1px solid #e5e7eb; backdrop-filter:saturate(1.2) blur(6px);
-        display:flex; justify-content:center; z-index:50;
+        display:flex; flex-direction:column; align-items:center; gap:8px; z-index:50;
       }
-      body { padding-bottom:84px }
+      .submit-meta{ color:#6b7280; font-size:12px; line-height:1.3; text-align:center }
+      .submit-meta b{ font-weight:700 }
+      /* bar yüksekliği için gövde alt boşluğu */
+      body { padding-bottom: 128px }
     </style>`);
 
     h.push(`<div id="toast" class="toast"></div>`);
@@ -80,17 +85,17 @@
 
     for (let i=0;i<q.length;i++){
       const it=q[i], id=it.id||it.name||it.key||`q${i+1}`, label=it.label||id, required=!!it.required;
-      const name=attr(id), reqAttr = ""; // HTML5 required'a güvenmiyoruz → özel doğrulama kullanıyoruz.
+      const name=attr(id);
       h.push(`<div class="q" tabindex="-1" data-index="${i}" data-required="${required ? "1":""}" data-name="${name}">
                 <div class="field"><div><strong>${esc(label)}</strong></div>`);
       if (it.type==="radio" && Array.isArray(it.options)) {
         for (const opt of it.options){ const val=typeof opt==="string"?opt:opt.value; const txt=typeof opt==="string"?opt:(opt.label||opt.value);
-          h.push(`<label><input class="ctl" type="radio" name="${name}" value="${attr(val)}" ${reqAttr}> ${esc(txt)}</label>`); }
+          h.push(`<label><input class="ctl" type="radio" name="${name}" value="${attr(val)}"> ${esc(txt)}</label>`); }
       } else if (it.type==="checkbox" && Array.isArray(it.options)) {
         for (const opt of it.options){ const val=typeof opt==="string"?opt:opt.value; const txt=typeof opt==="string"?opt:(opt.label||opt.value);
           h.push(`<label><input class="ctl" type="checkbox" name="${name}" value="${attr(val)}"> ${esc(txt)}</label>`); }
       } else if (it.type==="select" && Array.isArray(it.options)) {
-        h.push(`<label><select class="ctl" name="${name}" ${reqAttr}>`);
+        h.push(`<label><select class="ctl" name="${name}">`);
         for (const opt of it.options){ const val=typeof opt==="string"?opt:opt.value; const txt=typeof opt==="string"?opt:(opt.label||opt.value);
           h.push(`<option value="${attr(val)}">${esc(txt)}</option>`); }
         h.push(`</select></label>`);
@@ -104,8 +109,19 @@
     }
 
     h.push(`</form>`);
-    h.push(`<div class="submit-bar"><button id="submitBtn" class="btn ripple" type="submit" form="f">Gönder</button></div>`);
-    h.push(`<div style="margin-top:12px;color:#6b7280;font-size:12px;line-height:1.4">Bu form mikroar.com alanında oluşturuldu.<br>iletisim@mikroar.com<br>Mikroar Formlar</div>`);
+
+    // Sticky bar: buton + dipnot birlikte
+    h.push(`
+      <div class="submit-bar">
+        <button id="submitBtn" class="btn ripple" type="submit" form="f">Gönder</button>
+        <div class="submit-meta">
+          Bu form mikroar.com alanında oluşturuldu.<br>
+          iletisim@mikroar.com<br>
+          <b>Mikroar Formlar</b>
+        </div>
+      </div>
+    `);
+
     app.innerHTML=h.join("");
 
     // Etkileşimler
@@ -127,14 +143,13 @@
       e.preventDefault();
       const formEl=e.currentTarget, btn=document.getElementById("submitBtn");
 
-      // ✔ Tamamen ÖZEL doğrulama: her basışta ilk eksik bloğa git
+      // ÖZEL doğrulama: her basışta ilk eksik bloğa git
       const invalid = findFirstInvalid();
       if (invalid) {
         showInvalidFeedback(btn, invalid);
         return;
       }
 
-      // Geçerli → yükleniyor
       setLoading(btn,true);
       const fd=new FormData(formEl), answers={};
       for (const [k,v] of fd.entries()){
@@ -157,16 +172,16 @@
     };
   }
 
-  // --- INVALID geri bildirimi tek noktadan ---
+  // --- INVALID geri bildirimi ---
   function showInvalidFeedback(btn, block){
     toast("Lütfen zorunlu soruları doldurun.");
     try { if (navigator.vibrate) navigator.vibrate(40); } catch {}
-    btn.classList.remove("shake"); void btn.offsetWidth; btn.classList.add("shake"); // yeniden tetikle
+    btn.classList.remove("shake"); void btn.offsetWidth; btn.classList.add("shake");
     const hint = block.querySelector(".hint"); if (hint) hint.style.display="block";
     smoothFocus(block, true);
   }
 
-  // Zorunlu bloğu bul (ilk eksik)
+  // İlk eksik bloğu bul
   function findFirstInvalid(){
     const blocks = Array.from(app.querySelectorAll(".q"));
     for (const b of blocks){
