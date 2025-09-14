@@ -14,6 +14,11 @@
     .list { border:1px solid #eee; border-radius:8px; padding:8px; max-height:420px; overflow:auto; }
     .item { padding:8px; border-bottom:1px solid #eee; cursor:pointer; }
     .item:last-child { border-bottom:none; }
+    .hr { height:1px; background:#eee; margin:12px 0; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+    .muted { color:#6b7280; font-size:12px; }
+    .btn { background:#111; color:#fff; cursor:pointer }
+    .btn.secondary { background:#f3f4f6; color:#111 }
   </style>
 </head>
 <body>
@@ -23,7 +28,7 @@
     <div>
       <label>Admin anahtar:</label>
       <input id="token" type="password" placeholder="ADMIN_TOKEN" />
-      <button id="login">Giriş</button>
+      <button id="login" class="btn">Giriş</button>
     </div>
 
     <div id="gate" style="margin:16px 0; color:#b00020; display:none;">Bu sayfa için ADMIN_TOKEN gerekli.</div>
@@ -33,17 +38,62 @@
         <h3>Formlar</h3>
         <div class="list" id="list"></div>
       </div>
+
       <div class="col">
-        <h3>Detay</h3>
-        <div style="display:grid; gap:8px;">
+        <div style="display:flex;gap:8px;align-items:center;justify-content:space-between">
+          <h3>Detay</h3>
+          <div>
+            <button id="new" class="btn secondary">Yeni</button>
+            <button id="preview" class="btn secondary">Önizleme</button>
+          </div>
+        </div>
+
+        <div class="grid">
           <input id="slug" placeholder="slug" />
           <input id="title" placeholder="başlık" />
+        </div>
+
+        <div style="margin:8px 0;">
+          <label>Durum:</label>
           <select id="active">
             <option value="true">Aktif</option>
             <option value="false">Pasif</option>
           </select>
-          <textarea id="schema" placeholder='{"questions":[{"id":"q1","type":"text","label":"Adınız?"}]}'></textarea>
-          <button id="save">Kaydet</button>
+        </div>
+
+        <div class="hr"></div>
+
+        <details open>
+          <summary><strong>Görsel Soru Editörü</strong> <span class="muted">— şemaya soru ekle</span></summary>
+          <div class="grid" style="margin-top:8px">
+            <select id="qbType" title="Soru tipi">
+              <option value="radio">Tek seçim (radio)</option>
+              <option value="checkbox">Çoklu seçim (checkbox)</option>
+              <option value="select">Açılır liste (select)</option>
+              <option value="text">Metin (text)</option>
+              <option value="textarea">Uzun metin (textarea)</option>
+              <option value="number">Sayı (number)</option>
+            </select>
+            <input id="qbId" placeholder="id (opsiyonel)" />
+          </div>
+          <div class="grid" style="margin-top:8px">
+            <input id="qbLabel" placeholder="soru etiketi *" />
+            <label style="display:flex;gap:8px;align-items:center"><input id="qbReq" type="checkbox" /> Zorunlu</label>
+          </div>
+          <div style="margin-top:8px">
+            <textarea id="qbOpts" placeholder="Seçenekli tiplerde her satıra bir seçenek yazın"></textarea>
+          </div>
+          <button id="qbAdd" class="btn">Şemaya ekle</button>
+          <span class="muted">Eklenen sorular aşağıdaki JSON şemasına yazılır.</span>
+        </details>
+
+        <div class="hr"></div>
+
+        <h4>Şema (JSON)</h4>
+        <textarea id="schema" placeholder='{"questions":[{"id":"q1","type":"text","label":"Adınız?"}]}'></textarea>
+
+        <div style="margin-top:8px">
+          <button id="save" class="btn" style="width:100%">Kaydet</button>
         </div>
       </div>
     </div>
