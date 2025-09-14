@@ -131,3 +131,6 @@
 [[edge_functions]]
   function = "form-ssr"
   path     = "/form.html"
+  [[edge_functions]]
+  function = "form-ssr"
+  path     = "/f/*"
