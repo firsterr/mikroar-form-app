@@ -2,8 +2,15 @@
   publish   = "mikroar-form-app/public"
   functions = "mikroar-form-app/netlify/functions"
 
-# ---------- form.mikroar.com ----------
-# Kısa link: /f/:code -> form.html  (genel kuraldan önce)
+[functions]
+  node_bundler = "esbuild"   # Netlify default
+  external_node_modules = ["@supabase/supabase-js"]
+
+# ---------------------------
+# form.mikroar.com
+# ---------------------------
+
+# Kısa link: /f/:code  → form.html (URL adres çubuğunda aynı kalır; rewrite)
 [[redirects]]
   from = "/f/*"
   to   = "/form.html"
@@ -11,37 +18,43 @@
   force  = true
   conditions = { Host = ["form.mikroar.com"] }
 
-# API -> Functions
+# API → Functions
 [[redirects]]
   from = "/api/*"
   to   = "/.netlify/functions/:splat"
   status = 200
   conditions = { Host = ["form.mikroar.com"] }
 
-# SPA catch-all (form akışı)
+# Catch-all → form.html (tek sayfa uygulaması)
 [[redirects]]
   from = "/*"
   to   = "/form.html"
   status = 200
   conditions = { Host = ["form.mikroar.com"] }
 
-# ---------- anket.mikroar.com ----------
-# API -> Functions (admin işlemleri burada)
+# ---------------------------
+# anket.mikroar.com (admin)
+# ---------------------------
+
+# API → Functions
 [[redirects]]
   from = "/api/*"
   to   = "/.netlify/functions/:splat"
   status = 200
   conditions = { Host = ["anket.mikroar.com"] }
 
-# Admin UI catch-all (AMA KİLİTLEYECEĞİZ)
+# Catch-all → admin.html
 [[redirects]]
   from = "/*"
   to   = "/admin.html"
   status = 200
   conditions = { Host = ["anket.mikroar.com"] }
 
-# ---------- HTTP Headers ----------
-# HTML: kısa cache
+# ---------------------------
+# Güvenlik & Cache başlıkları
+# ---------------------------
+
+# HTML: kısa cache + zorunlu validasyon
 [[headers]]
   for = "/*.html"
   [headers.values]
@@ -50,22 +63,24 @@
     X-Content-Type-Options = "nosniff"
     X-Frame-Options = "DENY"
     Permissions-Policy = "geolocation=(), microphone=(), camera=()"
+    # CSP'yi alan adına göre daralt (Supabase projeni güncelle)
     Content-Security-Policy = "default-src 'self'; img-src 'self' data: https:; font-src 'self' https: data:; connect-src 'self' https://*.supabase.co https://*.supabase.in; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; base-uri 'self'; frame-ancestors 'none'"
 
-# Statik varlıklar: uzun ömür
+# Statik varlıklar: uzun ömür + immutable
 [[headers]]
   for = "/*.{js,css,woff,woff2,png,jpg,jpeg,gif,svg,webp,avif}"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
-# Health endpoint (cron ping)
+# Sağlık ucu (Cron ping için)
 [[redirects]]
   from = "/health"
   to = "/health.txt"
   status = 200
 
-# ---------- Edge Functions mapping ----------
-# /form.html isteklerinde k → slug çöz ve kanonik URL'ye yönlendir
+# ---------------------------
+# Edge Function (k→slug SSR)
+# ---------------------------
 [[edge_functions]]
   function = "form-ssr"
-  path = "/form.html"
+  path     = "/form.html"
