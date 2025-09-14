@@ -1,13 +1,15 @@
 {
   "name": "mikroar-form-app",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "type": "module",
+  "type": "commonjs",
   "scripts": {
     "dev": "netlify dev",
-    "build": "echo \"static\""
+    "build": "echo \"static\"",
+    "lint": "echo \"(opsiyonel)\""
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.46.1"
-  }
+  },
+  "devDependencies": {}
 }
