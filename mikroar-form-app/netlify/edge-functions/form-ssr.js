@@ -13,12 +13,12 @@ export default async (request, context) => {
   }
 
   // Varsayılan meta (fallback)
-  let meta = {
-    title: "Mikroar Anket",
-    description: "Ankete katılın.",
-    image: origin + "https://www.emturkey.com.tr/wp-content/uploads/2022/03/em-nedir-resim.jpg", // public/og/default.jpg dosyasını koy
-    url: origin + url.pathname
-  };
+ let meta = {
+  title: "Mikroar Anket",
+  description: "Ankete katılın.",
+  image: "https://www.emturkey.com.tr/wp-content/uploads/2022/03/em-nedir-resim.jpg", // ✅ harici URL, origin eklenmez
+  url: origin + url.pathname
+};
 
   // Form başlığı/açıklamasıyla meta’yı zenginleştir
   try {
