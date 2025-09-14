@@ -91,3 +91,21 @@
 [[edge_functions]]
   function = "form-ssr"
   path     = "/form.html"
+  [build]
+  publish = "mikroar-form-app/public"
+  functions = "mikroar-form-app/netlify/functions"
+
+# /api/* -> Netlify Functions
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# Edge Function: OG meta enjektesi
+[[edge_functions]]
+  path = "/f/*"
+  function = "form-ssr"
+
+[[edge_functions]]
+  path = "/form.html"
+  function = "form-ssr"
