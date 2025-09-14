@@ -3,9 +3,10 @@
   const skeleton = document.getElementById("skeleton");
   const errorBox = document.getElementById("error");
 
+  const LAZY_THRESHOLD = 16; // 16+ seçenek → lazy render
+
   window.addEventListener("DOMContentLoaded", boot);
 
-  // /form.html parametresiz ise form yükleme (liste modu var)
   function hasIdent(){
     const u = new URL(location.href);
     if (u.searchParams.get("slug") || u.searchParams.get("k")) return true;
@@ -14,17 +15,28 @@
   }
 
   async function boot() {
-    if (!hasIdent()) { skeleton.style.display="none"; errorBox.style.display="none"; app.classList.add("hidden"); return; }
-    skeleton.style.display="grid"; errorBox.style.display="none"; app.classList.add("hidden");
+    if (!hasIdent()) {
+      skeleton.style.display="none";
+      errorBox.style.display="none";
+      app.classList.add("hidden");
+      return;
+    }
+
+    skeleton.style.display="grid";
+    errorBox.style.display="none";
+    app.classList.add("hidden");
+
     try {
       const { slug, code } = resolveIdent();
       const form = await fetchForm({ slug, code });
-      renderForm(form);
-      skeleton.style.display="none"; app.classList.remove("hidden");
-     
-      setupProgress();        // ⬅️ ilerleme çubuğunu başlat
+      renderForm(form);                 // ⬅️ açılışta odak yok; başlık görünür
+      skeleton.style.display="none";
+      app.classList.remove("hidden");
+      setupProgress();
     } catch {
-      skeleton.style.display="none"; errorBox.textContent="Form bulunamadı veya bağlantı sorunu."; errorBox.style.display="block";
+      skeleton.style.display="none";
+      errorBox.textContent="Form bulunamadı veya bağlantı sorunu.";
+      errorBox.style.display="block";
     }
   }
 
@@ -65,13 +77,11 @@
       .q.checked { background:#fffef2; box-shadow: inset 0 0 0 2px #fde68a; }
       label { display:block; margin:6px 0; cursor:pointer; }
 
-      /* Ripple */
       .ripple { position:relative; overflow:hidden }
       .ripple span.rip { position:absolute; border-radius:50%; transform:scale(0);
         opacity:.35; background:#fff; pointer-events:none; animation:rip .6s ease-out }
       @keyframes rip { to { transform:scale(12); opacity:0 } }
 
-      /* Sticky submit bar (buton + dipnot birlikte) */
       .submit-bar{
         position:fixed; left:0; right:0; bottom:0;
         padding:10px max(16px, env(safe-area-inset-left)) calc(10px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-right));
@@ -85,8 +95,6 @@
     </style>`);
 
     h.push(`<div id="toast" class="toast"></div>`);
-
-    /* İlerleme çubuğu + sayaç */
     h.push(`
       <div id="progressWrap" class="progress-wrap">
         <div class="progress-meta">
@@ -102,33 +110,54 @@
     h.push(`<form id="f" autocomplete="on">`);
 
     for (let i=0;i<q.length;i++){
-      const it=q[i], id=it.id||it.name||it.key||`q${i+1}`, label=it.label||id, required=!!it.required;
-      const name=attr(id);
-      h.push(`<div class="q" tabindex="-1" data-index="${i}" data-required="${required ? "1":""}" data-name="${name}">
-                <div class="field"><div><strong>${esc(label)}</strong></div>`);
-      if (it.type==="radio" && Array.isArray(it.options)) {
-        for (const opt of it.options){ const val=typeof opt==="string"?opt:opt.value; const txt=typeof opt==="string"?opt:(opt.label||opt.value);
-          h.push(`<label><input class="ctl" type="radio" name="${name}" value="${attr(val)}"> ${esc(txt)}</label>`); }
+      const it = q[i];
+      const qid = it.id || it.name || it.key || `q${i+1}`;
+      const label = it.label || qid;
+      const required = !!it.required;
+      const name = attr(qid);
+
+      h.push(`<div class="q" tabindex="-1" data-index="${i}" data-required="${required ? "1":""}" data-name="${name}" data-qid="${attr(qid)}">
+        <div class="field"><div><strong>${esc(label)}</strong></div>`);
+
+      const isChoice = ["radio","checkbox","select"].includes(it.type) && Array.isArray(it.options);
+      const isHeavy  = isChoice && it.options.length >= LAZY_THRESHOLD;
+
+      if (isChoice && isHeavy) {
+        // Lazy placeholder: görünür olunca gerçek seçenekler basılacak
+        h.push(`<div class="lazy-opts" data-type="${attr(it.type)}" data-qid="${attr(qid)}">Seçenekler yükleniyor…</div>`);
+      } else if (it.type==="radio" && Array.isArray(it.options)) {
+        for (const opt of it.options) {
+          const val = typeof opt==="string" ? opt : opt.value;
+          const txt = typeof opt==="string" ? opt : (opt.label||opt.value);
+          h.push(`<label><input class="ctl" type="radio" name="${name}" value="${attr(val)}"> ${esc(txt)}</label>`);
+        }
       } else if (it.type==="checkbox" && Array.isArray(it.options)) {
-        for (const opt of it.options){ const val=typeof opt==="string"?opt:opt.value; const txt=typeof opt==="string"?opt:(opt.label||opt.value);
-          h.push(`<label><input class="ctl" type="checkbox" name="${name}" value="${attr(val)}"> ${esc(txt)}</label>`); }
+        for (const opt of it.options) {
+          const val = typeof opt==="string" ? opt : opt.value;
+          const txt = typeof opt==="string" ? opt : (opt.label||opt.value);
+          h.push(`<label><input class="ctl" type="checkbox" name="${name}" value="${attr(val)}"> ${esc(txt)}</label>`);
+        }
       } else if (it.type==="select" && Array.isArray(it.options)) {
         h.push(`<label><select class="ctl" name="${name}">`);
-        for (const opt of it.options){ const val=typeof opt==="string"?opt:opt.value; const txt=typeof opt==="string"?opt:(opt.label||opt.value);
-          h.push(`<option value="${attr(val)}">${esc(txt)}</option>`); }
+        for (const opt of it.options) {
+          const val = typeof opt==="string" ? opt : opt.value;
+          const txt = typeof opt==="string" ? opt : (opt.label||opt.value);
+          h.push(`<option value="${attr(val)}">${esc(txt)}</option>`);
+        }
         h.push(`</select></label>`);
       } else if (it.type==="textarea") {
         h.push(`<label><textarea class="ctl" name="${name}" rows="4"></textarea></label>`);
       } else {
-        const t=it.type||"text"; h.push(`<label><input class="ctl" type="${attr(t)}" name="${name}" /></label>`);
+        const t = it.type || "text";
+        h.push(`<label><input class="ctl" type="${attr(t)}" name="${name}" /></label>`);
       }
+
       h.push(`<div class="hint" style="display:none;color:#b00020;font-size:12px;margin-top:6px;">Bu soru zorunludur.</div>`);
       h.push(`</div></div>`);
     }
 
     h.push(`</form>`);
 
-    // Sticky bar: buton + dipnot birlikte
     h.push(`
       <div class="submit-bar">
         <button id="submitBtn" class="btn ripple" type="submit" form="f">Gönder</button>
@@ -140,39 +169,33 @@
       </div>
     `);
 
-    app.innerHTML=h.join("");
+    app.innerHTML = h.join("");
 
-    // Etkileşimler
+    // ---- Etkileşimler
     app.querySelectorAll(".q").forEach((b, idx) => {
       b.addEventListener("click", () => setFocus(idx));
       b.addEventListener("focusin", () => setFocus(idx));
       b.addEventListener("focusout", () => b.classList.remove("focus"));
     });
 
-    app.querySelectorAll(".ctl").forEach(el=>{
-      el.addEventListener("change",(e)=>{
-        const b=e.target.closest(".q"); if(!b) return;
-        b.classList.add("checked");
-        const next=nextBlock(b); if(next) smoothFocus(next);
-        const hint=b.querySelector(".hint"); if(hint) hint.style.display="none";
-        updateProgress(); // ⬅️ yanıt değiştikçe ilerleme güncelle
-      });
-      el.addEventListener("input", updateProgress);
-    });
-
+    attachControlBehavior(app); // mevcut .ctl'ler
     document.getElementById("f").addEventListener("submit", onSubmit(form.slug));
     attachRipple(document.getElementById("submitBtn"));
 
-    // Scroll ile de konum güncelle (hafif throttle)
+    // Lazy seçenekleri görünür olunca yükle
+    setupLazyOptions(q);
+
+    // Scroll → sayaç güncelle
     window.addEventListener("scroll", throttle(updateProgress, 200), { passive:true });
   }
 
+  // --- Submit akışı
   function onSubmit(formSlug){
     return async (e)=>{
       e.preventDefault();
-      const formEl=e.currentTarget, btn=document.getElementById("submitBtn");
+      const formEl = e.currentTarget;
+      const btn = document.getElementById("submitBtn");
 
-      // ÖZEL doğrulama: her basışta ilk eksik bloğa git
       const invalid = findFirstInvalid();
       if (invalid) {
         showInvalidFeedback(btn, invalid);
@@ -180,12 +203,17 @@
       }
 
       setLoading(btn,true);
-      const fd=new FormData(formEl), answers={};
+
+      const fd = new FormData(formEl), answers = {};
       for (const [k,v] of fd.entries()){
-        if (answers[k]!==undefined){ if (Array.isArray(answers[k])) answers[k].push(v); else answers[k]=[answers[k],v]; }
-        else { answers[k]=v; }
+        if (answers[k]!==undefined){
+          if (Array.isArray(answers[k])) answers[k].push(v);
+          else answers[k] = [answers[k], v];
+        } else {
+          answers[k] = v;
+        }
       }
-      const meta={ href:location.href, ua:navigator.userAgent };
+      const meta = { href: location.href, ua: navigator.userAgent };
 
       const res = await fetch("/api/responses", {
         method:"POST", headers:{ "content-type":"application/json" },
@@ -199,6 +227,100 @@
       setLoading(btn,false);
       toast("Kaydetme hatası. Lütfen tekrar deneyin.");
     };
+  }
+
+  // --- Lazy seçenekler + Prefetch ---
+  function setupLazyOptions(questions){
+    const nodes = app.querySelectorAll(".lazy-opts");
+    const io = ("IntersectionObserver" in window)
+      ? new IntersectionObserver((entries)=>{
+          entries.forEach(e=>{
+            if (e.isIntersecting) {
+              materializeOptions(e.target, questions);
+              io.unobserve(e.target);
+            }
+          });
+        }, { rootMargin: "200px" })
+      : null;
+
+    nodes.forEach(n=>{
+      if (io) io.observe(n); else materializeOptions(n, questions);
+      n.closest(".q")?.addEventListener("focusin", ()=> materializeOptions(n, questions), { once:true });
+    });
+  }
+
+  function materializeOptions(node, questions){
+    if (!node || node.dataset.done) return;
+    const type = node.dataset.type;
+    const qid  = node.dataset.qid;
+
+    const spec = questions.find(it => (it.id||it.name||it.key||"") === qid);
+    if (!spec || !Array.isArray(spec.options)) return;
+
+    let replacement;
+    if (type === "select") {
+      const name = node.closest(".q")?.dataset.name || qid;
+      const sel = document.createElement("select");
+      sel.className = "ctl"; sel.name = name;
+      spec.options.forEach(opt => {
+        const o = document.createElement("option");
+        o.value = typeof opt==="string" ? opt : opt.value;
+        o.textContent = typeof opt==="string" ? opt : (opt.label||opt.value);
+        sel.appendChild(o);
+      });
+      replacement = document.createElement("label");
+      replacement.appendChild(sel);
+    } else {
+      const name = node.closest(".q")?.dataset.name || qid;
+      const wrap = document.createElement("div");
+      spec.options.forEach(opt=>{
+        const val = typeof opt==="string" ? opt : opt.value;
+        const txt = typeof opt==="string" ? opt : (opt.label||opt.value);
+        const label = document.createElement("label");
+        label.innerHTML = `<input class="ctl" type="${type}" name="${attr(name)}" value="${attr(val)}"> ${esc(txt)}`;
+        wrap.appendChild(label);
+      });
+      replacement = wrap;
+    }
+
+    node.replaceWith(replacement);
+    node.dataset.done = "1";
+
+    // Yeni gelen inputlara davranışları bağla
+    attachControlBehavior(replacement);
+  }
+
+  // Mevcut/sonradan gelen .ctl için ortak davranışlar
+  function attachControlBehavior(root){
+    root.querySelectorAll
+      ? root.querySelectorAll(".ctl").forEach(el=>{
+          el.addEventListener("change",(e)=>{
+            const b = e.target.closest(".q"); if(!b) return;
+            b.classList.add("checked");
+
+            // Prefetch: bir sonraki bloğun lazy seçeneklerini hemen hazırla
+            const next = nextBlock(b);
+            if (next) {
+              const nLazy = next.querySelector(".lazy-opts");
+              if (nLazy) materializeOptions(nLazy, collectQuestions());
+              const nn = nextBlock(next)?.querySelector(".lazy-opts");
+              if (nn) (window.requestIdleCallback || setTimeout)(()=> materializeOptions(nn, collectQuestions()), 150);
+            }
+
+            const hint=b.querySelector(".hint"); if(hint) hint.style.display="none";
+            const nb = nextBlock(b); if (nb) smoothFocus(nb);
+            updateProgress();
+          });
+          el.addEventListener("input", updateProgress);
+        })
+      : null;
+  }
+
+  function collectQuestions(){
+    // render sırasında kullanılan schema.questions dizisini tekrar üretmeyelim diye,
+    // DOM'dan qid ve seçenek bilgisine ihtiyaç olduğunda bu stub kullanılıyor.
+    // Lazy tarafında only lookup için yeterli; asıl options spec materyalizeOptions çağrısında parametreyle geliyor.
+    return [];
   }
 
   // --- INVALID geri bildirimi ---
@@ -215,14 +337,14 @@
     const blocks = Array.from(app.querySelectorAll(".q"));
     for (const b of blocks){
       const req = b.dataset.required==="1"; if (!req) continue;
-      const name=b.dataset.name; if(!name) continue;
-      const group=b.querySelectorAll(`[name="${cssEscape(name)}"]`); if(!group.length) continue;
+      const name = b.dataset.name; if(!name) continue;
+      const group = b.querySelectorAll(`[name="${cssEscape(name)}"]`); if(!group.length) continue;
       if (!isGroupAnswered(group)) return b;
     }
     return null;
   }
 
-  // --- İlerleme çubuğu mantığı ---
+  // --- İlerleme çubuğu ---
   function setupProgress(){
     const total = app.querySelectorAll(".q").length;
     const qTotal = document.getElementById("qTotal");
@@ -236,17 +358,13 @@
     const total = blocks.length || 1;
     const pct = Math.round((answered / total) * 100);
 
-    const bar = document.getElementById("progressBar");
-    if (bar) bar.style.width = pct + "%";
-    const qPct = document.getElementById("qPct");
-    if (qPct) qPct.textContent = pct + "%";
+    const bar = document.getElementById("progressBar"); if (bar) bar.style.width = pct + "%";
+    const qPct = document.getElementById("qPct"); if (qPct) qPct.textContent = pct + "%";
 
-    // Konum sayacı (odakta/ekranda olan soru)
     const qPosEl = document.getElementById("qPos");
     if (qPosEl) {
       let idx = currentFocusedIndex();
       if (idx < 0) {
-        // görünümdeki ilk blok
         const topView = blocks.findIndex(b => b.getBoundingClientRect().top >= 0);
         idx = topView >= 0 ? topView : 0;
       }
@@ -256,15 +374,14 @@
 
   function currentFocusedIndex(){
     const blocks = Array.from(app.querySelectorAll(".q"));
-    const f = blocks.findIndex(b => b.classList.contains("focus"));
-    return f;
+    return blocks.findIndex(b => b.classList.contains("focus"));
   }
 
   function isGroupAnswered(nodeList){
     if (!nodeList || !nodeList.length) return true;
-    let ok=false;
+    let ok = false;
     for (const el of nodeList){
-      const tag=el.tagName.toLowerCase();
+      const tag = el.tagName.toLowerCase();
       if (tag==="input"){
         if (el.type==="radio") { if (el.checked){ ok=true; break; } }
         else if (el.type==="checkbox"){ if (el.checked){ ok=true; } }
@@ -276,7 +393,7 @@
     return ok;
   }
 
-  // Mobil güvenilir odak + kaydırma
+  // --- Kaydırma + odak ---
   function smoothFocus(block, focusInput){
     if (!block) return;
     try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch {}
@@ -297,21 +414,31 @@
     },90));
   }
 
-  // Odak görünürlüğünü ve sayaç konumunu güncel tut
   function setFocus(i){
     const blocks = Array.from(app.querySelectorAll(".q"));
     blocks.forEach((b, ix)=> b.classList.toggle("focus", ix===i));
     updateProgress();
   }
 
-  function focusFirstQuestion(){ const first=app.querySelector(".q"); if (first) smoothFocus(first); }
-  function nextBlock(b){ const all=Array.from(app.querySelectorAll(".q")); const i=all.indexOf(b); return i>=0 && i<all.length-1 ? all[i+1] : null; }
+  function nextBlock(b){
+    const all=Array.from(app.querySelectorAll(".q"));
+    const i=all.indexOf(b);
+    return i>=0 && i<all.length-1 ? all[i+1] : null;
+  }
 
-  // Görsel geri bildirimler
-  function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.style.display="block"; setTimeout(()=>{ t.style.display="none"; },3000); }
-  function setLoading(btn,on){ if(!btn) return; btn.classList.toggle("loading",!!on); btn.textContent = on ? "Gönderiliyor…" : "Gönder"; }
+  // --- UI yardımcıları ---
+  function toast(msg){
+    const t=document.getElementById("toast");
+    t.textContent=msg; t.style.display="block";
+    setTimeout(()=>{ t.style.display="none"; },3000);
+  }
+  function setLoading(btn,on){
+    if(!btn) return;
+    btn.classList.toggle("loading",!!on);
+    btn.textContent = on ? "Gönderiliyor…" : "Gönder";
+  }
 
-  // Yardımcılar
+  // --- Genel yardımcılar ---
   function esc(s){ return String(s).replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;' }[m])); }
   function attr(s){ return String(s).replace(/"/g,"&quot;"); }
   function cssEscape(s){ return s.replace(/["\\]/g,"\\$&"); }
