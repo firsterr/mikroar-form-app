@@ -1,116 +1,4 @@
-[build]
-  publish   = "mikroar-form-app/public"
-  functions = "mikroar-form-app/netlify/functions"
-
-[functions]
-  node_bundler = "esbuild"   # Netlify default
-  external_node_modules = ["@supabase/supabase-js"]
-
-# ---------------------------
-# form.mikroar.com
-# ---------------------------
-
-# Kısa link: /f/:code  → form.html (URL adres çubuğunda aynı kalır; rewrite)
-[[redirects]]
-  from = "/f/*"
-  to   = "/form.html"
-  status = 200
-  force  = true
-  conditions = { Host = ["form.mikroar.com"] }
-
-# API → Functions
-[[redirects]]
-  from = "/api/*"
-  to   = "/.netlify/functions/:splat"
-  status = 200
-  conditions = { Host = ["form.mikroar.com"] }
-
-# Catch-all → form.html (tek sayfa uygulaması)
-[[redirects]]
-  from = "/*"
-  to   = "/form.html"
-  status = 200
-  conditions = { Host = ["form.mikroar.com"] }
-
-  # KÖK → index.html (slug listesi - anahtarlı)
-[[redirects]]
-  from = "/"
-  to   = "/index.html"
-  status = 200
-  conditions = { Host = ["form.mikroar.com"] }
-
-# ---------------------------
-# anket.mikroar.com (admin)
-# ---------------------------
-
-# API → Functions
-[[redirects]]
-  from = "/api/*"
-  to   = "/.netlify/functions/:splat"
-  status = 200
-  conditions = { Host = ["anket.mikroar.com"] }
-
-# Catch-all → admin.html
-[[redirects]]
-  from = "/*"
-  to   = "/admin.html"
-  status = 200
-  conditions = { Host = ["anket.mikroar.com"] }
-
-# ---------------------------
-# Güvenlik & Cache başlıkları
-# ---------------------------
-
-# HTML: kısa cache + zorunlu validasyon
-[[headers]]
-  for = "/*.html"
-  [headers.values]
-    Cache-Control = "public, max-age=60, must-revalidate"
-    Referrer-Policy = "strict-origin-when-cross-origin"
-    X-Content-Type-Options = "nosniff"
-    X-Frame-Options = "DENY"
-    Permissions-Policy = "geolocation=(), microphone=(), camera=()"
-    # CSP'yi alan adına göre daralt (Supabase projeni güncelle)
-    Content-Security-Policy = "default-src 'self'; img-src 'self' data: https:; font-src 'self' https: data:; connect-src 'self' https://*.supabase.co https://*.supabase.in; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; base-uri 'self'; frame-ancestors 'none'"
-
-# Statik varlıklar: uzun ömür + immutable
-[[headers]]
-  for = "/*.{js,css,woff,woff2,png,jpg,jpeg,gif,svg,webp,avif}"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
-
-# Sağlık ucu (Cron ping için)
-[[redirects]]
-  from = "/health"
-  to = "/health.txt"
-  status = 200
-
-# ---------------------------
-# Edge Function (k→slug SSR)
-# ---------------------------
-[[edge_functions]]
-  function = "form-ssr"
-  path     = "/form.html"
-  [build]
-  publish = "mikroar-form-app/public"
-  functions = "mikroar-form-app/netlify/functions"
-
-# /api/* -> Netlify Functions
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
-
-# Edge Function: OG meta enjektesi
-[[edge_functions]]
-  path = "/f/*"
-  function = "form-ssr"
-
-[[edge_functions]]
-  path = "/form.html"
-  function = "form-ssr"
-
-  # netlify.toml (tek ve sade)
+# ===== Netlify config (final) =====
 
 [build]
   publish   = "mikroar-form-app/public"
@@ -122,15 +10,12 @@
   to   = "/.netlify/functions/:splat"
   status = 200
 
-# Edge Function: OG/Twitter meta enjekte – kısa link sayfaları
+# Edge Function: OG/Twitter meta enjeksiyonu (kısa link sayfaları)
 [[edge_functions]]
   function = "form-ssr"
   path     = "/f/*"
 
-# Edge Function: OG/Twitter meta enjekte – form.html
+# Edge Function: OG/Twitter meta enjeksiyonu (form.html)
 [[edge_functions]]
   function = "form-ssr"
   path     = "/form.html"
-  [[edge_functions]]
-  function = "form-ssr"
-  path     = "/f/*"
