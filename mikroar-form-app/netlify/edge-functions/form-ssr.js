@@ -57,6 +57,8 @@ export default async (request, context) => {
     <meta name="twitter:title" content="${esc(meta.title)}" />
     <meta name="twitter:description" content="${esc(meta.description)}" />
     <meta name="twitter:image" content="${meta.image}" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
   `;
 
   return new HTMLRewriter()
