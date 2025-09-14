@@ -4,15 +4,15 @@ const { createClient } = require("@supabase/supabase-js");
 exports.handler = async (event) => {
   try {
     const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "";
-    const hdr = event.headers || {};
-    const token = hdr["x-admin-token"] || hdr["X-Admin-Token"] || (event.queryStringParameters?.token || "");
+    const hdr = toLower(event.headers || {});
+    const q = event.queryStringParameters || {};
+    const token = hdr["x-admin-token"] || q.token || "";
+
     if (!ADMIN_TOKEN || token !== ADMIN_TOKEN) {
-      return { statusCode: 401, body: JSON.stringify({ error: "unauthorized" }) };
+      return { statusCode: 401, headers: { "content-type":"application/json" }, body: JSON.stringify({ error: "unauthorized" }) };
     }
 
-    const url = process.env.SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_ANON_KEY;
-    const sb  = createClient(url, key, { auth: { persistSession: false } });
+    const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_ANON_KEY, { auth: { persistSession: false } });
 
     const { data, error } = await sb
       .from("forms")
@@ -21,12 +21,10 @@ exports.handler = async (event) => {
       .limit(200);
     if (error) throw error;
 
-    return {
-      statusCode: 200,
-      headers: { "content-type":"application/json" },
-      body: JSON.stringify({ items: data || [] })
-    };
+    return { statusCode: 200, headers: { "content-type":"application/json" }, body: JSON.stringify({ items: data || [] }) };
   } catch (e) {
-    return { statusCode: 500, body: JSON.stringify({ error: String(e.message || e) }) };
+    return { statusCode: 500, headers: { "content-type":"application/json" }, body: JSON.stringify({ error: String(e.message || e) }) };
   }
 };
+
+function toLower(h){ const o={}; for(const k in h) o[k.toLowerCase()] = h[k]; return o; }
