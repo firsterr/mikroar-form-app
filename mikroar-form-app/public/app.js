@@ -5,7 +5,22 @@
 
   window.addEventListener("DOMContentLoaded", boot);
 
+  function hasIdent(){
+    const u = new URL(location.href);
+    if (u.searchParams.get("slug") || u.searchParams.get("k")) return true;
+    if (/^\/f\//i.test(location.pathname)) return true;
+    return false;
+  }
+
   async function boot() {
+    // Parametresiz /form.html: liste modu aktif, form yükleme girişimi yok
+    if (!hasIdent()) {
+      skeleton.style.display = "none";
+      errorBox.style.display = "none";
+      app.classList.add("hidden");
+      return;
+    }
+
     skeleton.style.display = "grid";
     errorBox.style.display = "none";
     app.classList.add("hidden");
@@ -37,7 +52,6 @@
   async function fetchForm({ slug, code }) {
     const qs = slug ? `slug=${encodeURIComponent(slug)}` :
               code ? `k=${encodeURIComponent(code)}` : "";
-    if (!qs) throw new Error("missing-ident");
     const res = await fetch(`/api/forms?${qs}`, { headers:{ "accept":"application/json" } });
     const data = await res.json();
     if (!res.ok || !data?.ok) throw new Error("form-not-found");
@@ -61,7 +75,8 @@
       const name = attr(id);
       const reqAttr = required ? "required" : "";
 
-      h.push(`<div class="q" data-index="${i}" data-required="${required ? "1" : ""}" data-name="${name}">
+      // tabindex=-1 → programatik odaklanabilir; mobilde odak + kaydırma güvenilir
+      h.push(`<div class="q" tabindex="-1" data-index="${i}" data-required="${required ? "1" : ""}" data-name="${name}">
                 <div class="field"><div><strong>${esc(label)}</strong></div>`);
 
       if (it.type === "radio" && Array.isArray(it.options)) {
@@ -132,7 +147,7 @@
     return async (e) => {
       e.preventDefault();
 
-      // Mobil güvenilir doğrulama + kaydırma
+      // ❶ Mobil güvenilir doğrulama + kesin kaydırma
       const invalid = findFirstInvalid();
       if (invalid) {
         const hint = invalid.querySelector(".hint"); if (hint) hint.style.display = "block";
@@ -158,7 +173,7 @@
         body: JSON.stringify({ form_slug: formSlug, answers, meta })
       });
 
-      // Teşekkür sayfası — SLUG gizli (sessionStorage ile durum aktarımı)
+      // ❷ Teşekkür: slug gizli (sessionStorage)
       const reason = res.status === 409 ? "duplicate" : (res.ok ? "ok" : "error");
       sessionStorage.setItem("mikroar_thanks", JSON.stringify({ reason }));
       if (res.ok || res.status === 409) { location.href = "/thanks.html"; return; }
@@ -195,18 +210,21 @@
     return null;
   }
 
-  // Mobil güvenilir kaydırma + odak
+  // ❸ Mobil-güvenilir odak + kaydırma (çift aşama + zamanlamalı)
   function smoothFocus(block, focusInput){
-    const target = block;
+    const y = Math.max(0, block.getBoundingClientRect().top + window.scrollY - 100);
+    try { window.scrollTo({ top: y, behavior: "smooth" }); } catch { window.scrollTo(0, y); }
     requestAnimationFrame(() => {
       setTimeout(() => {
-        try { target.scrollIntoView({ behavior:"smooth", block:"center" }); } catch {}
-        const el = target.querySelector(".ctl");
-        if (focusInput && el && typeof el.focus === "function") el.focus({ preventScroll:true });
+        // focus
+        block.focus({ preventScroll: true });
+        const el = block.querySelector(".ctl");
+        if (focusInput && el && typeof el.focus === "function") el.focus({ preventScroll: true });
+        // görsel odak
         const blocks = Array.from(app.querySelectorAll(".q"));
         blocks.forEach(x=>x.classList.remove("focus"));
-        target.classList.add("focus");
-      }, 0);
+        block.classList.add("focus");
+      }, 80);
     });
   }
 
