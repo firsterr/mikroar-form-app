@@ -32,6 +32,13 @@
   status = 200
   conditions = { Host = ["form.mikroar.com"] }
 
+  # KÖK → index.html (slug listesi - anahtarlı)
+[[redirects]]
+  from = "/"
+  to   = "/index.html"
+  status = 200
+  conditions = { Host = ["form.mikroar.com"] }
+
 # ---------------------------
 # anket.mikroar.com (admin)
 # ---------------------------
