@@ -241,73 +241,79 @@
   }
 
   function materializeOptions(node, questions){
-    if (!node || node.dataset.done) return;
-    const type = node.dataset.type;
-    const qid  = node.dataset.qid;
+  if (!node || node.dataset.done) return;
 
-    const spec = questions.find(it => (it.id||it.name||it.key||"") === qid);
-    if (!spec || !Array.isArray(spec.options)) return;
+  const type  = node.dataset.type;
+  const block = node.closest(".q");
+  const idx   = parseInt(block?.dataset.index || "0", 10);
+  const qid   = node.dataset.qid || null;
 
-    let replacement;
-    if (type === "select") {
-      const name = node.closest(".q")?.dataset.name || qid;
-      const sel = document.createElement("select");
-      sel.className = "ctl"; sel.name = name;
-      spec.options.forEach(opt => {
-        const o = document.createElement("option");
-        o.value = typeof opt==="string" ? opt : opt.value;
-        o.textContent = typeof opt==="string" ? opt : (opt.label||opt.value);
-        sel.appendChild(o);
-      });
-      replacement = document.createElement("label");
-      replacement.appendChild(sel);
-    } else {
-      const name = node.closest(".q")?.dataset.name || qid;
-      const wrap = document.createElement("div");
-      spec.options.forEach(opt=>{
-        const val = typeof opt==="string" ? opt : opt.value;
-        const txt = typeof opt==="string" ? opt : (opt.label||opt.value);
-        const label = document.createElement("label");
-        label.innerHTML = `<input class="ctl" type="${type}" name="${attr(name)}" value="${attr(val)}"> ${esc(txt)}`;
-        wrap.appendChild(label);
-      });
-      replacement = wrap;
-    }
+  // Önce id/name/key ile dene, olmazsa index ile yakala
+  let spec = questions.find(it => (it.id || it.name || it.key) === qid);
+  if (!spec) spec = questions[idx];
 
-    node.replaceWith(replacement);
-    node.dataset.done = "1";
-    attachControlBehavior(replacement); // yeni .ctl
+  if (!spec || !Array.isArray(spec.options)) return;
 
-    // Prefetch: sonraki blok(lar)
-    const thisBlock = replacement.closest(".q");
-    const n1 = nextBlock(thisBlock)?.querySelector(".lazy-opts");
-    if (n1) materializeOptions(n1, questions);
-    const n2 = nextBlock(nextBlock(thisBlock))?.querySelector(".lazy-opts");
-    if (n2) (window.requestIdleCallback || setTimeout)(()=> materializeOptions(n2, questions), 150);
-  }
-
-  function attachControlBehavior(root){
-    root.querySelectorAll?.(".ctl")?.forEach(el=>{
-      el.addEventListener("change",(e)=>{
-        const b = e.target.closest(".q"); if(!b) return;
-        b.classList.add("checked");
-
-        // Prefetch
-        const next = nextBlock(b);
-        if (next) {
-          const nLazy = next.querySelector(".lazy-opts");
-          if (nLazy) materializeOptions(nLazy, collectQuestions());
-          const nn = nextBlock(next)?.querySelector(".lazy-opts");
-          if (nn) (window.requestIdleCallback || setTimeout)(()=> materializeOptions(nn, collectQuestions()), 150);
-        }
-
-        const hint=b.querySelector(".hint"); if(hint) hint.style.display="none";
-        const nb = nextBlock(b); if (nb) smoothFocus(nb);
-        updateProgress();
-      });
-      el.addEventListener("input", updateProgress);
+  let replacement;
+  if (type === "select") {
+    const name = block?.dataset.name || (spec.id || spec.name || spec.key || `q${idx+1}`);
+    const sel = document.createElement("select");
+    sel.className = "ctl"; sel.name = name;
+    spec.options.forEach(opt => {
+      const o = document.createElement("option");
+      o.value = typeof opt==="string" ? opt : opt.value;
+      o.textContent = typeof opt==="string" ? opt : (opt.label||opt.value);
+      sel.appendChild(o);
     });
+    replacement = document.createElement("label");
+    replacement.appendChild(sel);
+  } else {
+    const name = block?.dataset.name || (spec.id || spec.name || spec.key || `q${idx+1}`);
+    const wrap = document.createElement("div");
+    spec.options.forEach(opt=>{
+      const val = typeof opt==="string" ? opt : opt.value;
+      const txt = typeof opt==="string" ? opt : (opt.label||opt.value);
+      const label = document.createElement("label");
+      label.innerHTML = `<input class="ctl" type="${type}" name="${attr(name)}" value="${attr(val)}"> ${esc(txt)}`;
+      wrap.appendChild(label);
+    });
+    replacement = wrap;
   }
+
+  node.replaceWith(replacement);
+  node.dataset.done = "1";
+  attachControlBehavior(replacement);
+
+  // Prefetch: bir sonraki(ler)i erken hazırla
+  const n1 = nextBlock(block)?.querySelector(".lazy-opts");
+  if (n1) materializeOptions(n1, questions);
+  const n2 = nextBlock(nextBlock(block))?.querySelector(".lazy-opts");
+  if (n2) (window.requestIdleCallback || setTimeout)(()=> materializeOptions(n2, questions), 150);
+}
+
+ function attachControlBehavior(root){
+  if (!root || !root.querySelectorAll) return;
+  root.querySelectorAll(".ctl").forEach(el=>{
+    el.addEventListener("change",(e)=>{
+      const b = e.target.closest(".q"); if(!b) return;
+      b.classList.add("checked");
+
+      // Prefetch
+      const next = nextBlock(b);
+      if (next) {
+        const nLazy = next.querySelector(".lazy-opts");
+        if (nLazy) materializeOptions(nLazy, collectQuestions());
+        const nn = nextBlock(next)?.querySelector(".lazy-opts");
+        if (nn) (window.requestIdleCallback || setTimeout)(()=> materializeOptions(nn, collectQuestions()), 150);
+      }
+
+      const hint=b.querySelector(".hint"); if(hint) hint.style.display="none";
+      const nb = nextBlock(b); if (nb) smoothFocus(nb);
+      updateProgress();
+    });
+    el.addEventListener("input", updateProgress);
+  });
+}
   function collectQuestions(){ return []; } // lazy lookup için stub
 
   // INVALID geri bildirimi
