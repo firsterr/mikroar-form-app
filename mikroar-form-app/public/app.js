@@ -13,7 +13,7 @@
   }
 
   async function boot() {
-    // Parametresiz /form.html: liste modu aktif, form yükleme girişimi yok
+    // parametresiz /form.html: liste modu var → formu yükleme
     if (!hasIdent()) {
       skeleton.style.display = "none";
       errorBox.style.display = "none";
@@ -63,6 +63,17 @@
     const q = Array.isArray(s.questions) ? s.questions : [];
 
     const h = [];
+    h.push(`<style>
+      .btn { padding:10px 16px; border-radius:10px; border:1px solid #111; background:#111; color:#fff; }
+      .btn.loading { opacity:.8; pointer-events:none }
+      .toast { position:sticky; top:0; background:#fff7f7; border:1px solid #ffd3d3; color:#b00020; padding:10px 12px; border-radius:10px; margin-bottom:10px; display:none }
+      .q { padding:12px; border-radius:12px; transition: background 200ms, box-shadow 200ms; scroll-margin-top: 100px; }
+      .q.focus { background:#f9fafb; box-shadow: inset 0 0 0 2px #e5e7eb; }
+      .q.checked { background:#fffef2; box-shadow: inset 0 0 0 2px #fde68a; }
+      label { display:block; margin:6px 0; cursor:pointer; }
+    </style>`);
+
+    h.push(`<div id="toast" class="toast"></div>`);
     h.push(`<h1>${esc(form.title || "Anket")}</h1>`);
     if (form.description) h.push(`<p>${esc(form.description)}</p>`);
     h.push(`<form id="f" autocomplete="on">`);
@@ -75,7 +86,6 @@
       const name = attr(id);
       const reqAttr = required ? "required" : "";
 
-      // tabindex=-1 → programatik odaklanabilir; mobilde odak + kaydırma güvenilir
       h.push(`<div class="q" tabindex="-1" data-index="${i}" data-required="${required ? "1" : ""}" data-name="${name}">
                 <div class="field"><div><strong>${esc(label)}</strong></div>`);
 
@@ -110,7 +120,7 @@
       h.push(`</div></div>`);
     }
 
-    h.push(`<div class="field"><button class="btn" type="submit">Gönder</button></div>`);
+    h.push(`<div class="field"><button id="submitBtn" class="btn" type="submit">Gönder</button></div>`);
     h.push(`
       <div style="margin-top:12px; color:#6b7280; font-size:12px; line-height:1.4">
         Bu form mikroar.com alanında oluşturuldu.<br>
@@ -121,7 +131,7 @@
     h.push(`</form>`);
     app.innerHTML = h.join("");
 
-    // “seçince aşağı kay” + hafif vurgu
+    // “Seçince aşağı kay” + hafif vurgu
     const blocks = Array.from(app.querySelectorAll(".q"));
     blocks.forEach((b, idx) => {
       b.addEventListener("click", () => setFocus(idx));
@@ -146,12 +156,17 @@
   function onSubmit(formSlug) {
     return async (e) => {
       e.preventDefault();
+      const btn = document.getElementById("submitBtn");
+      setLoading(btn, true);
 
-      // ❶ Mobil güvenilir doğrulama + kesin kaydırma
+      // Zorunlu kontrol + toast + kesin odak
       const invalid = findFirstInvalid();
       if (invalid) {
+        toast("Lütfen zorunlu soruları doldurun.");
         const hint = invalid.querySelector(".hint"); if (hint) hint.style.display = "block";
         smoothFocus(invalid, true);
+        setLoading(btn, false);
+        try { if (navigator.vibrate) navigator.vibrate(40); } catch {}
         return;
       }
 
@@ -171,20 +186,30 @@
         method: "POST",
         headers: { "content-type":"application/json" },
         body: JSON.stringify({ form_slug: formSlug, answers, meta })
-      });
+      }).catch(()=>null);
 
-      // ❷ Teşekkür: slug gizli (sessionStorage)
-      const reason = res.status === 409 ? "duplicate" : (res.ok ? "ok" : "error");
+      // Teşekkür: slug gizli (sessionStorage)
+      const reason = res && res.status === 409 ? "duplicate" : (res && res.ok ? "ok" : "error");
       sessionStorage.setItem("mikroar_thanks", JSON.stringify({ reason }));
-      if (res.ok || res.status === 409) { location.href = "/thanks.html"; return; }
+      if (res && (res.ok || res.status === 409)) { location.href = "/thanks.html"; return; }
 
-      let msg = "Kaydetme hatası.";
-      try { const d = await res.json(); msg = d.detail || d.error || msg; } catch {}
-      alert(msg);
+      setLoading(btn, false);
+      toast("Kaydetme hatası. Lütfen tekrar deneyin.");
     };
   }
 
-  // Zorunlu bloğu bul
+  // --------- helpers ----------
+  function toast(msg){
+    const t = document.getElementById("toast");
+    t.textContent = msg; t.style.display = "block";
+    setTimeout(()=>{ t.style.display = "none"; }, 3000);
+  }
+  function setLoading(btn, on){
+    if (!btn) return;
+    btn.classList.toggle("loading", !!on);
+    btn.textContent = on ? "Gönderiliyor…" : "Gönder";
+  }
+
   function findFirstInvalid(){
     const blocks = Array.from(app.querySelectorAll(".q"));
     for (const b of blocks) {
@@ -210,17 +235,14 @@
     return null;
   }
 
-  // ❸ Mobil-güvenilir odak + kaydırma (çift aşama + zamanlamalı)
   function smoothFocus(block, focusInput){
     const y = Math.max(0, block.getBoundingClientRect().top + window.scrollY - 100);
     try { window.scrollTo({ top: y, behavior: "smooth" }); } catch { window.scrollTo(0, y); }
     requestAnimationFrame(() => {
       setTimeout(() => {
-        // focus
         block.focus({ preventScroll: true });
         const el = block.querySelector(".ctl");
         if (focusInput && el && typeof el.focus === "function") el.focus({ preventScroll: true });
-        // görsel odak
         const blocks = Array.from(app.querySelectorAll(".q"));
         blocks.forEach(x=>x.classList.remove("focus"));
         block.classList.add("focus");
