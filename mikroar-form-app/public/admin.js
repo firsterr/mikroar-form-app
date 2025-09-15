@@ -1,19 +1,28 @@
-// MikroAR Admin — login gate + modern builder + sticky action bar (FINAL POLISHED)
+// MikroAR Admin — HOTFIX: eski tarayıcı uyumu + error boundary (FINAL)
 (function () {
   const app = document.getElementById("app");
 
-  // ----------------- helpers -----------------
-  const el = (t, a = {}, ...kids) => {
-    const d = document.createElement(t);
-    for (const [k, v] of Object.entries(a)) {
-      if (k === "class") d.className = v;
-      else if (k === "style") d.style.cssText = v;
-      else if (k.startsWith("on") && typeof v === "function") d.addEventListener(k.slice(2), v);
-      else if (v !== null && v !== undefined) d.setAttribute(k, v);
+  // ----------------- helpers (compatible) -----------------
+  function el(tag, attrs, /* ...children */) {
+    const node = document.createElement(tag);
+    if (attrs) {
+      for (const k in attrs) {
+        const v = attrs[k];
+        if (k === "class") node.className = v;
+        else if (k === "style") node.style.cssText = v;
+        else if (k.startsWith("on") && typeof v === "function") node.addEventListener(k.slice(2), v);
+        else if (v !== null && v !== undefined) node.setAttribute(k, v);
+      }
     }
-    for (const k of kids.flat()) d.append(k);
-    return d;
-  };
+    for (let i = 2; i < arguments.length; i++) {
+      const c = arguments[i];
+      if (c == null) continue;
+      if (typeof c === "string") node.insertAdjacentHTML("beforeend", c);
+      else if (Array.isArray(c)) c.forEach(x => x && node.appendChild(x));
+      else node.appendChild(c);
+    }
+    return node;
+  }
   const qs  = (s, r=document) => r.querySelector(s);
   const esc = s => String(s ?? "").replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m]));
   const clone = o => JSON.parse(JSON.stringify(o));
@@ -41,27 +50,50 @@
 
   // ----------------- boot -----------------
   document.addEventListener("DOMContentLoaded", init);
+  function safeMount(nodeBuilder) {
+    try {
+      app.innerHTML = "";
+      app.appendChild(nodeBuilder());
+    } catch (e) {
+      console.error("Admin UI crash:", e);
+      app.innerHTML = "";
+      app.appendChild(el("div", { class:"shell" },
+        el("style", {}, `
+          .shell{max-width:860px;margin:64px auto;padding:0 16px;font:14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+          .card{border:1px solid #e5e7eb;border-radius:16px;padding:16px}
+          .btn{padding:10px 14px;border:1px solid #111;background:#111;color:#fff;border-radius:12px;cursor:pointer}
+          .err{color:#b00020;margin-top:8px}
+        `),
+        el("div", { class:"card" },
+          el("h3", {}, "Beklenmeyen bir hata oluştu"),
+          el("div", { class:"err" }, "Arayüz render edilirken istisna yakalandı. Konsolu kontrol edin."),
+          el("div", { style:"margin-top:10px;display:flex;gap:8px" },
+            el("button", { class:"btn", onclick: ()=>renderLogin("Lütfen tekrar giriş yapın.") }, "Geri dön"),
+            el("button", { class:"btn", onclick: ()=>location.reload() }, "Sayfayı yenile")
+          )
+        )
+      ));
+    }
+  }
 
   async function init(){
-    renderLogin(); // her zaman önce login ekranı
+    safeMount(buildLogin);
     const cached = store.token;
     if (cached) qs("#tokenInput").value = cached;
   }
 
   // ----------------- views -----------------
-  function renderLogin(msg){
-    app.innerHTML = "";
-    app.append(
+  function buildLogin(){
+    return el("div", {},
       el("style", {}, `
         :root{ --fg:#111; --muted:#6b7280; --bd:#e5e7eb; --accent:#111; }
-        body{ font:14px system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#fff; color:var(--fg) }
+        body{ font:14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:#fff; color:var(--fg) }
         .shell{ max-width:860px; margin:64px auto; padding:0 16px }
         .title{ font-weight:800; font-size:32px; text-align:center; margin:24px 0 32px }
         .card{ border:1px solid var(--bd); border-radius:16px; padding:16px; }
         .col{ display:flex; flex-direction:column; gap:8px; }
         .input{ padding:12px; border:1px solid var(--bd); border-radius:12px; width:100%; }
-        .btn{ padding:12px 16px; border:1px solid var(--accent); background:var(--accent); color:#fff; border-radius:12px; cursor:pointer; transition:.15s transform }
-        .btn:active{ transform:translateY(1px) }
+        .btn{ padding:12px 16px; border:1px solid var(--accent); background:var(--accent); color:#fff; border-radius:12px; cursor:pointer }
         .muted{ color:var(--muted) }
         .error{ color:#b00020; margin-top:8px }
       `),
@@ -74,25 +106,27 @@
             el("div", { style:"display:flex; justify-content:flex-end" },
               el("button", { class:"btn", onclick: onLogin }, "Giriş")
             ),
-            el("div", { id:"loginMsg", class: msg ? "error" : "muted" },
-              msg || "Yalnızca ADMIN_TOKEN ile giriş yapılır."
-            )
+            el("div", { id:"loginMsg", class:"muted" }, "Yalnızca ADMIN_TOKEN ile giriş yapılır.")
           )
         )
       )
     );
   }
+  function renderLogin(msg){
+    safeMount(buildLogin);
+    if (msg) { const m = qs("#loginMsg"); if (m) { m.textContent = msg; m.className = /hata|doğrulanamadı/i.test(msg) ? "error" : "muted"; } }
+    const cached = store.token; if (cached) qs("#tokenInput").value = cached;
+  }
 
-  function renderApp(){
-    app.innerHTML = "";
-    app.append(
+  function buildApp(){
+    return el("div", {},
       el("style", {}, `
         :root{ --fg:#111; --muted:#6b7280; --bd:#e5e7eb; --accent:#111; }
-        body{ font:14px system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:var(--fg) }
+        body{ font:14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:var(--fg) }
         .shell{ max-width:1100px; margin:24px auto; padding:0 16px }
         .topbar{ display:flex; justify-content:space-between; align-items:center; margin:8px 0 16px }
         .title{ font-weight:800; font-size:24px }
-        .btn{ padding:10px 14px; border:1px solid var(--accent); background:var(--accent); color:#fff; border-radius:12px; cursor:pointer; transition:.15s transform }
+        .btn{ padding:10px 14px; border:1px solid var(--accent); background:var(--accent); color:#fff; border-radius:12px; cursor:pointer }
         .btn.ghost{ background:#fff; color:var(--accent) }
         .btn.small{ padding:8px 10px; font-size:12px }
         .btn.loading{ opacity:.7; pointer-events:none; position:relative }
@@ -108,26 +142,12 @@
         .qrow{ display:grid; grid-template-columns: 1fr 120px 120px 120px auto; gap:10px; align-items:start }
         .qrow .full{ grid-column:1/-1 }
         @media (max-width:980px){ .qrow{ grid-template-columns:1fr } }
-
-        /* Sticky action bar */
-        .actionbar{
-          position:fixed; left:0; right:0; bottom:0;
-          padding:10px max(16px, env(safe-area-inset-left)) calc(10px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-right));
-          background:linear-gradient(to top, rgba(250,250,250,.98), rgba(250,250,250,.88));
-          border-top:1px solid var(--bd);
-          display:flex; gap:10px; justify-content:center; z-index:50; backdrop-filter:saturate(1.1) blur(6px);
-        }
-        .spacer{ height:80px } /* actionbar için alt boşluk */
-        .toast{
-          position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
-          background:#111; color:#fff; padding:10px 14px; border-radius:12px; z-index:60; box-shadow:0 6px 20px rgba(0,0,0,.16);
-          opacity:0; pointer-events:none; transition:.25s opacity, .25s transform;
-        }
+        .actionbar{ position:fixed; left:0; right:0; bottom:0; padding:10px 16px calc(10px + env(safe-area-inset-bottom)); background:linear-gradient(to top, rgba(250,250,250,.98), rgba(250,250,250,.88)); border-top:1px solid var(--bd); display:flex; gap:10px; justify-content:center; z-index:50; backdrop-filter:saturate(1.1) blur(6px) }
+        .spacer{ height:80px }
+        .toast{ position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#111; color:#fff; padding:10px 14px; border-radius:12px; z-index:60; box-shadow:0 6px 20px rgba(0,0,0,.16); opacity:0; pointer-events:none; transition:.25s opacity,.25s transform }
         .toast.show{ opacity:1; transform:translateX(-50%) translateY(-4px) }
       `),
       el("div", { class:"shell" },
-
-        // topbar
         el("div", { class:"topbar" },
           el("div", { class:"title" }, "MikroAR Admin"),
           el("div", { class:"row" },
@@ -136,8 +156,6 @@
             el("button", { class:"btn ghost", onclick: onLogout }, "Çıkış")
           )
         ),
-
-        // liste + oluştur
         el("div", { class:"card" },
           el("div", { class:"grid2" },
             el("div", { class:"col" },
@@ -156,8 +174,6 @@
             )
           )
         ),
-
-        // meta
         el("div", { id:"meta", class:"card", style:"display:none" },
           el("div", { class:"grid2" },
             el("div", { class:"col" },
@@ -177,8 +193,6 @@
             el("textarea", { id:"desc", rows:"2", oninput: e=>state.description = e.target.value })
           )
         ),
-
-        // builder
         el("div", { id:"builder", class:"card", style:"display:none" },
           el("div", { style:"display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;" },
             el("b", {}, "Sorular"),
@@ -190,34 +204,25 @@
           ),
           el("div", { id:"qList" })
         ),
-
-        el("div", { class:"spacer" }) // actionbar için boşluk
+        el("div", { class:"spacer" })
       ),
-
-      // Sticky action bar
       el("div", { id:"actionbar", class:"actionbar", style:"display:none" },
         el("button", { id:"saveBtn", class:"btn", onclick: onSave }, "Kaydet / Yayınla"),
         el("button", { class:"btn ghost", onclick: onClearEditor }, "Ekranı Boşalt")
       ),
-
-      // Toast
       el("div", { id:"toast", class:"toast" }, "Kaydedildi ✓")
     );
-
-    // listeyi yükle
-    loadList().catch(()=> setStatus("Liste alınamadı", true));
   }
+  function renderApp(){ safeMount(buildApp); loadList().catch(()=> setStatus("Liste alınamadı", true)); }
 
   // ----------------- login flow -----------------
   async function onLogin(){
-    const token = qs("#tokenInput").value.trim();
+    const token = (qs("#tokenInput").value || "").trim();
     if (!token) return setLoginMsg("Token gerekli");
     setLoginMsg("Doğrulanıyor…");
     const ok = await testToken(token);
     if (!ok) return setLoginMsg("Yetki doğrulanamadı (401).");
-    store.token = token;
-    state.token = token;
-    state.authed = true;
+    store.token = token; state.token = token; state.authed = true;
     renderApp();
   }
   function onLogout(){
@@ -225,7 +230,7 @@
     state = { authed:false, token:"", list:[], slug:"", title:"", description:"", active:true, questions:[], saving:false };
     renderLogin("Çıkış yapıldı.");
   }
-  function setLoginMsg(m){ qs("#loginMsg").textContent = m; qs("#loginMsg").className = /doğrulanıyor/i.test(m) ? "muted" : ( /hata|yetki|gerekli/i.test(m) ? "error" : "muted" ); }
+  function setLoginMsg(m){ const n=qs("#loginMsg"); if(n){ n.textContent=m; n.className = /doğrulanıyor/i.test(m) ? "muted" : (/hata|yetki|gerekli/i.test(m) ? "error" : "muted"); } }
   async function testToken(token){
     try { const r = await fetch(`/api/forms-list?token=${encodeURIComponent(token)}`); return r.ok; } catch { return false; }
   }
@@ -239,16 +244,13 @@
     state.list = d.items || [];
     const sel = qs("#formList");
     sel.innerHTML = `<option value="">— seç —</option>`;
-    state.list.forEach(it => sel.append(el("option", { value: it.slug }, `${it.slug} — ${it.title || ""}`)));
+    for (let i=0;i<state.list.length;i++){
+      const it = state.list[i];
+      sel.appendChild(el("option", { value: it.slug }, `${it.slug} — ${it.title || ""}`));
+    }
     setStatus("Hazır");
   }
-
-  async function onLoadSelected(){
-    const s = qs("#formList").value;
-    if (!s) return;
-    await loadForm(s);
-  }
-
+  async function onLoadSelected(){ const s = qs("#formList").value; if (!s) return; await loadForm(s); }
   async function loadForm(slug){
     setStatus(`Yükleniyor: ${slug}…`);
     const r = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`).catch(()=>null);
@@ -268,26 +270,17 @@
     qs("#active").value = state.active ? "true" : "false";
     qs("#meta").style.display = "";
     qs("#builder").style.display = "";
-    qs("#actionbar").style.display = ""; // sticky bar aç
+    qs("#actionbar").style.display = "";
     renderQuestions();
     setStatus(`Yüklendi: ${slug}`);
   }
-
   function onCreateNew(){
     const slugInp = qs("#newSlug");
-    const slug = (slugInp.value || "").trim() || prompt("Yeni form için slug (örn: blkhizmet)");
+    const slug = (slugInp && slugInp.value ? slugInp.value.trim() : "") || prompt("Yeni form için slug (örn: blkhizmet)");
     if (!slug) return;
-    state.slug = slug;
-    state.title = "";
-    state.description = "";
-    state.active = true;
-    state.questions = [];
-    qs("#title").value = "";
-    qs("#desc").value  = "";
-    qs("#active").value = "true";
-    qs("#meta").style.display = "";
-    qs("#builder").style.display = "";
-    qs("#actionbar").style.display = "";
+    state.slug = slug; state.title = ""; state.description = ""; state.active = true; state.questions = [];
+    qs("#title").value = ""; qs("#desc").value = ""; qs("#active").value = "true";
+    qs("#meta").style.display = ""; qs("#builder").style.display = ""; qs("#actionbar").style.display = "";
     renderQuestions();
     setStatus(`Yeni form: ${state.slug}`);
   }
@@ -295,22 +288,16 @@
   // ----------------- builder -----------------
   function renderQuestions(){
     const host = qs("#qList"); host.innerHTML = "";
-    if (!state.questions.length) {
-      host.append(el("div", { class:"muted" }, "Henüz soru yok. “+ Soru ekle” ile başlayın."));
-      return;
-    }
-    state.questions.forEach((q, i) => host.append(renderRow(q, i)));
+    if (!state.questions.length) { host.appendChild(el("div", { class:"muted" }, "Henüz soru yok. “+ Soru ekle” ile başlayın.")); return; }
+    for (let i=0;i<state.questions.length;i++) host.appendChild(renderRow(state.questions[i], i));
   }
-
   function renderRow(q, i){
-    const row = el("div", { class:"card" },
+    return el("div", { class:"card" },
       el("div", { class:"qrow" },
-        // etiket
         el("div", { class:"col" },
           el("label", {}, `Soru ${i+1} — Etiket`),
           el("input", { class:"input", value:q.label||"", oninput:e=>{ q.label = e.target.value; } })
         ),
-        // tip
         el("div", { class:"col" },
           el("label", {}, "Tip"),
           el("select", { class:"input", onchange:e=>{ q.type=e.target.value; if(!needsOptions(q.type)){ delete q.options; delete q.other; } renderQuestions(); } },
@@ -318,7 +305,6 @@
             opt("checkbox", q.type), opt("select", q.type)
           )
         ),
-        // required
         el("div", { class:"col" },
           el("label", {}, "Zorunlu mu?"),
           el("select", { class:"input", onchange:e=>{ q.required = (e.target.value==="true"); } },
@@ -326,7 +312,6 @@
             el("option", { value:"false", selected:!q.required?"selected":null }, "Hayır")
           )
         ),
-        // Diğer şıkkı (yalnız radio/checkbox)
         el("div", { class:"col" },
           el("label", {}, "Diğer şıkkı"),
           (q.type==="radio" || q.type==="checkbox")
@@ -336,15 +321,12 @@
               )
             : el("div", { class:"muted" }, "—")
         ),
-        // araçlar
         el("div", { class:"row", style:"justify-content:flex-end" },
           el("button", { class:"btn small ghost", onclick: ()=>move(i,-1) }, "↑"),
           el("button", { class:"btn small ghost", onclick: ()=>move(i, 1) }, "↓"),
           el("button", { class:"btn small ghost", onclick: ()=>dup(i) }, "Kopyala"),
           el("button", { class:"btn small",       onclick: ()=>del(i) }, "Sil")
         ),
-
-        // seçenekler alanı
         needsOptions(q.type)
           ? el("div", { class:"col full" },
               el("label", {}, "Seçenekler (her satır bir seçenek)"),
@@ -354,7 +336,6 @@
           : null
       )
     );
-    return row;
   }
   function opt(v, cur){ return el("option", { value:v, selected: cur===v ? "selected" : null }, v); }
   function move(i,d){ const j=i+d; if(j<0||j>=state.questions.length) return; const t=state.questions[i]; state.questions[i]=state.questions[j]; state.questions[j]=t; renderQuestions(); }
@@ -374,53 +355,36 @@
       title: state.title,
       description: state.description,
       active: !!state.active,
-      schema: {
-        title: state.title,
-        description: state.description,
-        questions: state.questions.map(q => normalizeQuestion(q))
-      }
+      schema: { title: state.title, description: state.description,
+        questions: state.questions.map(q => normalizeQuestion(q)) }
     };
 
     const r = await fetch(`/api/forms-admin?token=${encodeURIComponent(store.token)}`, {
-      method:"POST",
-      headers:{ "content-type":"application/json" },
-      body: JSON.stringify(payload)
+      method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(payload)
     }).catch(()=>null);
 
-    state.saving = false;
-    if (btn) btn.classList.remove("loading");
+    state.saving = false; if (btn) btn.classList.remove("loading");
 
     if (!r || !r.ok) { setStatus("Kaydetme HATASI", true); toast("Kaydedilemedi. Tekrar deneyin."); return; }
-
-    setStatus("Kaydedildi");
-    toast("Kaydedildi ✓");
+    setStatus("Kaydedildi"); toast("Kaydedildi ✓");
   }
-
   function normalizeQuestion(q){
     const out = { type: q.type || "text", label: q.label || "", required: !!q.required };
     if (needsOptions(q.type)) {
       out.options = Array.isArray(q.options) ? q.options : [];
-      if ((q.type==="radio" || q.type==="checkbox") && q.other === true) out.other = true; // yalnız işaretlenmişse
+      if ((q.type==="radio" || q.type==="checkbox") && q.other === true) out.other = true;
     }
     return out;
   }
-
   function onExport(){
     if (!state.slug) { toast("Önce bir form yükleyin/oluşturun."); return; }
-    const data = {
-      slug: state.slug,
-      title: state.title,
-      description: state.description,
-      active: !!state.active,
-      schema: { title: state.title, description: state.description, questions: state.questions }
-    };
+    const data = { slug: state.slug, title: state.title, description: state.description,
+      active: !!state.active, schema: { title: state.title, description: state.description, questions: state.questions } };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type:"application/json" });
     const url = URL.createObjectURL(blob);
-    const a = el("a", { href:url, download: (state.slug||"form") + ".json" });
-    document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-    toast("JSON dışa verildi");
+    const a = el("a", { href:url, download: (state.slug||"form") + ".json" }); document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    toast("İçe/dışa aktarım tamam");
   }
-
   function onImport(){
     const inp = el("input", { type:"file", accept:"application/json" });
     inp.addEventListener("change", async ()=>{
@@ -434,15 +398,9 @@
         state.active      = !!(j.active ?? true);
         state.questions   = Array.isArray(j.schema?.questions) ? j.schema.questions :
                             (Array.isArray(j.questions) ? j.questions : []);
-        qs("#title").value = state.title;
-        qs("#desc").value  = state.description;
-        qs("#active").value = state.active ? "true" : "false";
-        qs("#meta").style.display = "";
-        qs("#builder").style.display = "";
-        qs("#actionbar").style.display = "";
-        renderQuestions();
-        setStatus("JSON içe alındı");
-        toast("İçe aktarıldı");
+        qs("#title").value = state.title; qs("#desc").value  = state.description; qs("#active").value = state.active ? "true" : "false";
+        qs("#meta").style.display = ""; qs("#builder").style.display = ""; qs("#actionbar").style.display = "";
+        renderQuestions(); setStatus("JSON içe alındı"); toast("İçe aktarıldı");
       }catch{ setStatus("JSON okunamadı", true); toast("JSON okunamadı"); }
     }, { once:true });
     inp.click();
@@ -450,7 +408,6 @@
 
   // ----------------- clear editor -----------------
   function onClearEditor(){
-    // Hızlı sıfırlama: ekrandaki formu kapat, alanları temizle
     state.slug = ""; state.title=""; state.description=""; state.active=true; state.questions=[];
     if (qs("#title")) qs("#title").value = "";
     if (qs("#desc"))  qs("#desc").value  = "";
@@ -458,10 +415,7 @@
     qs("#meta").style.display = "none";
     qs("#builder").style.display = "none";
     qs("#actionbar").style.display = "none";
-    // list ve yeni form alanları yerinde kalır → kullanıcı yeni forma başlayabilir
-    setStatus("Ekran boşaltıldı");
-    toast("Ekran boşaltıldı");
-    window.scrollTo({ top:0, behavior:"smooth" });
+    setStatus("Ekran boşaltıldı"); toast("Ekran boşaltıldı"); window.scrollTo({ top:0, behavior:"smooth" });
   }
 
   // ----------------- status & toast -----------------
@@ -472,12 +426,9 @@
     clearTimeout(setStatus._t);
     setStatus._t = setTimeout(()=>{ s.className="badge muted"; s.textContent="Hazır"; }, 2500);
   }
-
   function toast(msg){
     const t = qs("#toast"); if (!t) return;
-    t.textContent = msg;
-    t.classList.add("show");
-    clearTimeout(toast._t);
-    toast._t = setTimeout(()=> t.classList.remove("show"), 2200);
+    t.textContent = msg; t.classList.add("show");
+    clearTimeout(toast._t); toast._t = setTimeout(()=> t.classList.remove("show"), 2200);
   }
 })();
