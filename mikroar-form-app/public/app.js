@@ -1,11 +1,4 @@
-// app.js en üstüne (veya renderForm() tanımından önce) koy
-const style = document.createElement("style");
-style.textContent = `
-  .other-wrap{display:flex;align-items:center;gap:8px;margin-top:6px}
-  .other-input{flex:1;min-width:160px;padding:6px 8px;border:1px solid #e5e7eb;border-radius:8px}
-  .other-input[disabled]{opacity:.6}
-`;
-document.head.appendChild(style);
+
 
 (function () {
   const app = document.getElementById("app");
@@ -104,6 +97,9 @@ document.head.appendChild(style);
       .submit-meta{ color:#6b7280; font-size:12px; line-height:1.3; text-align:center }
       .submit-meta b{ font-weight:700 }
       body { padding-bottom: 128px }
+      .other-wrap{display:flex;align-items:center;gap:8px;margin-top:6px}
+.other-input{flex:1;min-width:160px;padding:6px 8px;border:1px solid #e5e7eb;border-radius:8px}
+.other-input[disabled]{opacity:.6}
     </style>`);
 
     h.push(`<div id="toast" class="toast"></div>`);
@@ -156,6 +152,16 @@ for (const opt of it.options) {
   const txt = typeof opt==="string" ? opt : (opt.label||opt.value);
   h.push(`<option value="${attr(val)}">${esc(txt)}</option>`);
 }
+        h.push(`<label class="other-wrap">
+  <input class="ctl other-toggle" type="radio" name="${name}" value="__OTHER__">
+  Diğer:
+  <input type="text" class="other-input" data-other-for="${name}" placeholder="Yazınız" disabled>
+</label>`);
+        h.push(`<label class="other-wrap">
+  <input class="ctl other-toggle" type="checkbox" name="${name}" value="__OTHER__">
+  Diğer:
+  <input type="text" class="other-input" data-other-for="${name}" placeholder="Yazınız" disabled>
+</label>`);
 h.push(`</select></label>`);
       } else if (it.type==="textarea") {
         h.push(`<label><textarea class="ctl" name="${name}" rows="4"></textarea></label>`);
