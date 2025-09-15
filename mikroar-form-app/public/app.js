@@ -1,3 +1,12 @@
+// app.js en üstüne (veya renderForm() tanımından önce) koy
+const style = document.createElement("style");
+style.textContent = `
+  .other-wrap{display:flex;align-items:center;gap:8px;margin-top:6px}
+  .other-input{flex:1;min-width:160px;padding:6px 8px;border:1px solid #e5e7eb;border-radius:8px}
+  .other-input[disabled]{opacity:.6}
+`;
+document.head.appendChild(style);
+
 (function () {
   const app = document.getElementById("app");
   const skeleton = document.getElementById("skeleton");
