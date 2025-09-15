@@ -1,17 +1,11 @@
-
-
+// public/app.js — FINAL
 (function () {
-  const block = node.closest(".q");
-const idx   = parseInt(block?.dataset.index || "0", 10);
-const qid   = node.dataset.qid || null;
-
-let spec = questions.find(it => (it.id || it.name || it.key) === qid);
-if (!spec) spec = questions[idx];
   const app = document.getElementById("app");
   const skeleton = document.getElementById("skeleton");
   const errorBox = document.getElementById("error");
 
   const LAZY_THRESHOLD = 16; // 16+ seçenek → lazy render
+  let CURRENT_QUESTIONS = []; // lazy/prefetch için global şema referansı
 
   window.addEventListener("DOMContentLoaded", boot);
 
@@ -42,7 +36,7 @@ if (!spec) spec = questions[idx];
       app.classList.remove("hidden");
       setupProgress();
 
-      // Pixel: içerik görüntülendi
+      // (opsiyonel) Facebook Pixel varsa ViewContent
       try { if (window.__fbqReady && window.fbq) fbq('track', 'ViewContent', { content_name: form.title, content_category: 'survey' }); } catch {}
     } catch {
       skeleton.style.display="none";
@@ -69,6 +63,7 @@ if (!spec) spec = questions[idx];
   function renderForm(form) {
     const s = form.schema || { questions: [] };
     const q = Array.isArray(s.questions) ? s.questions : [];
+    CURRENT_QUESTIONS = q;
 
     const h = [];
     h.push(`<style>
@@ -103,9 +98,11 @@ if (!spec) spec = questions[idx];
       .submit-meta{ color:#6b7280; font-size:12px; line-height:1.3; text-align:center }
       .submit-meta b{ font-weight:700 }
       body { padding-bottom: 128px }
+
+      /* Diğer alanı */
       .other-wrap{display:flex;align-items:center;gap:8px;margin-top:6px}
-.other-input{flex:1;min-width:160px;padding:6px 8px;border:1px solid #e5e7eb;border-radius:8px}
-.other-input[disabled]{opacity:.6}
+      .other-input{flex:1;min-width:160px;padding:6px 8px;border:1px solid #e5e7eb;border-radius:8px}
+      .other-input[disabled]{opacity:.6}
     </style>`);
 
     h.push(`<div id="toast" class="toast"></div>`);
@@ -144,31 +141,34 @@ if (!spec) spec = questions[idx];
           const txt = typeof opt==="string" ? opt : (opt.label||opt.value);
           h.push(`<label><input class="ctl" type="radio" name="${name}" value="${attr(val)}"> ${esc(txt)}</label>`);
         }
+        // Diğer (radio)
+        h.push(`<label class="other-wrap">
+          <input class="ctl other-toggle" type="radio" name="${name}" value="__OTHER__">
+          Diğer:
+          <input type="text" class="other-input" data-other-for="${name}" placeholder="Yazınız" disabled>
+        </label>`);
       } else if (it.type==="checkbox" && Array.isArray(it.options)) {
         for (const opt of it.options) {
           const val = typeof opt==="string" ? opt : opt.value;
           const txt = typeof opt==="string" ? opt : (opt.label||opt.value);
           h.push(`<label><input class="ctl" type="checkbox" name="${name}" value="${attr(val)}"> ${esc(txt)}</label>`);
         }
+        // Diğer (checkbox)
+        h.push(`<label class="other-wrap">
+          <input class="ctl other-toggle" type="checkbox" name="${name}" value="__OTHER__">
+          Diğer:
+          <input type="text" class="other-input" data-other-for="${name}" placeholder="Yazınız" disabled>
+        </label>`);
       } else if (it.type==="select" && Array.isArray(it.options)) {
+        // Placeholder "Seçiniz…"
         h.push(`<label><select class="ctl" name="${name}">`);
-h.push(`<option value="" disabled selected hidden>Seçiniz…</option>`);
-for (const opt of it.options) {
-  const val = typeof opt==="string" ? opt : opt.value;
-  const txt = typeof opt==="string" ? opt : (opt.label||opt.value);
-  h.push(`<option value="${attr(val)}">${esc(txt)}</option>`);
-}
-        h.push(`<label class="other-wrap">
-  <input class="ctl other-toggle" type="radio" name="${name}" value="__OTHER__">
-  Diğer:
-  <input type="text" class="other-input" data-other-for="${name}" placeholder="Yazınız" disabled>
-</label>`);
-        h.push(`<label class="other-wrap">
-  <input class="ctl other-toggle" type="checkbox" name="${name}" value="__OTHER__">
-  Diğer:
-  <input type="text" class="other-input" data-other-for="${name}" placeholder="Yazınız" disabled>
-</label>`);
-h.push(`</select></label>`);
+        h.push(`<option value="" disabled selected hidden>Seçiniz…</option>`);
+        for (const opt of it.options) {
+          const val = typeof opt==="string" ? opt : opt.value;
+          const txt = typeof opt==="string" ? opt : (opt.label||opt.value);
+          h.push(`<option value="${attr(val)}">${esc(txt)}</option>`);
+        }
+        h.push(`</select></label>`);
       } else if (it.type==="textarea") {
         h.push(`<label><textarea class="ctl" name="${name}" rows="4"></textarea></label>`);
       } else {
@@ -205,10 +205,11 @@ h.push(`</select></label>`);
     document.getElementById("f").addEventListener("submit", onSubmit(form.slug));
     attachRipple(document.getElementById("submitBtn"));
 
-    setupLazyOptions(q);
+    setupLazyOptions(); // CURRENT_QUESTIONS kullanılacak
     window.addEventListener("scroll", throttle(updateProgress, 200), { passive:true });
   }
 
+  // --- Submit akışı
   function onSubmit(formSlug){
     return async (e)=>{
       e.preventDefault();
@@ -226,6 +227,25 @@ h.push(`</select></label>`);
           if (Array.isArray(answers[k])) answers[k].push(v); else answers[k] = [answers[k], v];
         } else { answers[k] = v; }
       }
+
+      // "Diğer" alanlarını düzelt: __OTHER__ → girilen metin
+      for (const name of Object.keys(answers)){
+        const otherInput = document.querySelector(`.other-input[data-other-for="${cssEscape(name)}"]`);
+        if (!otherInput) continue;
+        const v = (otherInput.value || "").trim();
+
+        if (Array.isArray(answers[name])) {
+          const idx = answers[name].indexOf("__OTHER__");
+          if (idx > -1) {
+            if (v) answers[name][idx] = v; else answers[name].splice(idx,1);
+          }
+          if (answers[name].length === 0) delete answers[name];
+        } else {
+          if (answers[name] === "__OTHER__") answers[name] = v || "";
+          if (answers[name] === "") delete answers[name];
+        }
+      }
+
       const meta = { href: location.href, ua: navigator.userAgent };
 
       const res = await fetch("/api/responses", {
@@ -233,7 +253,7 @@ h.push(`</select></label>`);
         body:JSON.stringify({ form_slug:formSlug, answers, meta })
       }).catch(()=>null);
 
-      // Pixel: başarı (Lead) — redirect'ten hemen önce
+      // Pixel: başarı (Lead)
       try { if (window.__fbqReady && window.fbq) fbq('track', 'Lead', { content_name: formSlug }); } catch {}
 
       const reason = res && res.status===409 ? "duplicate" : (res && res.ok ? "ok" : "error");
@@ -245,139 +265,146 @@ h.push(`</select></label>`);
     };
   }
 
-  // Lazy seçenekler + Prefetch
-  function setupLazyOptions(questions){
+  // --- Lazy seçenekler + Prefetch ---
+  function setupLazyOptions(){
     const nodes = app.querySelectorAll(".lazy-opts");
     const io = ("IntersectionObserver" in window)
       ? new IntersectionObserver((entries)=>{
           entries.forEach(e=>{
-            if (e.isIntersecting) { materializeOptions(e.target, questions); io.unobserve(e.target); }
+            if (e.isIntersecting) { materializeOptions(e.target); io.unobserve(e.target); }
           });
         }, { rootMargin: "200px" })
       : null;
 
     nodes.forEach(n=>{
-      if (io) io.observe(n); else materializeOptions(n, questions);
-      n.closest(".q")?.addEventListener("focusin", ()=> materializeOptions(n, questions), { once:true });
+      if (io) io.observe(n); else materializeOptions(n);
+      n.closest(".q")?.addEventListener("focusin", ()=> materializeOptions(n), { once:true });
     });
   }
 
-  function materializeOptions(node, questions){
-  if (!node || node.dataset.done) return;
+  function materializeOptions(node){
+    if (!node || node.dataset.done) return;
 
-  const type  = node.dataset.type;
-  const block = node.closest(".q");
-  const idx   = parseInt(block?.dataset.index || "0", 10);
-  const qid   = node.dataset.qid || null;
+    const type  = node.dataset.type;
+    const block = node.closest(".q");
+    const idx   = parseInt(block?.dataset.index || "0", 10);
+    const qid   = node.dataset.qid || null;
 
-  // Önce id/name/key ile dene, olmazsa index ile yakala
-  let spec = questions.find(it => (it.id || it.name || it.key) === qid);
-  if (!spec) spec = questions[idx];
+    // Şemayı bul: önce id/name/key, olmazsa index
+    let spec = CURRENT_QUESTIONS.find(it => (it.id || it.name || it.key) === qid);
+    if (!spec) spec = CURRENT_QUESTIONS[idx];
+    if (!spec || !Array.isArray(spec.options)) return;
 
-  if (!spec || !Array.isArray(spec.options)) return;
+    let replacement;
+    if (type === "select") {
+      const name = block?.dataset.name || (spec.id || spec.name || spec.key || `q${idx+1}`);
+      const sel = document.createElement("select");
+      sel.className = "ctl"; sel.name = name;
 
-  let replacement;
-if (type === "select") {
-  const name = block?.dataset.name || (spec.id || spec.name || spec.key || `q${idx+1}`);
-  const sel = document.createElement("select");
-  sel.className = "ctl"; sel.name = name;
+      // Placeholder
+      const ph = document.createElement("option");
+      ph.value = ""; ph.textContent = "Seçiniz…"; ph.disabled = true; ph.selected = true; ph.hidden = true;
+      sel.appendChild(ph);
 
-  // Placeholder
-  const ph = document.createElement("option");
-  ph.value = ""; ph.textContent = "Seçiniz…"; ph.disabled = true; ph.selected = true; ph.hidden = true;
-  sel.appendChild(ph);
+      spec.options.forEach(opt => {
+        const o = document.createElement("option");
+        o.value = typeof opt==="string" ? opt : opt.value;
+        o.textContent = typeof opt==="string" ? opt : (opt.label||opt.value);
+        sel.appendChild(o);
+      });
+      replacement = document.createElement("label");
+      replacement.appendChild(sel);
+    } else {
+      const name = block?.dataset.name || (spec.id || spec.name || spec.key || `q${idx+1}`);
+      const wrap = document.createElement("div");
+      spec.options.forEach(opt=>{
+        const val = typeof opt==="string" ? opt : opt.value;
+        const txt = typeof opt==="string" ? opt : (opt.label||opt.value);
+        const label = document.createElement("label");
+        label.innerHTML = `<input class="ctl" type="${type}" name="${attr(name)}" value="${attr(val)}"> ${esc(txt)}`;
+        wrap.appendChild(label);
+      });
+      // Diğer seçeneği
+      const other = document.createElement("label");
+      other.className = "other-wrap";
+      other.innerHTML = `
+        <input class="ctl other-toggle" type="${type}" name="${attr(name)}" value="__OTHER__">
+        Diğer:
+        <input type="text" class="other-input" data-other-for="${attr(name)}" placeholder="Yazınız" disabled>
+      `;
+      wrap.appendChild(other);
+      replacement = wrap;
+    }
 
-  spec.options.forEach(opt => {
-    const o = document.createElement("option");
-    o.value = typeof opt==="string" ? opt : opt.value;
-    o.textContent = typeof opt==="string" ? opt : (opt.label||opt.value);
-    sel.appendChild(o);
-  });
-  replacement = document.createElement("label");
-  replacement.appendChild(sel);
-} else {
-    const name = block?.dataset.name || (spec.id || spec.name || spec.key || `q${idx+1}`);
-    const wrap = document.createElement("div");
-    spec.options.forEach(opt=>{
-      const val = typeof opt==="string" ? opt : opt.value;
-      const txt = typeof opt==="string" ? opt : (opt.label||opt.value);
-      const label = document.createElement("label");
-      label.innerHTML = `<input class="ctl" type="${type}" name="${attr(name)}" value="${attr(val)}"> ${esc(txt)}`;
-      wrap.appendChild(label);
-    });
-    replacement = wrap;
+    node.replaceWith(replacement);
+    node.dataset.done = "1";
+    attachControlBehavior(replacement); // yeni .ctl / other davranışları
+
+    // Prefetch: sonraki blok(lar)
+    const n1 = nextBlock(block)?.querySelector(".lazy-opts");
+    if (n1) materializeOptions(n1);
+    const n2 = nextBlock(nextBlock(block))?.querySelector(".lazy-opts");
+    if (n2) (window.requestIdleCallback || setTimeout)(()=> materializeOptions(n2), 150);
   }
 
-  node.replaceWith(replacement);
-  node.dataset.done = "1";
-  attachControlBehavior(replacement);
+  // Mevcut/sonradan gelen kontroller için davranışlar
+  function attachControlBehavior(root){
+    if (!root || !root.querySelectorAll) return;
 
-  // Prefetch: bir sonraki(ler)i erken hazırla
-  const n1 = nextBlock(block)?.querySelector(".lazy-opts");
-  if (n1) materializeOptions(n1, questions);
-  const n2 = nextBlock(nextBlock(block))?.querySelector(".lazy-opts");
-  if (n2) (window.requestIdleCallback || setTimeout)(()=> materializeOptions(n2, questions), 150);
-}
+    // Diğer toggle
+    root.querySelectorAll(".other-toggle").forEach(tg=>{
+      tg.addEventListener("change", (e)=>{
+        const name = e.target.name;
+        const input = app.querySelector(`.other-input[data-other-for="${cssEscape(name)}"]`);
+        if (!input) return;
 
- function attachControlBehavior(root){
-  if (!root || !root.querySelectorAll) return;
-
-  // Diğer toggle'ı: yazı alanını aç/kapat
-  root.querySelectorAll(".other-toggle").forEach(tg=>{
-    tg.addEventListener("change", (e)=>{
-      const name = e.target.name;
-      const input = app.querySelector(`.other-input[data-other-for="${cssEscape(name)}"]`);
-      if (!input) return;
-
-      if (e.target.type === "radio") {
-        // Diğer seçildiyse aç, aksi halde kapat
-        const checkedOther = e.target.checked && e.target.value === "__OTHER__";
-        input.disabled = !checkedOther;
-        if (checkedOther) input.focus(); else input.value = "";
-      } else { // checkbox
-        const checked = e.target.checked;
-        input.disabled = !checked;
-        if (checked) input.focus(); else input.value = "";
-      }
-      updateProgress();
+        if (e.target.type === "radio") {
+          const checkedOther = e.target.checked && e.target.value === "__OTHER__";
+          input.disabled = !checkedOther;
+          if (checkedOther) input.focus(); else input.value = "";
+        } else { // checkbox
+          const checked = e.target.checked;
+          input.disabled = !checked;
+          if (checked) input.focus(); else input.value = "";
+        }
+        updateProgress();
+      });
     });
-  });
 
-  // Diğer metin alanına yazıldıkça ilerleme/validasyon güncellensin
-  root.querySelectorAll(".other-input").forEach(inp=>{
-    inp.addEventListener("input", updateProgress);
-  });
-
-  // Normal kontrol davranışları
-  root.querySelectorAll(".ctl").forEach(el=>{
-    el.addEventListener("change",(e)=>{
-      const b = e.target.closest(".q"); if(!b) return;
-      b.classList.add("checked");
-
-      // Prefetch (varsa)
-      const next = nextBlock(b);
-      if (next) {
-        const nLazy = next.querySelector(".lazy-opts");
-        if (nLazy) materializeOptions(nLazy, collectQuestions());
-        const nn = nextBlock(next)?.querySelector(".lazy-opts");
-        if (nn) (window.requestIdleCallback || setTimeout)(()=> materializeOptions(nn, collectQuestions()), 150);
-      }
-
-      const hint=b.querySelector(".hint"); if(hint) hint.style.display="none";
-
-      // >>> YENİ: checkbox'ta otomatik kaydırmayı kapat <<<
-      if (e.target.type !== "checkbox") {
-        const nb = nextBlock(b); if (nb) smoothFocus(nb);
-      }
-
-      updateProgress();
+    // Diğer input yazıldıkça ilerleme güncellensin
+    root.querySelectorAll(".other-input").forEach(inp=>{
+      inp.addEventListener("input", updateProgress);
     });
-    el.addEventListener("input", updateProgress);
-  });
-}
-  function collectQuestions(){ return []; } // lazy lookup için stub
 
-  // INVALID geri bildirimi
+    // Normal kontrol davranışları
+    root.querySelectorAll(".ctl").forEach(el=>{
+      el.addEventListener("change",(e)=>{
+        const b = e.target.closest(".q"); if(!b) return;
+        b.classList.add("checked");
+
+        // Prefetch
+        const next = nextBlock(b);
+        if (next) {
+          const nLazy = next.querySelector(".lazy-opts");
+          if (nLazy) materializeOptions(nLazy);
+          const nn = nextBlock(next)?.querySelector(".lazy-opts");
+          if (nn) (window.requestIdleCallback || setTimeout)(()=> materializeOptions(nn), 150);
+        }
+
+        const hint=b.querySelector(".hint"); if(hint) hint.style.display="none";
+
+        // Checkbox'ta otomatik kaydırmayı kapat; radio/select'te devam
+        if (!(e.target.type === "checkbox")) {
+          const nb = nextBlock(b); if (nb) smoothFocus(nb);
+        }
+
+        updateProgress();
+      });
+      el.addEventListener("input", updateProgress);
+    });
+  }
+
+  // --- INVALID geri bildirimi ---
   function showInvalidFeedback(btn, block){
     toast("Lütfen zorunlu soruları doldurun.");
     try { if (navigator.vibrate) navigator.vibrate(40); } catch {}
@@ -398,12 +425,13 @@ if (type === "select") {
     return null;
   }
 
-  // İlerleme
+  // --- İlerleme çubuğu ---
   function setupProgress(){
     const total = app.querySelectorAll(".q").length;
     const qTotal = document.getElementById("qTotal"); if (qTotal) qTotal.textContent = total;
     updateProgress();
   }
+
   function updateProgress(){
     const blocks = Array.from(app.querySelectorAll(".q"));
     const answered = blocks.filter(b => isGroupAnswered(b.querySelectorAll(`[name="${cssEscape(b.dataset.name||"")}"]`))).length;
@@ -423,49 +451,57 @@ if (type === "select") {
       qPosEl.textContent = (idx + 1);
     }
   }
+
   function currentFocusedIndex(){
     const blocks = Array.from(app.querySelectorAll(".q"));
     return blocks.findIndex(b => b.classList.contains("focus"));
   }
- function isGroupAnswered(nodeList){
-  if (!nodeList || !nodeList.length) return true;
 
-  for (const el of nodeList){
-    const tag = el.tagName.toLowerCase();
+  function isGroupAnswered(nodeList){
+    if (!nodeList || !nodeList.length) return true;
 
-    if (tag === "input"){
-      if (el.type === "radio"){
-        if (el.checked){
-          if (el.value === "__OTHER__"){
-            const input = app.querySelector(`.other-input[data-other-for="${cssEscape(el.name)}"]`);
-            if (input && input.value.trim() !== "") return true; // Diğer + metin gerekli
-          } else {
-            return true;
+    const name = nodeList[0].name;
+    const otherInput = app.querySelector(`.other-input[data-other-for="${cssEscape(name)}"]`);
+    const otherText = otherInput ? otherInput.value.trim() : "";
+
+    let hasNormal = false, otherChecked = false;
+
+    for (const el of nodeList){
+      const tag = el.tagName.toLowerCase();
+
+      if (tag === "input"){
+        if (el.type === "radio"){
+          if (el.checked){
+            if (el.value === "__OTHER__"){ otherChecked = true; }
+            else { return true; } // normal radio seçiliyse yeterli
           }
         }
-      }
-      else if (el.type === "checkbox"){
-        if (el.checked){
-          if (el.value === "__OTHER__"){
-            const input = app.querySelector(`.other-input[data-other-for="${cssEscape(el.name)}"]`);
-            if (input && input.value.trim() !== "") return true; // diğer tek başına yetebilir
-          } else {
-            return true; // normal checkbox seçiliyse yeterli
+        else if (el.type === "checkbox"){
+          if (el.checked){
+            if (el.value === "__OTHER__"){ otherChecked = true; }
+            else { hasNormal = true; }
           }
         }
+        else {
+          if (el.value && el.value.trim()!=="") return true;
+        }
       }
-      else {
-        if (el.value && el.value.trim()!=="") return true;
+      else if (tag === "select" || tag === "textarea"){
+        if (el.value && el.value.trim()!=="") return true; // select placeholder "" olduğundan geçmez
       }
     }
-    else if (tag === "select" || tag === "textarea"){
-      if (el.value && el.value.trim()!=="") return true; // placeholder "" olduğundan geçmez
+
+    // Radio: sadece diğer seçiliyse metin zorunlu
+    // Checkbox: normallardan biri ya da (diğer + metin) yeterli
+    if (nodeList[0].type === "radio") {
+      return otherChecked && otherText !== "";
+    } else if (nodeList[0].type === "checkbox") {
+      return hasNormal || (otherChecked && otherText !== "");
     }
+    return false;
   }
-  return false;
-}
 
-  // Kaydırma + odak
+  // --- Kaydırma + odak ---
   function smoothFocus(block, focusInput){
     if (!block) return;
     try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch {}
@@ -485,18 +521,20 @@ if (type === "select") {
       setFocus(parseInt(block.dataset.index||"0",10)||0);
     },90));
   }
+
   function setFocus(i){
     const blocks = Array.from(app.querySelectorAll(".q"));
     blocks.forEach((b, ix)=> b.classList.toggle("focus", ix===i));
     updateProgress();
   }
+
   function nextBlock(b){
     const all=Array.from(app.querySelectorAll(".q"));
     const i=all.indexOf(b);
     return i>=0 && i<all.length-1 ? all[i+1] : null;
   }
 
-  // UI yardımcıları
+  // --- UI yardımcıları ---
   function toast(msg){
     const t=document.getElementById("toast");
     t.textContent=msg; t.style.display="block";
@@ -508,10 +546,10 @@ if (type === "select") {
     btn.textContent = on ? "Gönderiliyor…" : "Gönder";
   }
 
-  // Genel yardımcılar
+  // --- Genel yardımcılar ---
   function esc(s){ return String(s).replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;' }[m])); }
   function attr(s){ return String(s).replace(/"/g,"&quot;"); }
-  function cssEscape(s){ return s.replace(/["\\]/g,"\\$&"); }
+  function cssEscape(s){ return String(s).replace(/["\\]/g,"\\$&"); }
   function throttle(fn, wait){ let t=0; return (...a)=>{ const now=Date.now(); if (now-t>wait){ t=now; fn(...a); } }; }
 
   // Ripple
