@@ -1,40 +1,35 @@
-// MikroAR Admin — HOTFIX: eski tarayıcı uyumu + error boundary (FINAL)
+// MikroAR Admin — SAFE FINAL: login gate + builder + sticky bar + toast + inline addQuestion
 (function () {
   const app = document.getElementById("app");
 
-  // -- Güvenli element oluşturucu: <style>/<script> için textNode, diğerlerinde HTML ekler
-function el(tag, attrs /*, ...children */) {
-  const node = document.createElement(tag);
-  if (attrs) {
-    for (const k in attrs) {
-      const v = attrs[k];
-      if (k === "class") node.className = v;
-      else if (k === "style") node.style.cssText = v;
-      else if (k.startsWith("on") && typeof v === "function") node.addEventListener(k.slice(2), v);
-      else if (v !== null && v !== undefined) node.setAttribute(k, v);
-    }
-  }
-  const isStyleOrScript = node.tagName === "STYLE" || node.tagName === "SCRIPT";
-  for (let i = 2; i < arguments.length; i++) {
-    const c = arguments[i];
-    if (c == null) continue;
-    if (typeof c === "string") {
-      if (isStyleOrScript) {
-        // Kritik değişiklik: HTML olarak değil, metin olarak ekle
-        node.appendChild(document.createTextNode(c));
-      } else {
-        node.insertAdjacentHTML("beforeend", c);
+  // ---------- helpers (compatible & safe) ----------
+  function el(tag, attrs /*, ...children */) {
+    const node = document.createElement(tag);
+    if (attrs) {
+      for (const k in attrs) {
+        const v = attrs[k];
+        if (k === "class") node.className = v;
+        else if (k === "style") node.style.cssText = v;
+        else if (k.startsWith("on") && typeof v === "function") node.addEventListener(k.slice(2), v);
+        else if (v !== null && v !== undefined) node.setAttribute(k, v);
       }
-    } else if (Array.isArray(c)) {
-      for (let j = 0; j < c.length; j++) if (c[j]) node.appendChild(c[j]);
-    } else {
-      node.appendChild(c);
     }
+    const isStyleOrScript = node.tagName === "STYLE" || node.tagName === "SCRIPT";
+    for (let i = 2; i < arguments.length; i++) {
+      const c = arguments[i];
+      if (c == null) continue;
+      if (typeof c === "string") {
+        if (isStyleOrScript) node.appendChild(document.createTextNode(c));
+        else node.insertAdjacentHTML("beforeend", c);
+      } else if (Array.isArray(c)) {
+        for (let j = 0; j < c.length; j++) if (c[j]) node.appendChild(c[j]);
+      } else {
+        node.appendChild(c);
+      }
+    }
+    return node;
   }
-  return node;
-}
   const qs  = (s, r=document) => r.querySelector(s);
-  const esc = s => String(s ?? "").replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m]));
   const clone = o => JSON.parse(JSON.stringify(o));
   const needsOptions = (t) => t==="radio" || t==="checkbox" || t==="select";
   const splitLines = s => String(s||"").split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
@@ -45,7 +40,7 @@ function el(tag, attrs /*, ...children */) {
     set token(v){ localStorage.setItem("ADMIN_TOKEN", v || ""); }
   };
 
-  // ----------------- state -----------------
+  // ---------- state ----------
   let state = {
     authed: false,
     token: "",
@@ -58,28 +53,31 @@ function el(tag, attrs /*, ...children */) {
     saving: false
   };
 
-  // ----------------- boot -----------------
+  // ---------- boot with error boundary ----------
   document.addEventListener("DOMContentLoaded", init);
-  function safeMount(nodeBuilder) {
+
+  function safeMount(builder) {
     try {
       app.innerHTML = "";
-      app.appendChild(nodeBuilder());
+      app.appendChild(builder());
     } catch (e) {
       console.error("Admin UI crash:", e);
       app.innerHTML = "";
-      app.appendChild(el("div", { class:"shell" },
+      app.appendChild(el("div", {},
         el("style", {}, `
           .shell{max-width:860px;margin:64px auto;padding:0 16px;font:14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
           .card{border:1px solid #e5e7eb;border-radius:16px;padding:16px}
           .btn{padding:10px 14px;border:1px solid #111;background:#111;color:#fff;border-radius:12px;cursor:pointer}
           .err{color:#b00020;margin-top:8px}
         `),
-        el("div", { class:"card" },
-          el("h3", {}, "Beklenmeyen bir hata oluştu"),
-          el("div", { class:"err" }, "Arayüz render edilirken istisna yakalandı. Konsolu kontrol edin."),
-          el("div", { style:"margin-top:10px;display:flex;gap:8px" },
-            el("button", { class:"btn", onclick: ()=>renderLogin("Lütfen tekrar giriş yapın.") }, "Geri dön"),
-            el("button", { class:"btn", onclick: ()=>location.reload() }, "Sayfayı yenile")
+        el("div", { class:"shell" },
+          el("div", { class:"card" },
+            el("h3", {}, "Beklenmeyen bir hata oluştu"),
+            el("div", { class:"err" }, "Arayüz render edilirken istisna yakalandı. Konsolu kontrol edin."),
+            el("div", { style:"margin-top:10px;display:flex;gap:8px" },
+              el("button", { class:"btn", onclick: ()=>renderLogin("Lütfen tekrar giriş yapın.") }, "Geri dön"),
+              el("button", { class:"btn", onclick: ()=>location.reload() }, "Sayfayı yenile")
+            )
           )
         )
       ));
@@ -87,12 +85,12 @@ function el(tag, attrs /*, ...children */) {
   }
 
   async function init(){
-    safeMount(buildLogin);
+    renderLogin();
     const cached = store.token;
-    if (cached) qs("#tokenInput").value = cached;
+    if (cached && qs("#tokenInput")) qs("#tokenInput").value = cached;
   }
 
-  // ----------------- views -----------------
+  // ---------- LOGIN VIEW ----------
   function buildLogin(){
     return el("div", {},
       el("style", {}, `
@@ -124,10 +122,14 @@ function el(tag, attrs /*, ...children */) {
   }
   function renderLogin(msg){
     safeMount(buildLogin);
-    if (msg) { const m = qs("#loginMsg"); if (m) { m.textContent = msg; m.className = /hata|doğrulanamadı/i.test(msg) ? "error" : "muted"; } }
-    const cached = store.token; if (cached) qs("#tokenInput").value = cached;
+    if (msg) {
+      const m = qs("#loginMsg");
+      if (m) { m.textContent = msg; m.className = /hata|doğrulanamadı/i.test(msg) ? "error" : "muted"; }
+    }
+    const cached = store.token; if (cached && qs("#tokenInput")) qs("#tokenInput").value = cached;
   }
 
+  // ---------- APP VIEW ----------
   function buildApp(){
     return el("div", {},
       el("style", {}, `
@@ -158,6 +160,8 @@ function el(tag, attrs /*, ...children */) {
         .toast.show{ opacity:1; transform:translateX(-50%) translateY(-4px) }
       `),
       el("div", { class:"shell" },
+
+        // Topbar
         el("div", { class:"topbar" },
           el("div", { class:"title" }, "MikroAR Admin"),
           el("div", { class:"row" },
@@ -166,6 +170,8 @@ function el(tag, attrs /*, ...children */) {
             el("button", { class:"btn ghost", onclick: onLogout }, "Çıkış")
           )
         ),
+
+        // Liste + oluştur
         el("div", { class:"card" },
           el("div", { class:"grid2" },
             el("div", { class:"col" },
@@ -184,6 +190,8 @@ function el(tag, attrs /*, ...children */) {
             )
           )
         ),
+
+        // Meta
         el("div", { id:"meta", class:"card", style:"display:none" },
           el("div", { class:"grid2" },
             el("div", { class:"col" },
@@ -203,31 +211,42 @@ function el(tag, attrs /*, ...children */) {
             el("textarea", { id:"desc", rows:"2", oninput: e=>state.description = e.target.value })
           )
         ),
+
+        // Builder
         el("div", { id:"builder", class:"card", style:"display:none" },
           el("div", { style:"display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;" },
             el("b", {}, "Sorular"),
             el("div", { class:"row" },
               el("button", { class:"btn small ghost", onclick: onImport }, "JSON içe al"),
               el("button", { class:"btn small ghost", onclick: onExport }, "JSON dışa ver"),
-              el("button", { class:"btn small", onclick: addQuestion }, "+ Soru ekle")
+              // 🔧 addQuestion referansı yerine inline handler (scope sorunu biter)
+              el("button", { class:"btn small", onclick: ()=>{ 
+                state.questions.push({ type:"radio", label:"Yeni Soru", required:true, options:["Evet","Hayır"], other:false });
+                renderQuestions();
+              } }, "+ Soru ekle")
             )
           ),
           el("div", { id:"qList" })
         ),
+
         el("div", { class:"spacer" })
       ),
+
+      // Sticky action bar
       el("div", { id:"actionbar", class:"actionbar", style:"display:none" },
         el("button", { id:"saveBtn", class:"btn", onclick: onSave }, "Kaydet / Yayınla"),
         el("button", { class:"btn ghost", onclick: onClearEditor }, "Ekranı Boşalt")
       ),
+
+      // Toast
       el("div", { id:"toast", class:"toast" }, "Kaydedildi ✓")
     );
   }
   function renderApp(){ safeMount(buildApp); loadList().catch(()=> setStatus("Liste alınamadı", true)); }
 
-  // ----------------- login flow -----------------
+  // ---------- login flow ----------
   async function onLogin(){
-    const token = (qs("#tokenInput").value || "").trim();
+    const token = (qs("#tokenInput")?.value || "").trim();
     if (!token) return setLoginMsg("Token gerekli");
     setLoginMsg("Doğrulanıyor…");
     const ok = await testToken(token);
@@ -245,7 +264,7 @@ function el(tag, attrs /*, ...children */) {
     try { const r = await fetch(`/api/forms-list?token=${encodeURIComponent(token)}`); return r.ok; } catch { return false; }
   }
 
-  // ----------------- list & load -----------------
+  // ---------- list & load ----------
   async function loadList(){
     setStatus("Formlar yükleniyor…");
     const r = await fetch(`/api/forms-list?token=${encodeURIComponent(store.token)}`).catch(()=>null);
@@ -260,7 +279,7 @@ function el(tag, attrs /*, ...children */) {
     }
     setStatus("Hazır");
   }
-  async function onLoadSelected(){ const s = qs("#formList").value; if (!s) return; await loadForm(s); }
+  async function onLoadSelected(){ const s = qs("#formList")?.value; if (!s) return; await loadForm(s); }
   async function loadForm(slug){
     setStatus(`Yükleniyor: ${slug}…`);
     const r = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`).catch(()=>null);
@@ -284,23 +303,28 @@ function el(tag, attrs /*, ...children */) {
     renderQuestions();
     setStatus(`Yüklendi: ${slug}`);
   }
+
   function onCreateNew(){
     const slugInp = qs("#newSlug");
     const slug = (slugInp && slugInp.value ? slugInp.value.trim() : "") || prompt("Yeni form için slug (örn: blkhizmet)");
     if (!slug) return;
     state.slug = slug; state.title = ""; state.description = ""; state.active = true; state.questions = [];
-    qs("#title").value = ""; qs("#desc").value = ""; qs("#active").value = "true";
+    qs("#title").value = ""; qs("#desc").value  = ""; qs("#active").value = "true";
     qs("#meta").style.display = ""; qs("#builder").style.display = ""; qs("#actionbar").style.display = "";
     renderQuestions();
     setStatus(`Yeni form: ${state.slug}`);
   }
 
-  // ----------------- builder -----------------
+  // ---------- builder ----------
   function renderQuestions(){
     const host = qs("#qList"); host.innerHTML = "";
-    if (!state.questions.length) { host.appendChild(el("div", { class:"muted" }, "Henüz soru yok. “+ Soru ekle” ile başlayın.")); return; }
+    if (!state.questions.length) {
+      host.appendChild(el("div", { class:"muted" }, "Henüz soru yok. “+ Soru ekle” ile başlayın."));
+      return;
+    }
     for (let i=0;i<state.questions.length;i++) host.appendChild(renderRow(state.questions[i], i));
   }
+
   function renderRow(q, i){
     return el("div", { class:"card" },
       el("div", { class:"qrow" },
@@ -352,7 +376,7 @@ function el(tag, attrs /*, ...children */) {
   function dup(i){ state.questions.splice(i+1,0,clone(state.questions[i])); renderQuestions(); }
   function del(i){ state.questions.splice(i,1); renderQuestions(); }
 
-  // ----------------- save / import / export -----------------
+  // ---------- save / import / export ----------
   async function onSave(){
     if (!state.slug) { toast("Önce mevcut formu yükleyin veya yeni oluşturun."); return; }
     if (state.saving) return;
@@ -393,7 +417,7 @@ function el(tag, attrs /*, ...children */) {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type:"application/json" });
     const url = URL.createObjectURL(blob);
     const a = el("a", { href:url, download: (state.slug||"form") + ".json" }); document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-    toast("İçe/dışa aktarım tamam");
+    toast("JSON dışa verildi");
   }
   function onImport(){
     const inp = el("input", { type:"file", accept:"application/json" });
@@ -416,7 +440,7 @@ function el(tag, attrs /*, ...children */) {
     inp.click();
   }
 
-  // ----------------- clear editor -----------------
+  // ---------- clear editor ----------
   function onClearEditor(){
     state.slug = ""; state.title=""; state.description=""; state.active=true; state.questions=[];
     if (qs("#title")) qs("#title").value = "";
@@ -428,7 +452,7 @@ function el(tag, attrs /*, ...children */) {
     setStatus("Ekran boşaltıldı"); toast("Ekran boşaltıldı"); window.scrollTo({ top:0, behavior:"smooth" });
   }
 
-  // ----------------- status & toast -----------------
+  // ---------- status & toast ----------
   function setStatus(msg, err){
     const s = qs("#stat"); if (!s) return;
     s.textContent = msg;
