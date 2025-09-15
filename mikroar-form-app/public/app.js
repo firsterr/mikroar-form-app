@@ -427,21 +427,43 @@ if (type === "select") {
     const blocks = Array.from(app.querySelectorAll(".q"));
     return blocks.findIndex(b => b.classList.contains("focus"));
   }
-  function isGroupAnswered(nodeList){
-    if (!nodeList || !nodeList.length) return true;
-    let ok = false;
-    for (const el of nodeList){
-      const tag = el.tagName.toLowerCase();
-      if (tag==="input"){
-        if (el.type==="radio") { if (el.checked){ ok=true; break; } }
-        else if (el.type==="checkbox"){ if (el.checked){ ok=true; } }
-        else { if (el.value && el.value.trim()!==""){ ok=true; } }
-      } else if (tag==="select" || tag==="textarea"){
-        if (el.value && el.value.trim()!=="") ok=true;
+ function isGroupAnswered(nodeList){
+  if (!nodeList || !nodeList.length) return true;
+
+  for (const el of nodeList){
+    const tag = el.tagName.toLowerCase();
+
+    if (tag === "input"){
+      if (el.type === "radio"){
+        if (el.checked){
+          if (el.value === "__OTHER__"){
+            const input = app.querySelector(`.other-input[data-other-for="${cssEscape(el.name)}"]`);
+            if (input && input.value.trim() !== "") return true; // Diğer + metin gerekli
+          } else {
+            return true;
+          }
+        }
+      }
+      else if (el.type === "checkbox"){
+        if (el.checked){
+          if (el.value === "__OTHER__"){
+            const input = app.querySelector(`.other-input[data-other-for="${cssEscape(el.name)}"]`);
+            if (input && input.value.trim() !== "") return true; // diğer tek başına yetebilir
+          } else {
+            return true; // normal checkbox seçiliyse yeterli
+          }
+        }
+      }
+      else {
+        if (el.value && el.value.trim()!=="") return true;
       }
     }
-    return ok;
+    else if (tag === "select" || tag === "textarea"){
+      if (el.value && el.value.trim()!=="") return true; // placeholder "" olduğundan geçmez
+    }
   }
+  return false;
+}
 
   // Kaydırma + odak
   function smoothFocus(block, focusInput){
