@@ -7,15 +7,26 @@ export default async (request, context) => {
   let code = null;
   const m = url.pathname.match(/^\/f\/([^/?#]+)/);
   if (m && m[1]) code = m[1];
-
-  // Varsayılan meta (harici URL'de origin EKLEME!)
-  let meta = {
-    title: "Mikroar Anket",
-    description: "Ankete katılın.",
-    image: "https://www.emturkey.com.tr/wp-content/uploads/2022/03/em-nedir-resim.jpg",
-    url: origin + url.pathname
-  };
-
+// form verisini zaten API'den çekiyorsun:
+const api = `${origin}/api/forms?slug=${encodeURIComponent(slug)}`;
+const res = await fetch(api, { headers: { "accept": "application/json" } });
+const json = res.ok ? await res.json() : null;
+const form = json?.form || null;
+ // Varsayılan meta
+let meta = {
+  title: (form?.title || "Mikroar Anket"),
+  description: (form?.description || "Ankete katılın."),
+  image: origin + "/og/default.jpg",
+  url: origin + url.pathname
+};
+// 1) URL param ile override (sadece http/https)
+const paramImg = url.searchParams.get("i");
+if (paramImg && /^https?:\/\//i.test(paramImg)) {
+  meta.image = paramImg;
+} else if (form?.shareImageUrl && /^https?:\/\//i.test(form.shareImageUrl)) {
+  // 2) DB’deki paylaşım görseli
+  meta.image = form.shareImageUrl;
+}
   // Form başlığı/açıklaması mevcutsa zenginleştir
   try {
     if (slug || code) {
