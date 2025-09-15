@@ -4,37 +4,45 @@ const CORS = {
   "Access-Control-Allow-Methods":"GET, POST, OPTIONS",
   "Access-Control-Allow-Headers":"Content-Type, X-Admin-Token"
 };
+// ... mevcut import/supabase init/guard blokları aynen kalsın
+
 exports.handler = async (event) => {
-  if (event.httpMethod === "OPTIONS") return { statusCode:204, headers:CORS, body:"" };
-  try {
-    const ADMIN_TOKEN = (process.env.ADMIN_TOKEN || "").trim();
-    const hdr = toLower(event.headers || {});
-    const q = event.queryStringParameters || {};
-    const token = (hdr["x-admin-token"] || q.token || "").trim();
-    if (!ADMIN_TOKEN || token !== ADMIN_TOKEN) {
-      return { statusCode:401, headers:CORS, body: JSON.stringify({ error:"unauthorized" }) };
-    }
-    const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_ANON_KEY, { auth:{ persistSession:false } });
-    if (event.httpMethod === "GET") {
-      const slug = (q.slug || "").trim(); if (!slug) return resp(400,{ error:"slug-required" });
-      const { data, error } = await sb.from("forms").select("*").eq("slug", slug).maybeSingle();
-      if (error) return resp(500,{ error:error.message }); return resp(200,{ form:data });
-    }
-    if (event.httpMethod !== "POST") return resp(405,{ error:"method-not-allowed" },{ Allow:"GET, POST, OPTIONS" });
-    let body={}; try{ body = JSON.parse(event.body||"{}"); } catch { return resp(400,{ error:"invalid-json" }); }
-    const payload = {
-      slug:(body.slug||"").trim(),
-      title:(body.title||"").trim(),
-      active:!!body.active,
-      description: body.description ?? null,
-      schema: body.schema || { questions: [] }
-    };
-    if (!payload.slug) return resp(400,{ error:"slug-required" });
-    if (!payload.title) return resp(400,{ error:"title-required" });
-    const { data, error } = await sb.from("forms").upsert(payload,{ onConflict:"slug" }).select("*").maybeSingle();
-    if (error) return resp(500,{ error:error.message });
-    return resp(200,{ ok:true, form:data });
-  } catch(e){ return resp(500,{ error:String(e.message||e) }); }
+  if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
+
+  const token = event.queryStringParameters?.token || "";
+  if (token !== process.env.ADMIN_TOKEN) {
+    return { statusCode: 401, body: JSON.stringify({ error: "unauthorized" }) };
+  }
+
+  let payload;
+  try { payload = JSON.parse(event.body || "{}"); }
+  catch { return { statusCode: 400, body: JSON.stringify({ error: "bad_json" }) }; }
+
+  const { slug, title, description, active, schema, shareImageUrl } = payload;
+  if (!slug || !schema) {
+    return { statusCode: 400, body: JSON.stringify({ error: "slug_and_schema_required" }) };
+  }
+
+  const row = {
+    slug,
+    title: title || null,
+    description: description || null,
+    active: active === false ? false : true,
+    schema,
+    share_image_url: shareImageUrl || null,
+    updated_at: new Date().toISOString()
+  };
+
+  const { error } = await supabase
+    .from("forms")
+    .upsert(row, { onConflict: "slug" });
+
+  if (error) {
+    console.error("forms-admin upsert error:", error);
+    return { statusCode: 500, body: JSON.stringify({ error: "db_upsert_failed" }) };
+  }
+
+  return { statusCode: 200, body: JSON.stringify({ ok: true }) };
 };
 function resp(code,json,extra={}){ return { statusCode:code, headers:{ ...CORS, ...extra, "content-type":"application/json; charset=utf-8" }, body:JSON.stringify(json) }; }
 function toLower(h){ const o={}; for(const k in h) o[k.toLowerCase()]=h[k]; return o; }
