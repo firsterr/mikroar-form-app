@@ -1,41 +1,23 @@
-# ---------- BUILD ----------
+# =========================
+# Netlify config (final)
+# =========================
+
 [build]
   publish = "mikroar-form-app/public"
 
-# Serverless Functions klasörü (repo kökünden yol)
-[functions]
-  directory = "netlify/functions"
-
-# ---------- API redirect'leri ----------
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
-  force = true
-
-# ---------- Edge Function eşlemeleri ----------
-# form.html isteklerini Edge SSR ile işle
-[[edge_functions]]
-  path = "/form.html"
-  function = "form-ssr"
-
-# kısa link /f/* için de aynı Edge SSR devrede
-[[edge_functions]]
-  path = "/f/*"
-  function = "form-ssr"
-
-  [build]
-  publish = "mikroar-form-app/public"
-
+# Serverless Functions klasörü (mevcut konum)
 [functions]
   directory = "mikroar-form-app/netlify/functions"
+  node_bundler = "esbuild"
 
+# /api/* -> /.netlify/functions/*
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
   force = true
 
+# Edge Function eşlemeleri (SSR + kısa link)
 [[edge_functions]]
   path = "/form.html"
   function = "form-ssr"
