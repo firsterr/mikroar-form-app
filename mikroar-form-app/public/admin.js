@@ -1,4 +1,4 @@
-// MikroAR Admin — clean login gate + builder (FINAL)
+// MikroAR Admin — login gate + modern builder + sticky action bar (FINAL POLISHED)
 (function () {
   const app = document.getElementById("app");
 
@@ -35,7 +35,8 @@
     title: "",
     description: "",
     active: true,
-    questions: []
+    questions: [],
+    saving: false
   };
 
   // ----------------- boot -----------------
@@ -44,9 +45,7 @@
   async function init(){
     renderLogin(); // her zaman önce login ekranı
     const cached = store.token;
-    if (cached) {
-      qs("#tokenInput").value = cached;
-    }
+    if (cached) qs("#tokenInput").value = cached;
   }
 
   // ----------------- views -----------------
@@ -54,15 +53,15 @@
     app.innerHTML = "";
     app.append(
       el("style", {}, `
-        :root{ --fg:#111; --muted:#6b7280; --bd:#e5e7eb; }
+        :root{ --fg:#111; --muted:#6b7280; --bd:#e5e7eb; --accent:#111; }
         body{ font:14px system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#fff; color:var(--fg) }
-        .shell{ max-width:860px; margin:48px auto; padding:0 16px }
+        .shell{ max-width:860px; margin:64px auto; padding:0 16px }
         .title{ font-weight:800; font-size:32px; text-align:center; margin:24px 0 32px }
         .card{ border:1px solid var(--bd); border-radius:16px; padding:16px; }
-        .row{ display:flex; gap:12px; align-items:center; }
-        .col{ display:flex; flex-direction:column; gap:6px; }
-        .input{ padding:10px 12px; border:1px solid var(--bd); border-radius:10px; width:100%; }
-        .btn{ padding:10px 14px; border:1px solid #111; background:#111; color:#fff; border-radius:10px; cursor:pointer }
+        .col{ display:flex; flex-direction:column; gap:8px; }
+        .input{ padding:12px; border:1px solid var(--bd); border-radius:12px; width:100%; }
+        .btn{ padding:12px 16px; border:1px solid var(--accent); background:var(--accent); color:#fff; border-radius:12px; cursor:pointer; transition:.15s transform }
+        .btn:active{ transform:translateY(1px) }
         .muted{ color:var(--muted) }
         .error{ color:#b00020; margin-top:8px }
       `),
@@ -72,7 +71,7 @@
           el("div", { class:"col" },
             el("label", {}, "ADMIN_TOKEN"),
             el("input", { id:"tokenInput", class:"input", type:"password", placeholder:"ADMIN_TOKEN", value:store.token||"" }),
-            el("div", { class:"row", style:"justify-content:flex-end" },
+            el("div", { style:"display:flex; justify-content:flex-end" },
               el("button", { class:"btn", onclick: onLogin }, "Giriş")
             ),
             el("div", { id:"loginMsg", class: msg ? "error" : "muted" },
@@ -88,25 +87,43 @@
     app.innerHTML = "";
     app.append(
       el("style", {}, `
-        :root{ --fg:#111; --muted:#6b7280; --bd:#e5e7eb; }
+        :root{ --fg:#111; --muted:#6b7280; --bd:#e5e7eb; --accent:#111; }
         body{ font:14px system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:var(--fg) }
         .shell{ max-width:1100px; margin:24px auto; padding:0 16px }
         .topbar{ display:flex; justify-content:space-between; align-items:center; margin:8px 0 16px }
         .title{ font-weight:800; font-size:24px }
-        .btn{ padding:8px 12px; border:1px solid #111; background:#111; color:#fff; border-radius:10px; cursor:pointer }
-        .btn.ghost{ background:#fff; color:#111 }
-        .btn.small{ padding:6px 8px; font-size:12px }
+        .btn{ padding:10px 14px; border:1px solid var(--accent); background:var(--accent); color:#fff; border-radius:12px; cursor:pointer; transition:.15s transform }
+        .btn.ghost{ background:#fff; color:var(--accent) }
+        .btn.small{ padding:8px 10px; font-size:12px }
+        .btn.loading{ opacity:.7; pointer-events:none; position:relative }
+        .btn.loading::after{ content:""; position:absolute; right:10px; top:50%; width:14px; height:14px; margin-top:-7px; border:2px solid rgba(255,255,255,.7); border-top-color:#fff; border-radius:50%; animation:spin .9s linear infinite }
+        @keyframes spin{ to { transform:rotate(360deg) } }
+        .badge{ border:1px solid var(--bd); border-radius:999px; padding:2px 10px; font-size:12px }
+        .ok{ color:#065f46 } .err{ color:#b00020 } .muted{ color:var(--muted) }
         .card{ border:1px solid var(--bd); border-radius:14px; padding:12px; margin:12px 0 }
-        .row{ display:flex; gap:8px; align-items:center; }
+        .row{ display:flex; gap:10px; align-items:center; }
         .col{ display:flex; flex-direction:column; gap:6px; }
-        .input, textarea, select{ padding:8px 10px; border:1px solid var(--bd); border-radius:10px; width:100%; }
-        .muted{ color:var(--muted) }
+        .input, textarea, select{ padding:10px 12px; border:1px solid var(--bd); border-radius:12px; width:100%; }
         .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:12px }
         .qrow{ display:grid; grid-template-columns: 1fr 120px 120px 120px auto; gap:10px; align-items:start }
         .qrow .full{ grid-column:1/-1 }
         @media (max-width:980px){ .qrow{ grid-template-columns:1fr } }
-        .badge{ border:1px solid var(--bd); border-radius:999px; padding:2px 8px; font-size:12px }
-        .ok{ color:#065f46 } .err{ color:#b00020 }
+
+        /* Sticky action bar */
+        .actionbar{
+          position:fixed; left:0; right:0; bottom:0;
+          padding:10px max(16px, env(safe-area-inset-left)) calc(10px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-right));
+          background:linear-gradient(to top, rgba(250,250,250,.98), rgba(250,250,250,.88));
+          border-top:1px solid var(--bd);
+          display:flex; gap:10px; justify-content:center; z-index:50; backdrop-filter:saturate(1.1) blur(6px);
+        }
+        .spacer{ height:80px } /* actionbar için alt boşluk */
+        .toast{
+          position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+          background:#111; color:#fff; padding:10px 14px; border-radius:12px; z-index:60; box-shadow:0 6px 20px rgba(0,0,0,.16);
+          opacity:0; pointer-events:none; transition:.25s opacity, .25s transform;
+        }
+        .toast.show{ opacity:1; transform:translateX(-50%) translateY(-4px) }
       `),
       el("div", { class:"shell" },
 
@@ -115,11 +132,12 @@
           el("div", { class:"title" }, "MikroAR Admin"),
           el("div", { class:"row" },
             el("span", { id:"stat", class:"badge muted" }, "Hazır"),
+            el("button", { class:"btn ghost", onclick: onClearEditor }, "Ekranı Boşalt"),
             el("button", { class:"btn ghost", onclick: onLogout }, "Çıkış")
           )
         ),
 
-        // giriş + liste + oluştur
+        // liste + oluştur
         el("div", { class:"card" },
           el("div", { class:"grid2" },
             el("div", { class:"col" },
@@ -162,7 +180,7 @@
 
         // builder
         el("div", { id:"builder", class:"card", style:"display:none" },
-          el("div", { class:"row", style:"justify-content:space-between" },
+          el("div", { style:"display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;" },
             el("b", {}, "Sorular"),
             el("div", { class:"row" },
               el("button", { class:"btn small ghost", onclick: onImport }, "JSON içe al"),
@@ -170,12 +188,20 @@
               el("button", { class:"btn small", onclick: addQuestion }, "+ Soru ekle")
             )
           ),
-          el("div", { id:"qList" }),
-          el("div", { class:"row", style:"justify-content:flex-end; margin-top:8px" },
-            el("button", { class:"btn", onclick: onSave }, "Kaydet / Yayınla")
-          )
-        )
-      )
+          el("div", { id:"qList" })
+        ),
+
+        el("div", { class:"spacer" }) // actionbar için boşluk
+      ),
+
+      // Sticky action bar
+      el("div", { id:"actionbar", class:"actionbar", style:"display:none" },
+        el("button", { id:"saveBtn", class:"btn", onclick: onSave }, "Kaydet / Yayınla"),
+        el("button", { class:"btn ghost", onclick: onClearEditor }, "Ekranı Boşalt")
+      ),
+
+      // Toast
+      el("div", { id:"toast", class:"toast" }, "Kaydedildi ✓")
     );
 
     // listeyi yükle
@@ -189,7 +215,6 @@
     setLoginMsg("Doğrulanıyor…");
     const ok = await testToken(token);
     if (!ok) return setLoginMsg("Yetki doğrulanamadı (401).");
-    // success
     store.token = token;
     state.token = token;
     state.authed = true;
@@ -197,16 +222,12 @@
   }
   function onLogout(){
     store.token = "";
-    state = { authed:false, token:"", list:[], slug:"", title:"", description:"", active:true, questions:[] };
+    state = { authed:false, token:"", list:[], slug:"", title:"", description:"", active:true, questions:[], saving:false };
     renderLogin("Çıkış yapıldı.");
   }
   function setLoginMsg(m){ qs("#loginMsg").textContent = m; qs("#loginMsg").className = /doğrulanıyor/i.test(m) ? "muted" : ( /hata|yetki|gerekli/i.test(m) ? "error" : "muted" ); }
-
   async function testToken(token){
-    try {
-      const r = await fetch(`/api/forms-list?token=${encodeURIComponent(token)}`, { method:"GET" });
-      return r.ok;
-    } catch { return false; }
+    try { const r = await fetch(`/api/forms-list?token=${encodeURIComponent(token)}`); return r.ok; } catch { return false; }
   }
 
   // ----------------- list & load -----------------
@@ -227,6 +248,7 @@
     if (!s) return;
     await loadForm(s);
   }
+
   async function loadForm(slug){
     setStatus(`Yükleniyor: ${slug}…`);
     const r = await fetch(`/api/forms?slug=${encodeURIComponent(slug)}`).catch(()=>null);
@@ -241,20 +263,21 @@
     state.active      = !!f.active;
     state.questions   = Array.isArray(f.schema?.questions) ? clone(f.schema.questions) : [];
 
-    // meta + builder doldur
     qs("#title").value = state.title;
     qs("#desc").value = state.description;
     qs("#active").value = state.active ? "true" : "false";
     qs("#meta").style.display = "";
     qs("#builder").style.display = "";
+    qs("#actionbar").style.display = ""; // sticky bar aç
     renderQuestions();
     setStatus(`Yüklendi: ${slug}`);
   }
 
   function onCreateNew(){
-    const slug = prompt("Yeni form için slug (örn: blkhizmet)");
+    const slugInp = qs("#newSlug");
+    const slug = (slugInp.value || "").trim() || prompt("Yeni form için slug (örn: blkhizmet)");
     if (!slug) return;
-    state.slug = slug.trim();
+    state.slug = slug;
     state.title = "";
     state.description = "";
     state.active = true;
@@ -264,6 +287,7 @@
     qs("#active").value = "true";
     qs("#meta").style.display = "";
     qs("#builder").style.display = "";
+    qs("#actionbar").style.display = "";
     renderQuestions();
     setStatus(`Yeni form: ${state.slug}`);
   }
@@ -336,12 +360,15 @@
   function move(i,d){ const j=i+d; if(j<0||j>=state.questions.length) return; const t=state.questions[i]; state.questions[i]=state.questions[j]; state.questions[j]=t; renderQuestions(); }
   function dup(i){ state.questions.splice(i+1,0,clone(state.questions[i])); renderQuestions(); }
   function del(i){ state.questions.splice(i,1); renderQuestions(); }
-  function addQuestion(){ state.questions.push({ type:"radio", label:"Yeni Soru", required:true, options:["Evet","Hayır"], other:false }); renderQuestions(); }
 
   // ----------------- save / import / export -----------------
   async function onSave(){
-    if (!state.slug) { alert("Önce mevcut formu yükleyin veya yeni oluşturun."); return; }
+    if (!state.slug) { toast("Önce mevcut formu yükleyin veya yeni oluşturun."); return; }
+    if (state.saving) return;
+    state.saving = true;
+    const btn = qs("#saveBtn"); if (btn) btn.classList.add("loading");
     setStatus("Kaydediliyor…");
+
     const payload = {
       slug: state.slug,
       title: state.title,
@@ -353,28 +380,33 @@
         questions: state.questions.map(q => normalizeQuestion(q))
       }
     };
+
     const r = await fetch(`/api/forms-admin?token=${encodeURIComponent(store.token)}`, {
       method:"POST",
       headers:{ "content-type":"application/json" },
       body: JSON.stringify(payload)
     }).catch(()=>null);
-    if (!r || !r.ok) { setStatus("Kaydetme HATASI", true); return; }
+
+    state.saving = false;
+    if (btn) btn.classList.remove("loading");
+
+    if (!r || !r.ok) { setStatus("Kaydetme HATASI", true); toast("Kaydedilemedi. Tekrar deneyin."); return; }
+
     setStatus("Kaydedildi");
-    // listeyi tazele
-    loadList().catch(()=>{});
+    toast("Kaydedildi ✓");
   }
 
   function normalizeQuestion(q){
     const out = { type: q.type || "text", label: q.label || "", required: !!q.required };
     if (needsOptions(q.type)) {
       out.options = Array.isArray(q.options) ? q.options : [];
-      if ((q.type==="radio" || q.type==="checkbox") && q.other === true) out.other = true; // sadece işaretlenmişse
+      if ((q.type==="radio" || q.type==="checkbox") && q.other === true) out.other = true; // yalnız işaretlenmişse
     }
     return out;
   }
 
   function onExport(){
-    if (!state.slug) { alert("Önce bir form yükleyin/oluşturun."); return; }
+    if (!state.slug) { toast("Önce bir form yükleyin/oluşturun."); return; }
     const data = {
       slug: state.slug,
       title: state.title,
@@ -386,6 +418,7 @@
     const url = URL.createObjectURL(blob);
     const a = el("a", { href:url, download: (state.slug||"form") + ".json" });
     document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    toast("JSON dışa verildi");
   }
 
   function onImport(){
@@ -406,18 +439,45 @@
         qs("#active").value = state.active ? "true" : "false";
         qs("#meta").style.display = "";
         qs("#builder").style.display = "";
+        qs("#actionbar").style.display = "";
         renderQuestions();
         setStatus("JSON içe alındı");
-      }catch{ setStatus("JSON okunamadı", true); }
+        toast("İçe aktarıldı");
+      }catch{ setStatus("JSON okunamadı", true); toast("JSON okunamadı"); }
     }, { once:true });
     inp.click();
   }
 
-  // ----------------- status -----------------
+  // ----------------- clear editor -----------------
+  function onClearEditor(){
+    // Hızlı sıfırlama: ekrandaki formu kapat, alanları temizle
+    state.slug = ""; state.title=""; state.description=""; state.active=true; state.questions=[];
+    if (qs("#title")) qs("#title").value = "";
+    if (qs("#desc"))  qs("#desc").value  = "";
+    if (qs("#active")) qs("#active").value = "true";
+    qs("#meta").style.display = "none";
+    qs("#builder").style.display = "none";
+    qs("#actionbar").style.display = "none";
+    // list ve yeni form alanları yerinde kalır → kullanıcı yeni forma başlayabilir
+    setStatus("Ekran boşaltıldı");
+    toast("Ekran boşaltıldı");
+    window.scrollTo({ top:0, behavior:"smooth" });
+  }
+
+  // ----------------- status & toast -----------------
   function setStatus(msg, err){
     const s = qs("#stat"); if (!s) return;
     s.textContent = msg;
     s.className = "badge " + (err ? "err" : "ok");
-    setTimeout(()=>{ s.className="badge muted"; s.textContent="Hazır"; }, 2500);
+    clearTimeout(setStatus._t);
+    setStatus._t = setTimeout(()=>{ s.className="badge muted"; s.textContent="Hazır"; }, 2500);
+  }
+
+  function toast(msg){
+    const t = qs("#toast"); if (!t) return;
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(()=> t.classList.remove("show"), 2200);
   }
 })();
