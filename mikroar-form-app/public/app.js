@@ -150,12 +150,13 @@ document.head.appendChild(style);
         }
       } else if (it.type==="select" && Array.isArray(it.options)) {
         h.push(`<label><select class="ctl" name="${name}">`);
-        for (const opt of it.options) {
-          const val = typeof opt==="string" ? opt : opt.value;
-          const txt = typeof opt==="string" ? opt : (opt.label||opt.value);
-          h.push(`<option value="${attr(val)}">${esc(txt)}</option>`);
-        }
-        h.push(`</select></label>`);
+h.push(`<option value="" disabled selected hidden>Seçiniz…</option>`);
+for (const opt of it.options) {
+  const val = typeof opt==="string" ? opt : opt.value;
+  const txt = typeof opt==="string" ? opt : (opt.label||opt.value);
+  h.push(`<option value="${attr(val)}">${esc(txt)}</option>`);
+}
+h.push(`</select></label>`);
       } else if (it.type==="textarea") {
         h.push(`<label><textarea class="ctl" name="${name}" rows="4"></textarea></label>`);
       } else {
