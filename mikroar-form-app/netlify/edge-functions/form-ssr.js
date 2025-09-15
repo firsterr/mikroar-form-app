@@ -1,38 +1,47 @@
 // netlify/edge-functions/form-ssr.js
-export default async (request, context) => {
+export default async (request) => {
   try {
     const url = new URL(request.url);
     const origin = `${url.protocol}//${url.host}`;
 
-    // /f/:code => form.html?slug=...
-    const slug = url.searchParams.get("slug")
-      || url.pathname.replace(/^\/f\/?/, "") || "";
+    // 1) slug çöz
+    let slug = url.searchParams.get("slug") || "";
+    if (!slug) {
+      const m = url.pathname.match(/^\/f\/([^/?#]+)/);
+      if (m) {
+        const code = m[1];
+        // kısa kodu slug'a çevir
+        const rr = await fetch(`${origin}/api/go?code=${encodeURIComponent(code)}&format=json`, { headers: { accept: "application/json" } });
+        if (rr.ok) {
+          const jj = await rr.json().catch(() => null);
+          slug = jj?.slug || "";
+        }
+      }
+    }
 
-    // Formu API’den çek (OG için share_image_url ve title/desc lazım)
+    // 2) Formu getir
     let form = null;
     if (slug) {
       const api = `${origin}/api/forms?slug=${encodeURIComponent(slug)}`;
       const r = await fetch(api, { headers: { accept: "application/json" } });
       if (r.ok) {
-        const j = await r.json();
+        const j = await r.json().catch(() => null);
         form = j?.form || null;
       }
     }
 
-    // Meta
+    // 3) Meta hazırla (öncelik: ?i= → DB → default)
     let meta = {
       title: form?.title || "Mikroar Anket",
       description: form?.description || "Ankete katılın.",
       image: `${origin}/og/default.jpg`,
-      url: origin + url.pathname,
+      url: origin + url.pathname
     };
 
-    // 1) URL parametri ile override
-    const i = url.searchParams.get("i");
-    if (i && /^https?:\/\//i.test(i)) {
-      meta.image = i;
+    const paramImg = url.searchParams.get("i");
+    if (paramImg && /^https?:\/\//i.test(paramImg)) {
+      meta.image = paramImg;
     } else if (form?.shareImageUrl && /^https?:\/\//i.test(form.shareImageUrl)) {
-      // 2) DB alanı
       meta.image = form.shareImageUrl;
     }
 
@@ -41,22 +50,22 @@ export default async (request, context) => {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${escapeHtml(meta.title)}</title>
-<meta name="description" content="${escapeHtml(meta.description)}">
-<link rel="canonical" href="${escapeAttr(meta.url)}">
+<title>${e(meta.title)}</title>
+<meta name="description" content="${e(meta.description)}">
+<link rel="canonical" href="${a(meta.url)}">
 
 <meta property="og:type" content="website">
-<meta property="og:title" content="${escapeHtml(meta.title)}">
-<meta property="og:description" content="${escapeHtml(meta.description)}">
-<meta property="og:image" content="${escapeAttr(meta.image)}">
+<meta property="og:title" content="${e(meta.title)}">
+<meta property="og:description" content="${e(meta.description)}">
+<meta property="og:image" content="${a(meta.image)}">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:url" content="${escapeAttr(meta.url)}">
+<meta property="og:url" content="${a(meta.url)}">
 
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="${escapeHtml(meta.title)}">
-<meta name="twitter:description" content="${escapeHtml(meta.description)}">
-<meta name="twitter:image" content="${escapeAttr(meta.image)}">
+<meta name="twitter:title" content="${e(meta.title)}">
+<meta name="twitter:description" content="${e(meta.description)}">
+<meta name="twitter:image" content="${a(meta.image)}">
 
 <style>html,body{height:100%}body{display:flex;align-items:center;justify-content:center;font:16px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#111}.b{opacity:.7}</style>
 </head>
@@ -65,12 +74,11 @@ export default async (request, context) => {
   <script>location.replace("${origin}/form.html?slug=${encodeURIComponent(slug)}");</script>
 </body>
 </html>`;
-
     return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
   } catch (e) {
     return new Response("SSR error", { status: 500 });
   }
 };
 
-function escapeHtml(s){return String(s??"").replace(/[&<>"]/g,m=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[m]));}
-function escapeAttr(s){return String(s??"").replace(/"/g,"&quot;");}
+function e(s){return String(s??"").replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[m]));}
+function a(s){return String(s??"").replace(/"/g,"&quot;");}
