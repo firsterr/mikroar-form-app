@@ -10,12 +10,20 @@
   to   = "/.netlify/functions/:splat"
   status = 200
 
-# Edge Function: OG/Twitter meta enjeksiyonu (kısa link sayfaları)
-[[edge_functions]]
-  function = "form-ssr"
-  path     = "/f/*"
+
 
 # Edge Function: OG/Twitter meta enjeksiyonu (form.html)
 [[edge_functions]]
   function = "form-ssr"
   path     = "/form.html"
+
+[build]
+  publish = "mikroar-form-app/public"
+
+[[edge_functions]]
+  path = "/form.html"
+  function = "form-ssr"
+
+[[edge_functions]]
+  path = "/f/*"
+  function = "form-ssr"
