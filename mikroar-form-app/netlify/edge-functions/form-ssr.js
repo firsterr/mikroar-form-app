@@ -30,7 +30,7 @@ export default async (request) => {
       }
     }
 
-    // 3) Meta hazırla (öncelik: ?i= → DB → default)
+    // 3) Meta (öncelik: ?i= → DB → default)
     let meta = {
       title: form?.title || "Mikroar Anket",
       description: form?.description || "Ankete katılın.",
@@ -75,7 +75,7 @@ export default async (request) => {
 </body>
 </html>`;
     return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
-  } catch (e) {
+  } catch {
     return new Response("SSR error", { status: 500 });
   }
 };
