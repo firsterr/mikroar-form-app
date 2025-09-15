@@ -52,7 +52,11 @@ export default async (request, context) => {
     <meta name="twitter:description" content="${esc(meta.description)}" />
     <meta name="twitter:image" content="${meta.image}" />
   `;
-
+// ... mevcut kodda meta = { title, description, image, url } oluşturduğun yerden hemen sonra:
+const i = url.searchParams.get("i");
+if (i && /^https?:\/\//i.test(i)) {
+  meta.image = i; // parametre ile gelen mutlak URL’i kullan
+}
   // Var olan og:/twitter: meta'larını temizle → tek set kalsın
   return new HTMLRewriter()
     .on('meta[property^="og:"]', { element(el){ el.remove(); } })
