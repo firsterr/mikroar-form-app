@@ -321,12 +321,40 @@ if (type === "select") {
 
  function attachControlBehavior(root){
   if (!root || !root.querySelectorAll) return;
+
+  // Diğer toggle'ı: yazı alanını aç/kapat
+  root.querySelectorAll(".other-toggle").forEach(tg=>{
+    tg.addEventListener("change", (e)=>{
+      const name = e.target.name;
+      const input = app.querySelector(`.other-input[data-other-for="${cssEscape(name)}"]`);
+      if (!input) return;
+
+      if (e.target.type === "radio") {
+        // Diğer seçildiyse aç, aksi halde kapat
+        const checkedOther = e.target.checked && e.target.value === "__OTHER__";
+        input.disabled = !checkedOther;
+        if (checkedOther) input.focus(); else input.value = "";
+      } else { // checkbox
+        const checked = e.target.checked;
+        input.disabled = !checked;
+        if (checked) input.focus(); else input.value = "";
+      }
+      updateProgress();
+    });
+  });
+
+  // Diğer metin alanına yazıldıkça ilerleme/validasyon güncellensin
+  root.querySelectorAll(".other-input").forEach(inp=>{
+    inp.addEventListener("input", updateProgress);
+  });
+
+  // Normal kontrol davranışları
   root.querySelectorAll(".ctl").forEach(el=>{
     el.addEventListener("change",(e)=>{
       const b = e.target.closest(".q"); if(!b) return;
       b.classList.add("checked");
 
-      // Prefetch
+      // Prefetch (varsa)
       const next = nextBlock(b);
       if (next) {
         const nLazy = next.querySelector(".lazy-opts");
@@ -336,7 +364,12 @@ if (type === "select") {
       }
 
       const hint=b.querySelector(".hint"); if(hint) hint.style.display="none";
-      const nb = nextBlock(b); if (nb) smoothFocus(nb);
+
+      // >>> YENİ: checkbox'ta otomatik kaydırmayı kapat <<<
+      if (e.target.type !== "checkbox") {
+        const nb = nextBlock(b); if (nb) smoothFocus(nb);
+      }
+
       updateProgress();
     });
     el.addEventListener("input", updateProgress);
