@@ -1,6 +1,12 @@
 
 
 (function () {
+  const block = node.closest(".q");
+const idx   = parseInt(block?.dataset.index || "0", 10);
+const qid   = node.dataset.qid || null;
+
+let spec = questions.find(it => (it.id || it.name || it.key) === qid);
+if (!spec) spec = questions[idx];
   const app = document.getElementById("app");
   const skeleton = document.getElementById("skeleton");
   const errorBox = document.getElementById("error");
@@ -271,19 +277,25 @@ h.push(`</select></label>`);
   if (!spec || !Array.isArray(spec.options)) return;
 
   let replacement;
-  if (type === "select") {
-    const name = block?.dataset.name || (spec.id || spec.name || spec.key || `q${idx+1}`);
-    const sel = document.createElement("select");
-    sel.className = "ctl"; sel.name = name;
-    spec.options.forEach(opt => {
-      const o = document.createElement("option");
-      o.value = typeof opt==="string" ? opt : opt.value;
-      o.textContent = typeof opt==="string" ? opt : (opt.label||opt.value);
-      sel.appendChild(o);
-    });
-    replacement = document.createElement("label");
-    replacement.appendChild(sel);
-  } else {
+if (type === "select") {
+  const name = block?.dataset.name || (spec.id || spec.name || spec.key || `q${idx+1}`);
+  const sel = document.createElement("select");
+  sel.className = "ctl"; sel.name = name;
+
+  // Placeholder
+  const ph = document.createElement("option");
+  ph.value = ""; ph.textContent = "Seçiniz…"; ph.disabled = true; ph.selected = true; ph.hidden = true;
+  sel.appendChild(ph);
+
+  spec.options.forEach(opt => {
+    const o = document.createElement("option");
+    o.value = typeof opt==="string" ? opt : opt.value;
+    o.textContent = typeof opt==="string" ? opt : (opt.label||opt.value);
+    sel.appendChild(o);
+  });
+  replacement = document.createElement("label");
+  replacement.appendChild(sel);
+} else {
     const name = block?.dataset.name || (spec.id || spec.name || spec.key || `q${idx+1}`);
     const wrap = document.createElement("div");
     spec.options.forEach(opt=>{
