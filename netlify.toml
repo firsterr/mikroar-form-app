@@ -2,12 +2,11 @@
 [build]
   publish = "mikroar-form-app/public"
 
-# Netlify Functions kökü (repo yapına göre)
+# Serverless Functions klasörü (repo kökünden yol)
 [functions]
-  directory = "mikroar-form-app/netlify/functions"
+  directory = "netlify/functions"
 
 # ---------- API redirect'leri ----------
-# /api/* → /.netlify/functions/*
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
@@ -15,12 +14,12 @@
   force = true
 
 # ---------- Edge Function eşlemeleri ----------
-# form.html isteğini Edge SSR ile meta+redirect üret
+# form.html isteklerini Edge SSR ile işle
 [[edge_functions]]
   path = "/form.html"
   function = "form-ssr"
 
-# kısa linkler (/f/12345) için de aynı Edge SSR
+# kısa link /f/* için de aynı Edge SSR devrede
 [[edge_functions]]
   path = "/f/*"
   function = "form-ssr"
