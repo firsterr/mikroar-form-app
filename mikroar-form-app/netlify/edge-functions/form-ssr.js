@@ -1,82 +1,76 @@
-// Netlify Edge – OG/Twitter meta'ları tekilleştirir ve doğru görseli enjekte eder.
+// netlify/edge-functions/form-ssr.js
 export default async (request, context) => {
-  const url = new URL(request.url);
-  const origin = `${url.protocol}//${url.host}`;
-
-  let slug = url.searchParams.get("slug") || null;
-  let code = null;
-  const m = url.pathname.match(/^\/f\/([^/?#]+)/);
-  if (m && m[1]) code = m[1];
-// form verisini zaten API'den çekiyorsun:
-const api = `${origin}/api/forms?slug=${encodeURIComponent(slug)}`;
-const res = await fetch(api, { headers: { "accept": "application/json" } });
-const json = res.ok ? await res.json() : null;
-const form = json?.form || null;
- // Varsayılan meta
-let meta = {
-  title: (form?.title || "Mikroar Anket"),
-  description: (form?.description || "Ankete katılın."),
-  image: origin + "/og/default.jpg",
-  url: origin + url.pathname
-};
-// 1) URL param ile override (sadece http/https)
-const paramImg = url.searchParams.get("i");
-if (paramImg && /^https?:\/\//i.test(paramImg)) {
-  meta.image = paramImg;
-} else if (form?.shareImageUrl && /^https?:\/\//i.test(form.shareImageUrl)) {
-  // 2) DB’deki paylaşım görseli
-  meta.image = form.shareImageUrl;
-}
-  // Form başlığı/açıklaması mevcutsa zenginleştir
   try {
-    if (slug || code) {
-      const api = new URL(origin + "/api/forms");
-      if (slug) api.searchParams.set("slug", slug);
-      if (code) api.searchParams.set("k", code);
-      const r = await fetch(api.toString());
+    const url = new URL(request.url);
+    const origin = `${url.protocol}//${url.host}`;
+
+    // /f/:code => form.html?slug=...
+    const slug = url.searchParams.get("slug")
+      || url.pathname.replace(/^\/f\/?/, "") || "";
+
+    // Formu API’den çek (OG için share_image_url ve title/desc lazım)
+    let form = null;
+    if (slug) {
+      const api = `${origin}/api/forms?slug=${encodeURIComponent(slug)}`;
+      const r = await fetch(api, { headers: { accept: "application/json" } });
       if (r.ok) {
-        const data = await r.json();
-        if (data?.ok && data.form) {
-          meta.title = data.form.title || meta.title;
-          meta.description = data.form.description || meta.description;
-          if (data.form.og_image) meta.image = absUrl(data.form.og_image, origin);
-        }
+        const j = await r.json();
+        form = j?.form || null;
       }
     }
-  } catch (_) {}
 
-  const resp = await context.next();
-  const ct = (resp.headers.get("content-type") || "").toLowerCase();
-  if (!ct.includes("text/html")) return resp;
+    // Meta
+    let meta = {
+      title: form?.title || "Mikroar Anket",
+      description: form?.description || "Ankete katılın.",
+      image: `${origin}/og/default.jpg`,
+      url: origin + url.pathname,
+    };
 
-  const tags = `
-    <!-- og-from-edge -->
-    <meta property="og:title" content="${esc(meta.title)}" />
-    <meta property="og:description" content="${esc(meta.description)}" />
-    <meta property="og:image" content="${meta.image}" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    <meta property="og:url" content="${meta.url}" />
-    <meta property="og:type" content="website" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="${esc(meta.title)}" />
-    <meta name="twitter:description" content="${esc(meta.description)}" />
-    <meta name="twitter:image" content="${meta.image}" />
-  `;
-// ... mevcut kodda meta = { title, description, image, url } oluşturduğun yerden hemen sonra:
-const i = url.searchParams.get("i");
-if (i && /^https?:\/\//i.test(i)) {
-  meta.image = i; // parametre ile gelen mutlak URL’i kullan
-}
-  // Var olan og:/twitter: meta'larını temizle → tek set kalsın
-  return new HTMLRewriter()
-    .on('meta[property^="og:"]', { element(el){ el.remove(); } })
-    .on('meta[name^="twitter:"]',  { element(el){ el.remove(); } })
-    .on('head', { element(h){ h.append(tags, { html: true }); } })
-    .transform(resp);
+    // 1) URL parametri ile override
+    const i = url.searchParams.get("i");
+    if (i && /^https?:\/\//i.test(i)) {
+      meta.image = i;
+    } else if (form?.shareImageUrl && /^https?:\/\//i.test(form.shareImageUrl)) {
+      // 2) DB alanı
+      meta.image = form.shareImageUrl;
+    }
+
+    const html = `<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escapeHtml(meta.title)}</title>
+<meta name="description" content="${escapeHtml(meta.description)}">
+<link rel="canonical" href="${escapeAttr(meta.url)}">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="${escapeHtml(meta.title)}">
+<meta property="og:description" content="${escapeHtml(meta.description)}">
+<meta property="og:image" content="${escapeAttr(meta.image)}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:url" content="${escapeAttr(meta.url)}">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${escapeHtml(meta.title)}">
+<meta name="twitter:description" content="${escapeHtml(meta.description)}">
+<meta name="twitter:image" content="${escapeAttr(meta.image)}">
+
+<style>html,body{height:100%}body{display:flex;align-items:center;justify-content:center;font:16px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#111}.b{opacity:.7}</style>
+</head>
+<body>
+  <div class="b">Yükleniyor…</div>
+  <script>location.replace("${origin}/form.html?slug=${encodeURIComponent(slug)}");</script>
+</body>
+</html>`;
+
+    return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
+  } catch (e) {
+    return new Response("SSR error", { status: 500 });
+  }
 };
 
-function esc(s=""){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;"); }
-function absUrl(p, origin){ try{ return new URL(p, origin).href; }catch{ return origin + p; } }
-
-export const config = { path: ["/f/*", "/form.html"] };
+function escapeHtml(s){return String(s??"").replace(/[&<>"]/g,m=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[m]));}
+function escapeAttr(s){return String(s??"").replace(/"/g,"&quot;");}
