@@ -2,27 +2,37 @@
 (function () {
   const app = document.getElementById("app");
 
-  // ----------------- helpers (compatible) -----------------
-  function el(tag, attrs, /* ...children */) {
-    const node = document.createElement(tag);
-    if (attrs) {
-      for (const k in attrs) {
-        const v = attrs[k];
-        if (k === "class") node.className = v;
-        else if (k === "style") node.style.cssText = v;
-        else if (k.startsWith("on") && typeof v === "function") node.addEventListener(k.slice(2), v);
-        else if (v !== null && v !== undefined) node.setAttribute(k, v);
-      }
+  // -- Güvenli element oluşturucu: <style>/<script> için textNode, diğerlerinde HTML ekler
+function el(tag, attrs /*, ...children */) {
+  const node = document.createElement(tag);
+  if (attrs) {
+    for (const k in attrs) {
+      const v = attrs[k];
+      if (k === "class") node.className = v;
+      else if (k === "style") node.style.cssText = v;
+      else if (k.startsWith("on") && typeof v === "function") node.addEventListener(k.slice(2), v);
+      else if (v !== null && v !== undefined) node.setAttribute(k, v);
     }
-    for (let i = 2; i < arguments.length; i++) {
-      const c = arguments[i];
-      if (c == null) continue;
-      if (typeof c === "string") node.insertAdjacentHTML("beforeend", c);
-      else if (Array.isArray(c)) c.forEach(x => x && node.appendChild(x));
-      else node.appendChild(c);
-    }
-    return node;
   }
+  const isStyleOrScript = node.tagName === "STYLE" || node.tagName === "SCRIPT";
+  for (let i = 2; i < arguments.length; i++) {
+    const c = arguments[i];
+    if (c == null) continue;
+    if (typeof c === "string") {
+      if (isStyleOrScript) {
+        // Kritik değişiklik: HTML olarak değil, metin olarak ekle
+        node.appendChild(document.createTextNode(c));
+      } else {
+        node.insertAdjacentHTML("beforeend", c);
+      }
+    } else if (Array.isArray(c)) {
+      for (let j = 0; j < c.length; j++) if (c[j]) node.appendChild(c[j]);
+    } else {
+      node.appendChild(c);
+    }
+  }
+  return node;
+}
   const qs  = (s, r=document) => r.querySelector(s);
   const esc = s => String(s ?? "").replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m]));
   const clone = o => JSON.parse(JSON.stringify(o));
