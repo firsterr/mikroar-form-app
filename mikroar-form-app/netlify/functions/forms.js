@@ -13,31 +13,38 @@ const json = (body, status = 200, extraHeaders = {}) => ({
   body: JSON.stringify(body)
 });
 
+// ... supabase init vs.
+
 exports.handler = async (event) => {
-  try {
-    const q = event.queryStringParameters || {};
-    let slug = q.slug?.trim() || null;
-    const code = (q.k || q.code || "").trim() || null;
+  const slug = event.queryStringParameters?.slug;
+  if (!slug) return { statusCode: 400, body: JSON.stringify({ error: "slug_required" }) };
 
-    // k -> slug
-    if (!slug && code) {
-      const { data: short, error: e1 } = await sb
-        .from("shortlinks").select("slug").eq("code", code).maybeSingle();
-      if (e1) throw e1;
-      slug = short?.slug || null;
-    }
+  const { data, error } = await supabase
+    .from("forms")
+    .select("slug, title, description, active, schema, share_image_url")
+    .eq("slug", slug)
+    .single();
 
-    if (!slug) return json({ ok:false, error:"slug-required" }, 400);
+  if (error || !data) {
+    return { statusCode: 404, body: JSON.stringify({ ok:false, error: "not_found" }) };
+  }
 
-    // form
-    const { data: form, error } = await sb
-      .from("forms")
-      .select("*")
-      .eq("slug", slug)
-      .eq("active", true)
-      .maybeSingle();
-    if (error) throw error;
-    if (!form) return json({ ok:false, error:"not-found" }, 404);
+  return {
+    statusCode: 200,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      ok: true,
+      form: {
+        slug: data.slug,
+        title: data.title,
+        description: data.description,
+        active: data.active,
+        schema: data.schema,
+        shareImageUrl: data.share_image_url || null
+      }
+    })
+  };
+};
 
     // normalize
     const description =
