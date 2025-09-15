@@ -1,29 +1,26 @@
-# ===== Netlify config (final) =====
-
-[build]
-  publish   = "mikroar-form-app/public"
-  functions = "mikroar-form-app/netlify/functions"
-
-# API → Functions yönlendirmesi
-[[redirects]]
-  from = "/api/*"
-  to   = "/.netlify/functions/:splat"
-  status = 200
-
-
-
-# Edge Function: OG/Twitter meta enjeksiyonu (form.html)
-[[edge_functions]]
-  function = "form-ssr"
-  path     = "/form.html"
-
+# ---------- BUILD ----------
 [build]
   publish = "mikroar-form-app/public"
 
+# Netlify Functions kökü (repo yapına göre)
+[functions]
+  directory = "mikroar-form-app/netlify/functions"
+
+# ---------- API redirect'leri ----------
+# /api/* → /.netlify/functions/*
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+  force = true
+
+# ---------- Edge Function eşlemeleri ----------
+# form.html isteğini Edge SSR ile meta+redirect üret
 [[edge_functions]]
   path = "/form.html"
   function = "form-ssr"
 
+# kısa linkler (/f/12345) için de aynı Edge SSR
 [[edge_functions]]
   path = "/f/*"
   function = "form-ssr"
