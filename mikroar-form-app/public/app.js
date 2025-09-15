@@ -1,4 +1,4 @@
-// public/app.js — FINAL
+// public/app.js — OTHER opsiyonu admin'den yönetilir (other/allowOther/showOther === true ise eklenir)
 (function () {
   const app = document.getElementById("app");
   const skeleton = document.getElementById("skeleton");
@@ -127,6 +127,8 @@
       const required = !!it.required;
       const name = attr(qid);
 
+      const showOther = !!(it.other || it.allowOther || it.showOther); // ⬅️ sadece admin işaretlerse
+
       h.push(`<div class="q" tabindex="-1" data-index="${i}" data-required="${required ? "1":""}" data-name="${name}" data-qid="${attr(qid)}">
         <div class="field"><div><strong>${esc(label)}</strong></div>`);
 
@@ -134,31 +136,33 @@
       const isHeavy  = isChoice && it.options.length >= LAZY_THRESHOLD;
 
       if (isChoice && isHeavy) {
-        h.push(`<div class="lazy-opts" data-type="${attr(it.type)}" data-qid="${attr(qid)}">Seçenekler yükleniyor…</div>`);
+        h.push(`<div class="lazy-opts" data-type="${attr(it.type)}" data-qid="${attr(qid)}" data-other="${showOther ? "1" : ""}">Seçenekler yükleniyor…</div>`);
       } else if (it.type==="radio" && Array.isArray(it.options)) {
         for (const opt of it.options) {
           const val = typeof opt==="string" ? opt : opt.value;
           const txt = typeof opt==="string" ? opt : (opt.label||opt.value);
           h.push(`<label><input class="ctl" type="radio" name="${name}" value="${attr(val)}"> ${esc(txt)}</label>`);
         }
-        // Diğer (radio)
-        h.push(`<label class="other-wrap">
-          <input class="ctl other-toggle" type="radio" name="${name}" value="__OTHER__">
-          Diğer:
-          <input type="text" class="other-input" data-other-for="${name}" placeholder="Yazınız" disabled>
-        </label>`);
+        if (showOther) {
+          h.push(`<label class="other-wrap">
+            <input class="ctl other-toggle" type="radio" name="${name}" value="__OTHER__">
+            Diğer:
+            <input type="text" class="other-input" data-other-for="${name}" placeholder="Yazınız" disabled>
+          </label>`);
+        }
       } else if (it.type==="checkbox" && Array.isArray(it.options)) {
         for (const opt of it.options) {
           const val = typeof opt==="string" ? opt : opt.value;
           const txt = typeof opt==="string" ? opt : (opt.label||opt.value);
           h.push(`<label><input class="ctl" type="checkbox" name="${name}" value="${attr(val)}"> ${esc(txt)}</label>`);
         }
-        // Diğer (checkbox)
-        h.push(`<label class="other-wrap">
-          <input class="ctl other-toggle" type="checkbox" name="${name}" value="__OTHER__">
-          Diğer:
-          <input type="text" class="other-input" data-other-for="${name}" placeholder="Yazınız" disabled>
-        </label>`);
+        if (showOther) {
+          h.push(`<label class="other-wrap">
+            <input class="ctl other-toggle" type="checkbox" name="${name}" value="__OTHER__">
+            Diğer:
+            <input type="text" class="other-input" data-other-for="${name}" placeholder="Yazınız" disabled>
+          </label>`);
+        }
       } else if (it.type==="select" && Array.isArray(it.options)) {
         // Placeholder "Seçiniz…"
         h.push(`<label><select class="ctl" name="${name}">`);
@@ -289,6 +293,7 @@
     const block = node.closest(".q");
     const idx   = parseInt(block?.dataset.index || "0", 10);
     const qid   = node.dataset.qid || null;
+    const showOther = node.dataset.other === "1"; // ⬅️ render’la uyumlu
 
     // Şemayı bul: önce id/name/key, olmazsa index
     let spec = CURRENT_QUESTIONS.find(it => (it.id || it.name || it.key) === qid);
@@ -324,15 +329,16 @@
         label.innerHTML = `<input class="ctl" type="${type}" name="${attr(name)}" value="${attr(val)}"> ${esc(txt)}`;
         wrap.appendChild(label);
       });
-      // Diğer seçeneği
-      const other = document.createElement("label");
-      other.className = "other-wrap";
-      other.innerHTML = `
-        <input class="ctl other-toggle" type="${type}" name="${attr(name)}" value="__OTHER__">
-        Diğer:
-        <input type="text" class="other-input" data-other-for="${attr(name)}" placeholder="Yazınız" disabled>
-      `;
-      wrap.appendChild(other);
+      if (showOther || spec.other || spec.allowOther || spec.showOther) {
+        const other = document.createElement("label");
+        other.className = "other-wrap";
+        other.innerHTML = `
+          <input class="ctl other-toggle" type="${type}" name="${attr(name)}" value="__OTHER__">
+          Diğer:
+          <input type="text" class="other-input" data-other-for="${attr(name)}" placeholder="Yazınız" disabled>
+        `;
+        wrap.appendChild(other);
+      }
       replacement = wrap;
     }
 
@@ -494,7 +500,7 @@
     // Radio: sadece diğer seçiliyse metin zorunlu
     // Checkbox: normallardan biri ya da (diğer + metin) yeterli
     if (nodeList[0].type === "radio") {
-      return otherChecked && otherText !== "";
+      return otherChecked ? (otherText !== "") : false;
     } else if (nodeList[0].type === "checkbox") {
       return hasNormal || (otherChecked && otherText !== "");
     }
