@@ -30,6 +30,7 @@ export default async (request) => {
       }
     }
 
+    // ?i= ile override, yoksa DB, o da yoksa default
     const paramImg = url.searchParams.get("i");
     const meta = {
       title: form?.title || "Mikroar Anket",
@@ -42,37 +43,54 @@ export default async (request) => {
       url: origin + url.pathname
     };
 
+    const frameSrc = slug
+      ? `/form.html?slug=${encodeURIComponent(slug)}`
+      : `/form.html?error=not_found`;
+
     const html = `<!doctype html>
 <html lang="tr">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${h(meta.title)}</title>
 <meta name="description" content="${h(meta.description)}">
 <link rel="canonical" href="${a(meta.url)}">
+
 <meta property="og:type" content="website">
 <meta property="og:title" content="${h(meta.title)}">
 <meta property="og:description" content="${h(meta.description)}">
 <meta property="og:image" content="${a(meta.image)}">
-<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
 <meta property="og:url" content="${a(meta.url)}">
+
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${h(meta.title)}">
 <meta name="twitter:description" content="${h(meta.description)}">
 <meta name="twitter:image" content="${a(meta.image)}">
-<style>html,body{height:100%}body{display:flex;align-items:center;justify-content:center;font:16px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#111}.b{opacity:.7}</style>
+
+<style>
+  html,body{height:100%;margin:0}
+  body{font:16px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#111}
+  .wrap{position:fixed;inset:0}
+  iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+  .noslug{display:flex;align-items:center;justify-content:center;height:100%}
+  .muted{opacity:.7}
+</style>
 </head>
 <body>
-  <div class="b">Yükleniyor…</div>
-  <script>
-    ${slug ? `location.replace("${origin}/form.html?slug=${encodeURIComponent(slug)}");`
-           : `document.body.innerHTML='<div class="b">Form bulunamadı.</div>';`}
-  </script>
+  ${slug
+    ? `<div class="wrap"><iframe src="${a(frameSrc)}" allow="clipboard-write *; clipboard-read *"></iframe></div>`
+    : `<div class="noslug"><div class="muted">Form bulunamadı.</div></div>`}
+  <noscript><div class="muted" style="position:fixed;left:0;right:0;bottom:8px;text-align:center">Bu sayfa JavaScript gerektirir.</div></noscript>
 </body>
 </html>`;
+
     return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
   } catch {
     return new Response("SSR error", { status: 500 });
   }
 };
+
 function h(s){return String(s??"").replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[m]));}
 function a(s){return String(s??"").replace(/"/g,"&quot;");}
