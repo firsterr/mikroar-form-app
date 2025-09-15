@@ -1,23 +1,41 @@
-// /.netlify/functions/go?code=XXXX
-const { createClient } = require("@supabase/supabase-js");
+// netlify/functions/go.js
+const { SUPABASE_URL, SUPABASE_SERVICE_ROLE, SUPABASE_ANON_KEY } = process.env;
+const KEY = SUPABASE_SERVICE_ROLE || SUPABASE_ANON_KEY;
+
+function j(status, body, headers = {}) {
+  return { statusCode: status, headers: { "content-type": "application/json; charset=utf-8", ...headers }, body: JSON.stringify(body) };
+}
 
 exports.handler = async (event) => {
-  const code = (event.queryStringParameters?.code || "").trim();
-  if (!code) return json(400, { ok:false, error:"missing-code" });
+  try {
+    const code = event.queryStringParameters?.code
+      || (event.path || "").split("/").pop();
+    if (!code) return j(400, { error: "code_required" });
+    if (!SUPABASE_URL || !KEY) return j(500, { error: "server_env_missing" });
 
-  const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, { auth:{ persistSession:false } });
+    const url = new URL(`${SUPABASE_URL}/rest/v1/forms`);
+    url.searchParams.set("select", "slug,short_code");
+    url.searchParams.set("short_code", `eq.${code}`);
+    url.searchParams.set("limit", "1");
 
-  const { data, error } = await sb.from("shortlinks").select("slug").eq("code", code).maybeSingle();
-  if (error) return json(500, { ok:false, error:"db", detail:error.message });
-  if (!data?.slug) return json(404, { ok:false, error:"not-found" });
+    const r = await fetch(url, { headers: { apikey: KEY, authorization: `Bearer ${KEY}`, accept: "application/json" } });
+    if (!r.ok) return j(502, { error: "upstream_error", detail: r.statusText });
 
-  return json(200, { ok:true, slug: data.slug });
+    const rows = await r.json();
+    if (!rows?.length) return j(404, { error: "not_found" });
+
+    const slug = rows[0].slug;
+    const fmt = (event.queryStringParameters?.format || "").toLowerCase();
+    if (fmt === "json") return j(200, { ok: true, slug });
+
+    // default: redirect
+    return {
+      statusCode: 302,
+      headers: { Location: `/form.html?slug=${encodeURIComponent(slug)}` },
+      body: "",
+    };
+  } catch (e) {
+    console.error("go.js crash:", e);
+    return j(500, { error: "server_crash" });
+  }
 };
-
-function json(status, body) {
-  return {
-    statusCode: status,
-    headers: { "content-type":"application/json; charset=utf-8", "cache-control":"no-store" },
-    body: JSON.stringify(body)
-  };
-}
