@@ -1,11 +1,8 @@
-# =========================
-# Netlify config (final)
-# =========================
-
+# ---------- BUILD ----------
 [build]
   publish = "mikroar-form-app/public"
 
-# Serverless Functions klasörü (mevcut konum)
+# Serverless Functions klasörü
 [functions]
   directory = "mikroar-form-app/netlify/functions"
   node_bundler = "esbuild"
@@ -17,11 +14,7 @@
   status = 200
   force = true
 
-# Edge Function eşlemeleri (SSR + kısa link)
-[[edge_functions]]
-  path = "/form.html"
-  function = "form-ssr"
-
+# ---------- Edge Function eşleşmesi YALNIZCA kısa link için ----------
 [[edge_functions]]
   path = "/f/*"
   function = "form-ssr"
