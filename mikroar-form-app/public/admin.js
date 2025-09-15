@@ -63,7 +63,8 @@
     description: "",
     active: true,
     questions: [],
-    saving: false
+    saving: false,
+     shareImageUrl: ""
   };
 
   // ---------- boot with error boundary ----------
@@ -327,9 +328,9 @@
     qs("#builder").style.display = "";
     qs("#actionbar").style.display = "";
 
-    // Görsel URL alanını slug’a göre doldur
-    const og = getOg(state.slug);
-    const ogInp = qs("#ogImg"); if (ogInp) ogInp.value = og;
+// loadForm(slug) içinde, form çekildikten sonra:
+state.shareImageUrl = form.shareImageUrl || "";
+const ogInp = qs("#ogImg"); if (ogInp) ogInp.value = state.shareImageUrl;
 
     renderQuestions();
     setStatus(`Yüklendi: ${slug}`);
@@ -361,6 +362,18 @@
   function renderRow(q, i){
     return el("div", { class:"card" },
       el("div", { class:"qrow" },
+         el("div", { class:"col", style:"margin-top:6px" },
+  el("label", {}, "Görsel URL (Paylaşım)"),
+  el("div", { class:"row" },
+    el("input", {
+      id:"ogImg", class:"input", placeholder:"https://…jpg/png",
+      oninput: e=> state.shareImageUrl = e.target.value
+    }),
+    el("button", { class:"btn ghost", onclick: onCopyShare }, "Paylaşım linkini kopyala"),
+    el("button", { class:"btn ghost", onclick: ()=>{ const u = qs('#ogImg')?.value; if(u) window.open(u,'_blank'); } }, "Görseli aç")
+  ),
+  el("div", { class:"muted" }, "Not: DB’ye kaydedilir; WhatsApp/FB önizlemesinde kullanılır.")
+),
         el("div", { class:"col" },
           el("label", {}, `Soru ${i+1} — Etiket`),
           el("input", { class:"input", value:q.label||"", oninput:e=>{ q.label = e.target.value; } })
@@ -415,14 +428,14 @@
     const btn = qs("#saveBtn"); if (btn) btn.classList.add("loading");
     setStatus("Kaydediliyor…");
 
-    const payload = {
-      slug: state.slug,
-      title: state.title,
-      description: state.description,
-      active: !!state.active,
-      schema: { title: state.title, description: state.description,
-        questions: state.questions.map(q => normalizeQuestion(q)) }
-    };
+   const payload = {
+  slug: state.slug,
+  title: state.title,
+  description: state.description,
+  active: !!state.active,
+  schema: { title: state.title, description: state.description, questions: state.questions.map(normalizeQuestion) },
+  shareImageUrl: (state.shareImageUrl || "").trim()
+};
 
     const r = await fetch(`/api/forms-admin?token=${encodeURIComponent(store.token)}`, {
       method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(payload)
