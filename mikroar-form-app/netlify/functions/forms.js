@@ -1,68 +1,61 @@
-// /.netlify/functions/forms
-const { createClient } = require("@supabase/supabase-js");
+// netlify/functions/forms.js
+const { SUPABASE_URL, SUPABASE_SERVICE_ROLE, SUPABASE_ANON_KEY } = process.env;
+const SB_KEY = SUPABASE_SERVICE_ROLE || SUPABASE_ANON_KEY;
 
-const sb = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_ANON_KEY,
-  { auth: { persistSession: false } }
-);
-
-const json = (body, status = 200, extraHeaders = {}) => ({
-  statusCode: status,
-  headers: { "content-type": "application/json; charset=utf-8", ...extraHeaders },
-  body: JSON.stringify(body)
-});
-
-// ... supabase init vs.
+function res(status, body, extra = {}) {
+  return {
+    statusCode: status,
+    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...extra },
+    body: JSON.stringify(body),
+  };
+}
 
 exports.handler = async (event) => {
-  const slug = event.queryStringParameters?.slug;
-  if (!slug) return { statusCode: 400, body: JSON.stringify({ error: "slug_required" }) };
+  try {
+    if (event.httpMethod === "OPTIONS") return res(204, {});
+    if (event.httpMethod !== "GET") return res(405, { error: "method_not_allowed" });
 
-  const { data, error } = await supabase
-    .from("forms")
-    .select("slug, title, description, active, schema, share_image_url")
-    .eq("slug", slug)
-    .single();
+    if (!SUPABASE_URL || !SB_KEY) return res(500, { error: "server_env_missing" });
 
-  if (error || !data) {
-    return { statusCode: 404, body: JSON.stringify({ ok:false, error: "not_found" }) };
-  }
+    const slug = event.queryStringParameters?.slug;
+    if (!slug) return res(400, { error: "slug_required" });
 
-  return {
-    statusCode: 200,
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
+    const url = new URL(`${SUPABASE_URL}/rest/v1/forms`);
+    url.searchParams.set("select", "slug,title,description,active,schema,share_image_url");
+    url.searchParams.set("slug", `eq.${slug}`);
+    url.searchParams.set("limit", "1");
+
+    const r = await fetch(url.toString(), {
+      headers: {
+        apikey: SB_KEY,
+        authorization: `Bearer ${SB_KEY}`,
+        accept: "application/json",
+      },
+    });
+
+    if (!r.ok) {
+      const t = await r.text().catch(() => "");
+      console.error("forms.js supabase error:", r.status, t);
+      return res(502, { ok: false, error: "upstream_error", detail: r.statusText });
+    }
+
+    const rows = await r.json();
+    if (!rows || !rows.length) return res(404, { ok: false, error: "not_found" });
+
+    const f = rows[0];
+    return res(200, {
       ok: true,
       form: {
-        slug: data.slug,
-        title: data.title,
-        description: data.description,
-        active: data.active,
-        schema: data.schema,
-        shareImageUrl: data.share_image_url || null
-      }
-    })
-  };
-};
-
-    // normalize
-    const description =
-      form.description ?? form.desc ?? form.schema?.description ?? form.schema?.desc ?? null;
-
-    const payload = {
-      id: form.id,
-      slug: form.slug,
-      title: form.title ?? form.schema?.title ?? "",
-      description,
-      active: !!form.active,
-      schema: form.schema ?? { questions: [] }
-    };
-
-    return json({ ok:true, form: payload }, 200, {
-      "Cache-Control": "public, max-age=30, must-revalidate"
+        slug: f.slug,
+        title: f.title,
+        description: f.description,
+        active: !!f.active,
+        schema: f.schema,
+        shareImageUrl: f.share_image_url || null,
+      },
     });
-  } catch (err) {
-    return json({ ok:false, error:"server-error", detail: err?.message || String(err) }, 500);
+  } catch (e) {
+    console.error("forms.js crash:", e);
+    return res(500, { error: "server_crash" });
   }
 };
