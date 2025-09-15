@@ -23,3 +23,23 @@
 [[edge_functions]]
   path = "/f/*"
   function = "form-ssr"
+
+  [build]
+  publish = "mikroar-form-app/public"
+
+[functions]
+  directory = "mikroar-form-app/netlify/functions"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+  force = true
+
+[[edge_functions]]
+  path = "/form.html"
+  function = "form-ssr"
+
+[[edge_functions]]
+  path = "/f/*"
+  function = "form-ssr"
