@@ -1,4 +1,4 @@
-// MikroAR Admin — SAFE FINAL: login gate + builder + sticky bar + toast + inline addQuestion
+// MikroAR Admin — TR labels + Share Image URL (local only) + inline addQuestion (SAFE)
 (function () {
   const app = document.getElementById("app");
 
@@ -35,10 +35,23 @@
   const splitLines = s => String(s||"").split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
   const joinLines  = a => (a||[]).join("\n");
 
+  // TR görünür etiketler (iç value değişmiyor)
+  const TYPE_LABELS = {
+    text: "Kısa yanıt",
+    textarea: "Paragraf",
+    radio: "Tek seçim",
+    checkbox: "Çoklu seçim",
+    select: "Açılır menü"
+  };
+  const TYPE_ORDER = ["text","textarea","radio","checkbox","select"];
+
   const store = {
     get token(){ return localStorage.getItem("ADMIN_TOKEN") || ""; },
     set token(v){ localStorage.setItem("ADMIN_TOKEN", v || ""); }
   };
+  const ogKey = (slug) => `FORM_OG_IMG::${slug}`;
+  const getOg = (slug) => slug ? (localStorage.getItem(ogKey(slug)) || "") : "";
+  const setOg = (slug, url) => { if (slug) localStorage.setItem(ogKey(slug), url || ""); };
 
   // ---------- state ----------
   let state = {
@@ -151,7 +164,7 @@
         .col{ display:flex; flex-direction:column; gap:6px; }
         .input, textarea, select{ padding:10px 12px; border:1px solid var(--bd); border-radius:12px; width:100%; }
         .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:12px }
-        .qrow{ display:grid; grid-template-columns: 1fr 120px 120px 120px auto; gap:10px; align-items:start }
+        .qrow{ display:grid; grid-template-columns: 1fr 140px 120px 140px auto; gap:10px; align-items:start }
         .qrow .full{ grid-column:1/-1 }
         @media (max-width:980px){ .qrow{ grid-template-columns:1fr } }
         .actionbar{ position:fixed; left:0; right:0; bottom:0; padding:10px 16px calc(10px + env(safe-area-inset-bottom)); background:linear-gradient(to top, rgba(250,250,250,.98), rgba(250,250,250,.88)); border-top:1px solid var(--bd); display:flex; gap:10px; justify-content:center; z-index:50; backdrop-filter:saturate(1.1) blur(6px) }
@@ -209,6 +222,19 @@
           el("div", { class:"col", style:"margin-top:6px" },
             el("label", {}, "Açıklama"),
             el("textarea", { id:"desc", rows:"2", oninput: e=>state.description = e.target.value })
+          ),
+
+          // >>> Görsel URL (paylaşım) — localStorage, DB'ye gitmez
+          el("div", { class:"col", style:"margin-top:6px" },
+            el("label", {}, "Görsel URL (Paylaşım)"),
+            el("div", { class:"row" },
+              el("input", { id:"ogImg", class:"input", placeholder:"https://…jpg/png",
+                oninput: e=> setOg(state.slug, e.target.value)
+              }),
+              el("button", { class:"btn ghost", onclick: onCopyShare }, "Paylaşım linkini kopyala"),
+              el("button", { class:"btn ghost", onclick: ()=>{ const u = qs('#ogImg')?.value; if(u) window.open(u,'_blank'); } }, "Görseli aç")
+            ),
+            el("div", { class:"muted" }, "Not: Bu alan DB’ye yazılmaz; tarayıcınıza kayıt edilir. Linke ?i= parametresi olarak eklenir.")
           )
         ),
 
@@ -219,7 +245,7 @@
             el("div", { class:"row" },
               el("button", { class:"btn small ghost", onclick: onImport }, "JSON içe al"),
               el("button", { class:"btn small ghost", onclick: onExport }, "JSON dışa ver"),
-              // 🔧 addQuestion referansı yerine inline handler (scope sorunu biter)
+              // inline addQuestion
               el("button", { class:"btn small", onclick: ()=>{ 
                 state.questions.push({ type:"radio", label:"Yeni Soru", required:true, options:["Evet","Hayır"], other:false });
                 renderQuestions();
@@ -300,6 +326,11 @@
     qs("#meta").style.display = "";
     qs("#builder").style.display = "";
     qs("#actionbar").style.display = "";
+
+    // Görsel URL alanını slug’a göre doldur
+    const og = getOg(state.slug);
+    const ogInp = qs("#ogImg"); if (ogInp) ogInp.value = og;
+
     renderQuestions();
     setStatus(`Yüklendi: ${slug}`);
   }
@@ -311,6 +342,8 @@
     state.slug = slug; state.title = ""; state.description = ""; state.active = true; state.questions = [];
     qs("#title").value = ""; qs("#desc").value  = ""; qs("#active").value = "true";
     qs("#meta").style.display = ""; qs("#builder").style.display = ""; qs("#actionbar").style.display = "";
+    // yeni formda og url alanını boşalt
+    const ogInp = qs("#ogImg"); if (ogInp) ogInp.value = getOg(slug) || "";
     renderQuestions();
     setStatus(`Yeni form: ${state.slug}`);
   }
@@ -335,8 +368,7 @@
         el("div", { class:"col" },
           el("label", {}, "Tip"),
           el("select", { class:"input", onchange:e=>{ q.type=e.target.value; if(!needsOptions(q.type)){ delete q.options; delete q.other; } renderQuestions(); } },
-            opt("text", q.type), opt("textarea", q.type), opt("radio", q.type),
-            opt("checkbox", q.type), opt("select", q.type)
+            ...TYPE_ORDER.map(t => el("option", { value:t, selected: q.type===t ? "selected" : null }, TYPE_LABELS[t]))
           )
         ),
         el("div", { class:"col" },
@@ -371,7 +403,6 @@
       )
     );
   }
-  function opt(v, cur){ return el("option", { value:v, selected: cur===v ? "selected" : null }, v); }
   function move(i,d){ const j=i+d; if(j<0||j>=state.questions.length) return; const t=state.questions[i]; state.questions[i]=state.questions[j]; state.questions[j]=t; renderQuestions(); }
   function dup(i){ state.questions.splice(i+1,0,clone(state.questions[i])); renderQuestions(); }
   function del(i){ state.questions.splice(i,1); renderQuestions(); }
@@ -434,10 +465,25 @@
                             (Array.isArray(j.questions) ? j.questions : []);
         qs("#title").value = state.title; qs("#desc").value  = state.description; qs("#active").value = state.active ? "true" : "false";
         qs("#meta").style.display = ""; qs("#builder").style.display = ""; qs("#actionbar").style.display = "";
+        const ogInp = qs("#ogImg"); if (ogInp) ogInp.value = getOg(state.slug) || "";
         renderQuestions(); setStatus("JSON içe alındı"); toast("İçe aktarıldı");
       }catch{ setStatus("JSON okunamadı", true); toast("JSON okunamadı"); }
     }, { once:true });
     inp.click();
+  }
+
+  // ---------- share link (uses ?i= param) ----------
+  function onCopyShare(){
+    if (!state.slug) { toast("Önce formu yükleyin/oluşturun."); return; }
+    const img = (qs("#ogImg")?.value || "").trim();
+    if (!img) { toast("Görsel URL gerekli."); return; }
+    const base = `${location.origin}/form.html?slug=${encodeURIComponent(state.slug)}`;
+    const url  = `${base}&i=${encodeURIComponent(img)}`;
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(url).then(()=>toast("Paylaşım linki kopyalandı"));
+    } else {
+      prompt("Paylaşım linki:", url);
+    }
   }
 
   // ---------- clear editor ----------
@@ -446,6 +492,7 @@
     if (qs("#title")) qs("#title").value = "";
     if (qs("#desc"))  qs("#desc").value  = "";
     if (qs("#active")) qs("#active").value = "true";
+    const ogInp = qs("#ogImg"); if (ogInp) ogInp.value = "";
     qs("#meta").style.display = "none";
     qs("#builder").style.display = "none";
     qs("#actionbar").style.display = "none";
