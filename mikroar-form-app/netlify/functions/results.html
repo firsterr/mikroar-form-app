@@ -1,0 +1,180 @@
+<!-- mikroar-form-app/public/results.html -->
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MikroAR Results</title>
+  <style>
+    :root{ --bg:#fff; --fg:#111; --muted:#6b7280; --line:#e5e7eb; }
+    body{ font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin:0; background:#fafafa; color:var(--fg); }
+    .wrap{ max-width:1200px; margin:24px auto; padding:0 16px; }
+    h1{ font-size:22px; margin:0 0 16px 0; }
+    .card{ background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:16px; }
+    .row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    input,select,button{ font:inherit; padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:#fff; }
+    input[type=password]{ min-width:260px; }
+    button{ background:#111; color:#fff; border-color:#111; cursor:pointer; }
+    button.ghost{ background:#fff; color:#111; border-color:var(--line); }
+    .muted{ color:var(--muted); font-size:12px; }
+    .space{ height:12px; }
+    .table-wrap{ overflow:auto; border:1px solid var(--line); border-radius:10px; }
+    table{ border-collapse:separate; border-spacing:0; width:100%; min-width:800px; }
+    thead th{ position:sticky; top:0; background:#fff; z-index:1; }
+    th,td{ border-bottom:1px solid var(--line); padding:8px 10px; text-align:left; vertical-align:top; font-size:14px; }
+    tbody tr:nth-child(odd){ background:#fcfcfc; }
+    .right{ margin-left:auto; display:flex; gap:8px; }
+    .status{ margin-left:6px; font-size:12px; color:var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Yanıtlar (Results)</h1>
+    <div class="card">
+      <div class="row">
+        <label class="muted">ADMIN_TOKEN</label>
+        <input id="token" type="password" placeholder="ADMIN_TOKEN" />
+        <button id="loginBtn">Giriş</button>
+        <span id="authStat" class="status"></span>
+      </div>
+
+      <div class="space"></div>
+
+      <div class="row">
+        <select id="slug" disabled style="min-width:320px">
+          <option value="">— slug seç —</option>
+        </select>
+        <button id="loadBtn" disabled>Yükle</button>
+        <div class="right">
+          <button id="refreshBtn" class="ghost" disabled>Yenile</button>
+          <button id="csvBtn" disabled>CSV indir</button>
+        </div>
+      </div>
+
+      <div class="space"></div>
+      <div class="muted" id="meta"></div>
+
+      <div class="space"></div>
+      <div class="table-wrap">
+        <table id="grid">
+          <thead><tr id="thead"></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const $ = (s)=>document.querySelector(s);
+  const tokenEl   = $("#token");
+  const loginBtn  = $("#loginBtn");
+  const authStat  = $("#authStat");
+  const slugSel   = $("#slug");
+  const loadBtn   = $("#loadBtn");
+  const refreshBtn= $("#refreshBtn");
+  const csvBtn    = $("#csvBtn");
+  const thead     = $("#thead");
+  const tbody     = $("#tbody");
+  const meta      = $("#meta");
+
+  let TOKEN = "";
+  let CURRENT = { headers: [], items: [], slug: "", title: "" };
+
+  loginBtn.addEventListener("click", async ()=>{
+    TOKEN = (tokenEl.value || "").trim();
+    if (!TOKEN) { authStat.textContent="Token gerekli"; return; }
+    authStat.textContent="Doğrulanıyor…";
+    slugSel.innerHTML = `<option value="">— slug seç —</option>`;
+    slugSel.disabled = true; loadBtn.disabled = true; refreshBtn.disabled = true; csvBtn.disabled = true;
+
+    const r = await fetch(`/api/forms-list?token=${encodeURIComponent(TOKEN)}`).catch(()=>null);
+    if (!r || !r.ok) { authStat.textContent="Yetki hatası (401/403)"; return; }
+    const d = await r.json().catch(()=>null);
+    if (!d || !Array.isArray(d.items)) { authStat.textContent="Liste alınamadı"; return; }
+
+    d.items.forEach(x=>{
+      const opt = document.createElement("option");
+      opt.value = x.slug; opt.textContent = `${x.slug} — ${x.title}${x.active ? " (aktif)" : ""}`;
+      slugSel.appendChild(opt);
+    });
+    slugSel.disabled = false; loadBtn.disabled = false;
+    authStat.textContent = "Hazır";
+  });
+
+  loadBtn.addEventListener("click", ()=> load(slugSel.value));
+  refreshBtn.addEventListener("click", ()=> load(CURRENT.slug));
+  csvBtn.addEventListener("click", downloadCSV);
+
+  async function load(slug){
+    if (!slug) return;
+    meta.textContent = "Yükleniyor…";
+    thead.innerHTML=""; tbody.innerHTML="";
+    refreshBtn.disabled = true; csvBtn.disabled = true;
+
+    const url = `/api/results?slug=${encodeURIComponent(slug)}&token=${encodeURIComponent(TOKEN)}&limit=1000`;
+    const r = await fetch(url).catch(()=>null);
+    if (!r || !r.ok) { meta.textContent = "Veri alınamadı"; return; }
+    const d = await r.json().catch(()=>null);
+    if (!d || !d.ok) { meta.textContent = "Geçersiz yanıt"; return; }
+
+    CURRENT = d;
+
+    // başlıklar
+    thead.innerHTML = "";
+    d.headers.forEach(h=>{
+      const th = document.createElement("th");
+      th.textContent = h; thead.appendChild(th);
+    });
+
+    // satırlar
+    tbody.innerHTML = "";
+    d.items.forEach(row=>{
+      const tr = document.createElement("tr");
+      d.headers.forEach(h=>{
+        const td = document.createElement("td");
+        td.textContent = (row[h] ?? "");
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+
+    meta.textContent = `${d.title || d.slug} • ${d.count} satır`;
+    refreshBtn.disabled = false; csvBtn.disabled = (d.count === 0);
+  }
+
+  function downloadCSV(){
+    const { headers, items, title, slug } = CURRENT;
+    if (!headers || !items) return;
+
+    const esc = (v)=>{
+      const s = (v==null ? "" : String(v));
+      // Excel güvenliği: hücre başında = + - @ varsa ' ile kaçır
+      const dangerous = /^[=\-+@]/.test(s);
+      const safe = dangerous ? "'" + s : s;
+      if (safe.includes('"') || safe.includes(',') || safe.includes('\n')){
+        return `"${safe.replace(/"/g,'""')}"`;
+      }
+      return safe;
+    };
+
+    const rows = [];
+    rows.push(headers.map(esc).join(","));
+    for (const it of items){
+      rows.push(headers.map(h => esc(it[h])).join(","));
+    }
+
+    const csv = "\uFEFF" + rows.join("\n"); // BOM: Excel uyumu
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    const dt = new Date().toISOString().replace(/[:T]/g,"-").slice(0,19);
+    a.href = URL.createObjectURL(blob);
+    a.download = `${(title || slug || "results")}_${dt}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+})();
+</script>
+</body>
+</html>
