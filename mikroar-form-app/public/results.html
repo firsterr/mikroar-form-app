@@ -1,4 +1,3 @@
-<!-- mikroar-form-app/public/results.html -->
 <!doctype html>
 <html lang="tr">
 <head>
@@ -14,6 +13,7 @@
     .row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
     input,select,button{ font:inherit; padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:#fff; }
     input[type=password]{ min-width:260px; }
+    input[type=text]{ min-width:260px; }
     button{ background:#111; color:#fff; border-color:#111; cursor:pointer; }
     button.ghost{ background:#fff; color:#111; border-color:var(--line); }
     .muted{ color:var(--muted); font-size:12px; }
@@ -25,6 +25,7 @@
     tbody tr:nth-child(odd){ background:#fcfcfc; }
     .right{ margin-left:auto; display:flex; gap:8px; }
     .status{ margin-left:6px; font-size:12px; color:var(--muted); }
+    .error{ color:#b00020; }
   </style>
 </head>
 <body>
@@ -44,6 +45,7 @@
         <select id="slug" disabled style="min-width:320px">
           <option value="">— slug seç —</option>
         </select>
+        <input id="slugManual" type="text" placeholder="veya slug yazın…" style="display:none" />
         <button id="loadBtn" disabled>Yükle</button>
         <div class="right">
           <button id="refreshBtn" class="ghost" disabled>Yenile</button>
@@ -52,7 +54,7 @@
       </div>
 
       <div class="space"></div>
-      <div class="muted" id="meta"></div>
+      <div id="meta" class="muted"></div>
 
       <div class="space"></div>
       <div class="table-wrap">
@@ -67,121 +69,159 @@
 <script>
 (function(){
   const $ = (s)=>document.querySelector(s);
-  const tokenEl   = $("#token");
-  const loginBtn  = $("#loginBtn");
-  const authStat  = $("#authStat");
-  const slugSel   = $("#slug");
-  const loadBtn   = $("#loadBtn");
-  const refreshBtn= $("#refreshBtn");
-  const csvBtn    = $("#csvBtn");
-  const thead     = $("#thead");
-  const tbody     = $("#tbody");
-  const meta      = $("#meta");
+  const tokenEl=$("#token"), loginBtn=$("#loginBtn"), authStat=$("#authStat");
+  const slugSel=$("#slug"), slugManual=$("#slugManual"), loadBtn=$("#loadBtn"), refreshBtn=$("#refreshBtn"), csvBtn=$("#csvBtn");
+  const thead=$("#thead"), tbody=$("#tbody"), meta=$("#meta");
+  let TOKEN="", CURRENT={ headers:[], items:[], slug:"", title:"" };
 
-  let TOKEN = "";
-  let CURRENT = { headers: [], items: [], slug: "", title: "" };
+  // token hatırla
+  try {
+    const saved = localStorage.getItem("mikroar_admin_token");
+    if (saved) tokenEl.value = saved;
+  } catch {}
 
-  loginBtn.addEventListener("click", async ()=>{
-    TOKEN = (tokenEl.value || "").trim();
-    if (!TOKEN) { authStat.textContent="Token gerekli"; return; }
-    authStat.textContent="Doğrulanıyor…";
-    slugSel.innerHTML = `<option value="">— slug seç —</option>`;
-    slugSel.disabled = true; loadBtn.disabled = true; refreshBtn.disabled = true; csvBtn.disabled = true;
-
-    const r = await fetch(`/api/forms-list?token=${encodeURIComponent(TOKEN)}`).catch(()=>null);
-    if (!r || !r.ok) { authStat.textContent="Yetki hatası (401/403)"; return; }
-    const d = await r.json().catch(()=>null);
-    if (!d || !Array.isArray(d.items)) { authStat.textContent="Liste alınamadı"; return; }
-
-    d.items.forEach(x=>{
-      const opt = document.createElement("option");
-      opt.value = x.slug; opt.textContent = `${x.slug} — ${x.title}${x.active ? " (aktif)" : ""}`;
-      slugSel.appendChild(opt);
-    });
-    slugSel.disabled = false; loadBtn.disabled = false;
-    authStat.textContent = "Hazır";
+  loginBtn.addEventListener("click", doLogin);
+  loadBtn.addEventListener("click", ()=> {
+    const val = (slugSel.value || slugManual.value || "").trim();
+    if (val) load(val);
   });
-
-  loadBtn.addEventListener("click", ()=> load(slugSel.value));
-  refreshBtn.addEventListener("click", ()=> load(CURRENT.slug));
+  refreshBtn.addEventListener("click", ()=> CURRENT.slug && load(CURRENT.slug));
   csvBtn.addEventListener("click", downloadCSV);
 
- // ... results.html içindeki script’te load() fonksiyonunda:
-async function load(slug){
-  if(!slug) return;
-  meta.textContent="Yükleniyor…"; thead.innerHTML=""; tbody.innerHTML="";
-  refreshBtn.disabled=true; csvBtn.disabled=true;
+  async function doLogin(){
+    TOKEN=(tokenEl.value||"").trim();
+    if(!TOKEN){authStat.textContent="Token gerekli";authStat.classList.add("error");return;}
+    authStat.textContent="Doğrulanıyor…"; authStat.classList.remove("error");
 
-  const url=`/api/results?slug=${encodeURIComponent(slug)}&token=${encodeURIComponent(TOKEN)}&limit=1000`;
-  const r=await fetch(url).catch(()=>null);
+    // sakla
+    try { localStorage.setItem("mikroar_admin_token", TOKEN); } catch {}
 
-  if(!r){ meta.textContent="İstek atılamadı (network)"; return; }
-  if(!r.ok){
-    const t = await r.text().catch(()=> "");
-    meta.textContent = `Hata ${r.status}: ${t.slice(0,200)}`;
-    return;
+    // forms-list dene (token query + bearer)
+    slugSel.innerHTML=`<option value="">— slug seç —</option>`;
+    slugSel.disabled=true; loadBtn.disabled=true; refreshBtn.disabled=true; csvBtn.disabled=true;
+    slugManual.style.display="none";
+
+    let r;
+    try {
+      r = await fetch(`/api/forms-list?token=${encodeURIComponent(TOKEN)}`, {
+        headers: { "Authorization": `Bearer ${TOKEN}`, "accept":"application/json" },
+        cache: "no-store"
+      });
+    } catch {
+      r = null;
+    }
+
+    if (!r) {
+      authStat.textContent="Ağ hatası";
+      authStat.classList.add("error");
+      fallbackToManual();
+      return;
+    }
+    if (r.status === 401 || r.status === 403) {
+      authStat.textContent="Yetki hatası (401/403) – ADMIN_TOKEN eşleşmiyor";
+      authStat.classList.add("error");
+      fallbackToManual(); // yine de manuel slug ile sonuç çekebilirsin (token doğruysa /api/results çalışır)
+      return;
+    }
+    if (!r.ok) {
+      authStat.textContent=`Listede sorun (${r.status}) – manuel slug’a geçiliyor`;
+      authStat.classList.add("error");
+      fallbackToManual();
+      return;
+    }
+
+    const d = await r.json().catch(()=>null);
+    if (!d || !Array.isArray(d.items)) {
+      authStat.textContent="Liste alınamadı – manuel slug’a geçiliyor";
+      authStat.classList.add("error");
+      fallbackToManual();
+      return;
+    }
+
+    d.items.forEach(x=>{
+      const o=document.createElement("option");
+      o.value=x.slug; o.textContent=`${x.slug} — ${x.title}${x.active?" (aktif)":""}`;
+      slugSel.appendChild(o);
+    });
+    slugSel.disabled=false; loadBtn.disabled=false;
+    authStat.textContent="Hazır";
+    authStat.classList.remove("error");
   }
 
-  const d=await r.json().catch(()=>null);
-  if(!d||!d.ok){ meta.textContent = "Geçersiz yanıt"; return; }
+  function fallbackToManual(){
+    slugSel.disabled=true;
+    slugManual.style.display="inline-block";
+    loadBtn.disabled=false;
+  }
 
-  // ... (devam aynı)
-}
+  async function load(slug){
+    meta.textContent="Yükleniyor…"; meta.classList.remove("error");
+    thead.innerHTML=""; tbody.innerHTML="";
+    refreshBtn.disabled=true; csvBtn.disabled=true;
+
+    const url=`/api/results?slug=${encodeURIComponent(slug)}&token=${encodeURIComponent(TOKEN)}&limit=2000`;
+    let r;
+    try {
+      r = await fetch(url, {
+        headers: { "Authorization": `Bearer ${TOKEN}`, "accept":"application/json" },
+        cache: "no-store"
+      });
+    } catch {
+      meta.textContent="İstek atılamadı (network)";
+      meta.classList.add("error");
+      return;
+    }
+
+    if (!r.ok) {
+      const text = await r.text().catch(()=> "");
+      meta.textContent = `Hata ${r.status}: ` + (text || "beklenmedik");
+      meta.classList.add("error");
+      return;
+    }
+
+    const d = await r.json().catch(()=>null);
+    if (!d || !d.ok) {
+      meta.textContent = "Geçersiz yanıt / ok:false";
+      meta.classList.add("error");
+      return;
+    }
 
     CURRENT = d;
 
     // başlıklar
     thead.innerHTML = "";
     d.headers.forEach(h=>{
-      const th = document.createElement("th");
-      th.textContent = h; thead.appendChild(th);
+      const th=document.createElement("th"); th.textContent=h; thead.appendChild(th);
     });
 
     // satırlar
-    tbody.innerHTML = "";
+    const frag = document.createDocumentFragment();
     d.items.forEach(row=>{
-      const tr = document.createElement("tr");
+      const tr=document.createElement("tr");
       d.headers.forEach(h=>{
-        const td = document.createElement("td");
+        const td=document.createElement("td");
         td.textContent = (row[h] ?? "");
         tr.appendChild(td);
       });
-      tbody.appendChild(tr);
+      frag.appendChild(tr);
     });
+    tbody.innerHTML=""; tbody.appendChild(frag);
 
     meta.textContent = `${d.title || d.slug} • ${d.count} satır`;
-    refreshBtn.disabled = false; csvBtn.disabled = (d.count === 0);
+    meta.classList.remove("error");
+    refreshBtn.disabled=false; csvBtn.disabled=(d.count===0);
   }
 
   function downloadCSV(){
-    const { headers, items, title, slug } = CURRENT;
-    if (!headers || !items) return;
-
-    const esc = (v)=>{
-      const s = (v==null ? "" : String(v));
-      // Excel güvenliği: hücre başında = + - @ varsa ' ile kaçır
-      const dangerous = /^[=\-+@]/.test(s);
-      const safe = dangerous ? "'" + s : s;
-      if (safe.includes('"') || safe.includes(',') || safe.includes('\n')){
-        return `"${safe.replace(/"/g,'""')}"`;
-      }
-      return safe;
-    };
-
-    const rows = [];
-    rows.push(headers.map(esc).join(","));
-    for (const it of items){
-      rows.push(headers.map(h => esc(it[h])).join(","));
-    }
-
-    const csv = "\uFEFF" + rows.join("\n"); // BOM: Excel uyumu
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const a = document.createElement("a");
-    const dt = new Date().toISOString().replace(/[:T]/g,"-").slice(0,19);
-    a.href = URL.createObjectURL(blob);
-    a.download = `${(title || slug || "results")}_${dt}.csv`;
-    document.body.appendChild(a);
-    a.click();
+    const { headers, items, title, slug }=CURRENT; if(!headers||!items) return;
+    const esc=(v)=>{ const s=(v==null?"":String(v)); const danger=/^[=\-+@]/.test(s); const safe=danger?"'"+s:s;
+      return (safe.includes('"')||safe.includes(',')||safe.includes('\n')) ? `"${safe.replace(/"/g,'""')}"` : safe; };
+    const rows=[headers.map(esc).join(",")];
+    items.forEach(it=> rows.push(headers.map(h=>esc(it[h])).join(",")) );
+    const csv="\uFEFF"+rows.join("\n");
+    const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
+    const a=document.createElement("a"); const dt=new Date().toISOString().replace(/[:T]/g,"-").slice(0,19);
+    a.href=URL.createObjectURL(blob); a.download=`${(title||slug||"results")}_${dt}.csv`; document.body.appendChild(a); a.click();
     setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 500);
   }
 })();
