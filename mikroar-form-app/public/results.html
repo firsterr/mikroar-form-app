@@ -106,17 +106,27 @@
   refreshBtn.addEventListener("click", ()=> load(CURRENT.slug));
   csvBtn.addEventListener("click", downloadCSV);
 
-  async function load(slug){
-    if (!slug) return;
-    meta.textContent = "Yükleniyor…";
-    thead.innerHTML=""; tbody.innerHTML="";
-    refreshBtn.disabled = true; csvBtn.disabled = true;
+ // ... results.html içindeki script’te load() fonksiyonunda:
+async function load(slug){
+  if(!slug) return;
+  meta.textContent="Yükleniyor…"; thead.innerHTML=""; tbody.innerHTML="";
+  refreshBtn.disabled=true; csvBtn.disabled=true;
 
-    const url = `/api/results?slug=${encodeURIComponent(slug)}&token=${encodeURIComponent(TOKEN)}&limit=1000`;
-    const r = await fetch(url).catch(()=>null);
-    if (!r || !r.ok) { meta.textContent = "Veri alınamadı"; return; }
-    const d = await r.json().catch(()=>null);
-    if (!d || !d.ok) { meta.textContent = "Geçersiz yanıt"; return; }
+  const url=`/api/results?slug=${encodeURIComponent(slug)}&token=${encodeURIComponent(TOKEN)}&limit=1000`;
+  const r=await fetch(url).catch(()=>null);
+
+  if(!r){ meta.textContent="İstek atılamadı (network)"; return; }
+  if(!r.ok){
+    const t = await r.text().catch(()=> "");
+    meta.textContent = `Hata ${r.status}: ${t.slice(0,200)}`;
+    return;
+  }
+
+  const d=await r.json().catch(()=>null);
+  if(!d||!d.ok){ meta.textContent = "Geçersiz yanıt"; return; }
+
+  // ... (devam aynı)
+}
 
     CURRENT = d;
 
