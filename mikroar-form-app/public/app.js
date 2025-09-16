@@ -89,20 +89,12 @@
       @keyframes rip { to { transform:scale(12); opacity:0 } }
 
 .submit-bar{
-  position: fixed;
-  left: 0; right: 0; bottom: 0;
-  /* top | right | bottom | left  — safe-area doğru sırada */
-  padding: 10px max(16px, env(safe-area-inset-right))
-           calc(10px + env(safe-area-inset-bottom))
-           max(16px, env(safe-area-inset-left));
-  background: linear-gradient(to top, rgba(250,250,250,.98), rgba(250,250,250,.88));
+  position: static;                /* sabit değil */
+  padding: 16px 0 24px;
+  margin-top: 16px;
+  background: transparent;
   border-top: 1px solid #e5e7eb;
-  backdrop-filter: saturate(1.2) blur(6px);
   display: flex; flex-direction: column; align-items: center; gap: 8px;
-  z-index: 2147483647;           /* her şeyin üstünde olsun */
-  -webkit-transform: translateZ(0);
-  transform: translateZ(0);
-  touch-action: manipulation;    /* 300ms gecikmesini kapat */
 }
       
       .submit-meta{ color:#6b7280; font-size:12px; line-height:1.3; text-align:center }
@@ -207,18 +199,7 @@
     `);
 
     app.innerHTML = h.join("");
-    // --- Sabit alt bar için dinamik alt boşluk ---
-const fixedBar = document.querySelector(".submit-bar");
-function syncBottomPadding() {
-  const h = (fixedBar?.offsetHeight || 96);
-  document.body.style.paddingBottom = h + "px";
-}
-syncBottomPadding();
-if (fixedBar) {
-  new ResizeObserver(syncBottomPadding).observe(fixedBar);
-}
-window.addEventListener("orientationchange", () => setTimeout(syncBottomPadding, 300));
-window.addEventListener("resize", syncBottomPadding);
+ 
 
     // Etkileşimler
     app.querySelectorAll(".q").forEach((b, idx) => {
