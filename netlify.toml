@@ -19,8 +19,10 @@
   path = "/f/*"
   function = "form-ssr"
 
-  [[redirects]]
+# Sadece anket.mikroar.com için kökten admin.html'e yönlendir
+[[redirects]]
   from = "/"
-  to   = "/admin.html"
+  to = "/admin.html"
   status = 200
   force = true
+  conditions = { Host = ["anket.mikroar.com"] }
