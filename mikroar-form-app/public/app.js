@@ -230,6 +230,22 @@ window.addEventListener("resize", syncBottomPadding);
     attachControlBehavior(app);
     document.getElementById("f").addEventListener("submit", onSubmit(form.slug));
     attachRipple(document.getElementById("submitBtn"));
+    // iOS Safari: submit butonu her zaman form akışını tetiklesin
+(function () {
+  const btn  = document.getElementById("submitBtn");
+  const form = document.getElementById("f");
+  if (!btn || !form) return;
+
+  btn.addEventListener("click", (ev) => {
+    ev.preventDefault(); // form dışındaki butonlar için güvenli
+    if (typeof form.requestSubmit === "function") {
+      form.requestSubmit(btn);
+    } else {
+      // Eski tarayıcılar için fallback: bizim submit handler’ını tetikle
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    }
+  }, { passive: false });
+})();
 
     setupLazyOptions(); // CURRENT_QUESTIONS kullanılacak
     window.addEventListener("scroll", throttle(updateProgress, 200), { passive:true });
