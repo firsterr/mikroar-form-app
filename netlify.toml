@@ -6,7 +6,15 @@
 [functions]
   directory = "mikroar-form-app/netlify/functions"
   node_bundler = "esbuild"
-
+  
+# Sadece anket.mikroar.com için kökten /admin.html'e yönlendir
+[[redirects]]
+  from = "/"
+  to = "/admin.html"
+  status = 301            # URL değişsin istiyorsan 301/302; görünürde değişmesin istiyorsan 200 kullan
+  force = true            # index.html olsa bile kuralı uygula
+  conditions = { Host = ["anket.mikroar.com"] }
+  
 # /api/* -> /.netlify/functions/*
 [[redirects]]
   from = "/api/*"
@@ -19,10 +27,4 @@
   path = "/f/*"
   function = "form-ssr"
 
-# Sadece anket.mikroar.com için kökten admin.html'e yönlendir
-[[redirects]]
-  from = "/"
-  to = "/admin.html"
-  status = 200
-  force = true
-  conditions = { Host = ["anket.mikroar.com"] }
+
