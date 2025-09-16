@@ -18,3 +18,9 @@
 [[edge_functions]]
   path = "/f/*"
   function = "form-ssr"
+
+  [[redirects]]
+  from = "/"
+  to   = "/admin.html"
+  status = 200
+  force = true
