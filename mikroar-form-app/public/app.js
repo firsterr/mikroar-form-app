@@ -55,7 +55,16 @@
 
   async function fetchForm({ slug, code }) {
     const qs = slug ? `slug=${encodeURIComponent(slug)}` : `k=${encodeURIComponent(code)}`;
-    const r = await fetch(`/api/forms?${qs}`, { headers:{ accept:"application/json" }});
+   const r = await fetch(`/.netlify/functions/forms?slug=${encodeURIComponent(slug)}`);
+if (!r.ok) {
+  const j = await r.json().catch(() => ({}));
+  if (j.error === "inactive_form") {
+    showError("Bu anket şu anda pasif. Lütfen daha sonra tekrar deneyin.");
+    return;
+  }
+  showError("Form yüklenemedi.");
+  return;
+}
     const d = await r.json(); if (!r.ok || !d?.ok) throw new Error("nf");
     return d.form;
   }
