@@ -1,105 +1,28 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Mikroar Form</title>
-
-  <!-- Fallback OG (Edge’de dinamik meta yine eklenecek) -->
- <meta property="og:title" content="Mikroar Anket" />
-<meta property="og:description" content="Ankete katılın." />
-<meta property="og:image" content="https://www.emturkey.com.tr/wp-content/uploads/2022/03/em-nedir-resim.jpg" />
-<meta property="og:image:width" content="1200" />
-<meta property="og:image:height" content="630" />
-<meta property="og:type" content="website" />
-<meta name="twitter:card" content="summary_large_image" />
-
-  <!-- Pixel ID (opsiyonel): Doldurursan Pixel otomatik çalışır -->
-  <meta name="facebook-pixel-id" content="753180591019866" />
-  <script>
-  (function(){
-    const pid = document.querySelector('meta[name="facebook-pixel-id"]')?.content;
-
-    // FIX: init koşulu pid varsa çalışsın (daha önce 7531805... eşitliğinde çalışmıyordu)
-    if (pid) {
-      !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-        n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
-        n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
-        t.src='https://connect.facebook.net/en_US/fbevents.js';s=b.getElementsByTagName(e)[0];
-        s.parentNode.insertBefore(t,s)}(window, document,'script');
-      fbq('init', pid);
-      fbq('track', 'PageView');
-      window.__fbqReady = true;
-    }
-  })();
-  </script>
-  <noscript>
-    <img height="1" width="1" style="display:none"
-      src="https://www.facebook.com/tr?id=753180591019866&ev=PageView&noscript=1" />
-  </noscript>
-
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MikroAR Form</title>
   <style>
-    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#fff }
-    .wrap { max-width: 760px; margin: 0 auto; padding: 16px; }
-    #skeleton { display:grid; grid-template-columns:1fr; gap:10px; }
-    .srow { height:18px; background:#f3f4f6; border-radius:8px; }
-    #error { display:none; color:#b00020; background:#fff7f7; border:1px solid #ffd3d3; padding:10px 12px; border-radius:10px; }
+    body{ font:14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:#111; background:#fff; }
+    .container{ max-width:820px; margin:24px auto; padding:0 16px; }
+    #skeleton{ display:grid; gap:10px; }
+    .skl{ height:16px; background:#f3f4f6; border-radius:10px; }
+    #error{ display:none; padding:10px 12px; background:#fff7f7; border:1px solid #fca5a5; color:#b91c1c; border-radius:12px; }
+    #app.hidden{ display:none; }
   </style>
+  <script src="/app.js" defer></script>
 </head>
 <body>
-  <div class="wrap">
+  <div class="container">
     <div id="error"></div>
     <div id="skeleton">
-      <div class="srow" style="width:60%"></div>
-      <div class="srow" style="width:90%"></div>
-      <div class="srow" style="width:75%"></div>
+      <div class="skl" style="width:60%"></div>
+      <div class="skl" style="width:80%"></div>
+      <div class="skl" style="width:70%"></div>
     </div>
-    <div id="app"></div>
+    <div id="app" class="hidden"></div>
   </div>
-
-  <script src="/app.js" defer></script>
-
-  <!-- Pasif izleme: form submit ve başarılı kayıt için Lead/CompleteRegistration -->
-  <script>
-  (function(){
-    function trackLead() {
-      try { if (typeof fbq === 'function') fbq('track','Lead',{content_name:'MikroAR Anket',status:'submitted'}); } catch(e){}
-    }
-    function trackComplete() {
-      try {
-        if (typeof fbq === 'function') {
-          fbq('track','Lead',{value:1});
-          fbq('track','CompleteRegistration',{value:1});
-        }
-      } catch(e){}
-    }
-
-    // 1) Native form submit yakalama (SPA içinde #app altındaki formlar)
-    document.addEventListener('submit', function(e){
-      const form = e.target;
-      if (form && form.closest('#app')) {
-        // submit sonrası kısa gecikme ile tetikle
-        setTimeout(trackLead, 100);
-      }
-    }, true);
-
-    // 2) fetch proxy: Supabase/endpoint POST başarılıysa CompleteRegistration
-    const _fetch = window.fetch;
-    window.fetch = async function(){
-      const res = await _fetch.apply(this, arguments);
-      try {
-        const req = arguments[0];
-        const url = typeof req === 'string' ? req : req.url;
-        const method = (arguments[1]?.method || (typeof req !== 'string' && req.method) || 'GET').toUpperCase();
-
-        // Supabase veya responses insert pattern'i (gerektiğinde genişlet)
-        if (method === 'POST' && /supabase|responses|insert/i.test(url) && res.ok) {
-          trackComplete();
-        }
-      } catch(_e) {}
-      return res;
-    };
-  })();
-  </script>
 </body>
 </html>
