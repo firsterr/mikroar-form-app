@@ -165,44 +165,78 @@ function normalizeOption(opt) {
       .other-input{flex:1;min-width:160px;padding:6px 8px;border:1px solid #e5e7eb;border-radius:8px}
       .other-input[disabled]{opacity:.6}
 
-      .opt-row{
+      /* Görselli tek seçim seçenekleri */
+.opt-row{
   display:flex;
-  align-items:flex-start;
+  align-items:center;
   justify-content:space-between;
   gap:12px;
-  padding:8px 10px;
-  border-radius:10px;
-  transition:background .15s,border-color .15s;
+  padding:10px 12px;
+  margin-bottom:6px;
+  border-radius:12px;
+  border:1px solid #e5e7eb;
+  background:#fff;
+  transition:background .15s,border-color .15s,box-shadow .15s;
 }
 .opt-row:hover{
   background:#f9fafb;
+  border-color:#d1d5db;
 }
+.q.checked .opt-row{
+  border-color:#111;
+  background:#fefce8;
+  box-shadow:0 0 0 1px rgba(0,0,0,.04);
+}
+
 .opt-main{
   display:flex;
   align-items:center;
   gap:8px;
+  min-width:0;
+}
+.opt-main input[type="radio"]{
+  width:18px;
+  height:18px;
 }
 .opt-text{
   display:inline-block;
+  font-size:15px;
+  line-height:1.3;
+  word-break:break-word;
 }
+
 .opt-media{
   flex-shrink:0;
 }
 .opt-img{
   display:block;
-  width:80px;
-  max-height:80px;
+  width:76px;
+  height:76px;
   object-fit:cover;
-  border-radius:8px;
+  border-radius:12px;
   border:1px solid #e5e7eb;
 }
+
+/* Mobil optimizasyon: daha kompakt ve alignment düzeltmesi */
 @media (max-width:640px){
   .opt-row{
-    align-items:center;
+    padding:9px 10px;
+    gap:10px;
   }
   .opt-img{
-    width:64px;
-    max-height:64px;
+    width:68px;
+    height:68px;
+  }
+}
+
+/* Çok küçük ekranlarda (eski iPhone / küçük Android) */
+@media (max-width:390px){
+  .opt-row{
+    gap:8px;
+  }
+  .opt-img{
+    width:60px;
+    height:60px;
   }
 }
     </style>`);
