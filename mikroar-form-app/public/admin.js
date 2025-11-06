@@ -400,14 +400,20 @@
     const btn = qs("#saveBtn"); if (btn) btn.classList.add("loading");
     setStatus("Kaydediliyor…");
 
-    const payload = {
-      slug: state.slug,
-      title: state.title,
-      description: state.description,
-      active: !!state.active,
-      schema: { title: state.title, description: state.description, questions: state.questions.map(normalizeQuestion) },
-      shareImageUrl: (state.shareImageUrl || "").trim()
-    };
+   const payload = {
+  slug: state.slug,
+  title: state.title,
+  description: state.description,
+  active: (qs("#active")?.value === "true"),   // ← KRİTİK
+  schema: { title: state.title, description: state.description, questions: state.questions },
+  shareImageUrl: (state.shareImageUrl || "").trim()
+};
+
+await fetch("/.netlify/functions/forms-admin", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(payload)
+});
 
     const r = await fetch(`/api/forms-admin?token=${encodeURIComponent(store.token)}`, {
       method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(payload)
