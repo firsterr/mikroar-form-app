@@ -187,20 +187,39 @@ function normalizeOption(opt) {
       h.push(`<div class="q" tabindex="-1" data-index="${i}" data-required="${required ? "1":""}" data-name="${name}" data-qid="${attr(qid)}">
         <div class="field"><div><strong>${esc(label)}</strong></div>`);
 
-      if (it.type==="radio" && Array.isArray(it.options)) {
-        for (const opt of it.options) {
-          const val = typeof opt==="string" ? opt : opt.value;
-          const txt = typeof opt==="string" ? opt : (opt.label||opt.value);
-          h.push(`<label><input class="ctl" type="radio" name="${name}" value="${attr(val)}"> ${esc(txt)}</label>`);
-        }
-        if (showOther) {
-          h.push(`<label class="other-wrap">
-            <input class="ctl other-toggle" type="checkbox" name="${name}" value="__OTHER__">
-            Diğer:
-            <input type="text" class="other-input" data-other-for="${name}" placeholder="Yazınız" disabled>
-          </label>`);
-        }
-      }
+     if (it.type === "radio" && Array.isArray(it.options)) {
+  const options = it.options.map(normalizeOption);
+
+  for (const o of options) {
+    const val = o.value;
+    const txt = o.label;
+    const img = o.imageUrl;
+
+    h.push(
+      `<label class="opt-row ripple">
+         <span class="opt-main">
+           <input class="ctl" type="radio" name="${name}" value="${attr(val)}">
+           <span class="opt-text">${esc(txt)}</span>
+         </span>
+         ${
+           img
+             ? `<span class="opt-media">
+                  <img src="${attr(img)}" alt="${esc(txt)} görseli" class="opt-img">
+                </span>`
+             : ""
+         }
+       </label>`
+    );
+  }
+
+  if (showOther) {
+    h.push(`<label class="other-wrap">
+      <input class="ctl other-toggle" type="checkbox" name="${name}" value="__OTHER__">
+      Diğer:
+      <input type="text" class="other-input" data-other-for="${name}" placeholder="Yazınız" disabled>
+    </label>`);
+  }
+}
       // (checkbox/select/text/textarea blokları sizde nasılsa aynı şekilde devam eder…)
       h.push(`</div>`); // .field
       h.push(`<div class="hint" style="display:none;color:#b91c1c;font-size:12px">Bu soru zorunlu.</div>`);
