@@ -104,7 +104,30 @@
       errorBox.style.display = "block";
     }
   }
+// Metin satırını "label | imageUrl" formatında çöz
+function normalizeOption(opt) {
+  // Eski JSON formatını da desteklesin
+  if (typeof opt === "object" && opt !== null) {
+    return {
+      label: opt.label || opt.value || "",
+      value: opt.value || opt.label || "",
+      imageUrl: opt.imageUrl || null,
+    };
+  }
 
+  const raw = String(opt || "").trim();
+  if (!raw) return { label: "", value: "", imageUrl: null };
+
+  const parts = raw.split("|");
+  const label = parts[0].trim();
+  const imageUrl = (parts[1] || "").trim() || null;
+
+  return {
+    label,
+    value: label,      // DB’ye yine sadece label gidiyor
+    imageUrl,
+  };
+}
   // ---------- Render ----------
   function renderForm(form) {
     const s = form.schema || { questions: [] };
