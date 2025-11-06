@@ -24,18 +24,27 @@ exports.handler = async (event) => {
     try { payload = JSON.parse(event.body || "{}"); }
     catch { return res(400, { error: "bad_json" }); }
 
-    const { slug, title, description, active, schema, shareImageUrl } = payload;
-    if (!slug || !schema) return res(400, { error: "slug_and_schema_required" });
+    // ... handler içinde, body parse edildikten ve auth geçtiyse:
+const { slug, title, description, schema, active, shareImageUrl } = JSON.parse(event.body || "{}");
 
-    const row = {
-      slug,
-      title: title ?? null,
-      description: description ?? null,
-      active: active === false ? false : true,
-      schema,
-      share_image_url: (shareImageUrl || null),
-      updated_at: new Date().toISOString(),
-    };
+// Supabase REST upsert:
+const r = await fetch(`${SUPABASE_URL}/rest/v1/forms`, {
+  method: "POST",
+  headers: {
+    apikey: SB_KEY,
+    Authorization: `Bearer ${SB_KEY}`,
+    "Content-Type": "application/json",
+    Prefer: "resolution=merge-duplicates"
+  },
+  body: JSON.stringify([{
+    slug,
+    title: title || null,
+    description: description || null,
+    schema,                       // JSON
+    active: !!active,             // ← KRİTİK: aktif/pasif DB’ye yaz
+    share_image_url: shareImageUrl || null
+  }])
+});
 
     const url = new URL(`${SUPABASE_URL}/rest/v1/forms`);
     // upsert by unique slug
