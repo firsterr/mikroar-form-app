@@ -16,33 +16,48 @@
     return false;
   }
 
-  async function boot() {
-    if (!hasIdent()) {
-      skeleton.style.display="none";
-      errorBox.style.display="none";
-      app.classList.add("hidden");
-      return;
-    }
-
-    skeleton.style.display="grid";
-    errorBox.style.display="none";
+ async function boot() {
+  if (!hasIdent()) {
+    skeleton.style.display = "none";
+    errorBox.style.display = "none";
     app.classList.add("hidden");
-
-    try {
-      const { slug, code } = resolveIdent();
-      const form = await fetchForm({ slug, code });
-      renderForm(form);
-      skeleton.style.display="none";
-      app.classList.remove("hidden");
-      setupProgress();
-      try { if (window.__fbqReady && window.fbq) fbq('track', 'ViewContent', { content_name: form.title, content_category: 'survey' }); } catch {}
-    } catch (e) {
-      console.error("BOOT_FAIL:", e);
-      skeleton.style.display="none";
-      errorBox.textContent="Form bulunamadı veya bağlantı sorunu.";
-      errorBox.style.display="block";
-    }
+    return;
   }
+
+  skeleton.style.display = "grid";
+  errorBox.style.display = "none";
+  app.classList.add("hidden");
+
+  try {
+    const { slug, code } = resolveIdent();
+    const form = await fetchForm({ slug, code });
+
+    // AKTİF / PASİF KONTROLÜ
+    if (form && form.active === false) {
+      skeleton.style.display = "none";
+      if (errorBox) {
+        errorBox.textContent = "Bu anket şu anda pasif. Lütfen daha sonra tekrar deneyin.";
+        errorBox.style.display = "block";
+      }
+      return; // renderForm ÇAĞRILMIYOR
+    }
+
+    renderForm(form);
+    skeleton.style.display = "none";
+    app.classList.remove("hidden");
+    setupProgress();
+    try {
+      if (window.__fbqReady && window.fbq) {
+        fbq("track", "ViewContent", { content_name: form.title, content_category: "survey" });
+      }
+    } catch {}
+  } catch (e) {
+    console.error("BOOT_FAIL:", e);
+    skeleton.style.display = "none";
+    errorBox.textContent = "Form bulunamadı veya bağlantı sorunu.";
+    errorBox.style.display = "block";
+  }
+}
 
   function resolveIdent() {
     const u = new URL(location.href);
