@@ -408,7 +408,25 @@
   schema: { title: state.title, description: state.description, questions: state.questions },
   shareImageUrl: (state.shareImageUrl || "").trim()
 };
+// ... Supabase’den form çekildikten sonra:
+if (!f) {
+  return res(404, { error: "not_found" }, { "cache-control": "no-store" });
+}
+if (!f.active) {
+  return res(403, { error: "inactive_form" }, { "cache-control": "no-store" });
+}
 
+// aktifse devam:
+return res(200, {
+  form: {
+    slug: f.slug,
+    title: f.title,
+    description: f.description,
+    active: !!f.active,
+    schema: f.schema,
+    shareImageUrl: f.share_image_url || null
+  }
+});
 await fetch("/.netlify/functions/forms-admin", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
