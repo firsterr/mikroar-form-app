@@ -26,6 +26,77 @@
     .right{ margin-left:auto; display:flex; gap:8px; }
     .status{ margin-left:6px; font-size:12px; color:var(--muted); }
     .error{ color:#b00020; }
+    /* Analiz paneli */
+.viz-panel{
+  margin-top: 16px;
+  margin-bottom: 24px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  border: 1px solid #e5e7eb;
+  background: #fbfbfb;
+}
+.viz-header{
+  display:flex;
+  align-items:baseline;
+  gap:8px;
+  margin-bottom:10px;
+}
+.viz-header h2{
+  margin:0;
+  font-size:18px;
+}
+.viz-subtitle{
+  font-size:12px;
+  color:#6b7280;
+}
+.viz-controls{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px 16px;
+  align-items:center;
+  margin-bottom:12px;
+  font-size:14px;
+}
+.viz-controls label{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.viz-controls select{
+  padding:4px 8px;
+  border-radius:8px;
+  border:1px solid #d1d5db;
+}
+#vizRefreshBtn{
+  padding:6px 12px;
+  border-radius:999px;
+  border:1px solid #111827;
+  background:#111827;
+  color:#fff;
+  font-size:13px;
+  cursor:pointer;
+}
+#vizRefreshBtn:hover{
+  background:#000;
+}
+.viz-chart-wrap{
+  background:#fff;
+  border-radius:12px;
+  padding:10px;
+  border:1px solid #e5e7eb;
+  min-height:220px;
+}
+
+/* Mobil */
+@media (max-width:640px){
+  .viz-panel{
+    padding:12px 12px;
+  }
+  .viz-controls{
+    flex-direction:column;
+    align-items:flex-start;
+  }
+}
   </style>
 </head>
 <body>
@@ -58,6 +129,33 @@
 
       <div class="space"></div>
       <div class="table-wrap">
+        <section id="vizPanel" class="viz-panel">
+  <div class="viz-header">
+    <h2>Analiz Paneli</h2>
+    <span class="viz-subtitle">Tablodan canlı yüzde dağılım grafiği</span>
+  </div>
+
+  <div class="viz-controls">
+    <label>
+      Soru:
+      <select id="vizQuestionSelect"></select>
+    </label>
+
+    <label>
+      Grafik tipi:
+      <select id="vizChartType">
+        <option value="bar">Çubuk Grafik</option>
+        <option value="pie">Pasta Grafik</option>
+      </select>
+    </label>
+
+    <button id="vizRefreshBtn" type="button">Güncelle</button>
+  </div>
+
+  <div class="viz-chart-wrap">
+    <canvas id="vizChart" height="140"></canvas>
+  </div>
+</section>
         <table id="grid">
           <thead><tr id="thead"></tr></thead>
           <tbody id="tbody"></tbody>
@@ -223,6 +321,160 @@
     const a=document.createElement("a"); const dt=new Date().toISOString().replace(/[:T]/g,"-").slice(0,19);
     a.href=URL.createObjectURL(blob); a.download=`${(title||slug||"results")}_${dt}.csv`; document.body.appendChild(a); a.click();
     setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+})();
+</script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+(function () {
+  let chartInstance = null;
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const table = document.getElementById("grid");
+    const headerRow = document.getElementById("thead");
+    const tbody = document.getElementById("tbody");
+    if (!table || !headerRow || !tbody) return;
+
+    const questionSelect = document.getElementById("vizQuestionSelect");
+    const chartTypeSelect = document.getElementById("vizChartType");
+    const refreshBtn = document.getElementById("vizRefreshBtn");
+
+    // Tablon server'dan dolduruluyor; tbody dolduğunda tetikle
+    const observer = new MutationObserver(() => {
+      if (tbody.rows.length > 0 && headerRow.cells.length > 0) {
+        observer.disconnect();
+        initQuestions(headerRow, questionSelect);
+        renderCurrentChart(headerRow, tbody, questionSelect, chartTypeSelect);
+      }
+    });
+    observer.observe(tbody, { childList: true });
+
+    // Sayfa zaten dolu geldiyse
+    if (tbody.rows.length > 0 && headerRow.cells.length > 0) {
+      observer.disconnect();
+      initQuestions(headerRow, questionSelect);
+      renderCurrentChart(headerRow, tbody, questionSelect, chartTypeSelect);
+    }
+
+    if (questionSelect) {
+      questionSelect.addEventListener("change", () => {
+        renderCurrentChart(headerRow, tbody, questionSelect, chartTypeSelect);
+      });
+    }
+    if (chartTypeSelect) {
+      chartTypeSelect.addEventListener("change", () => {
+        renderCurrentChart(headerRow, tbody, questionSelect, chartTypeSelect);
+      });
+    }
+    if (refreshBtn) {
+      refreshBtn.addEventListener("click", () => {
+        renderCurrentChart(headerRow, tbody, questionSelect, chartTypeSelect, { forceReload: true });
+      });
+    }
+  });
+
+  function initQuestions(headerRow, selectEl) {
+    if (!headerRow || !selectEl) return;
+
+    const options = [];
+    // 0: created_at, 1: ip → bunları atlıyoruz
+    for (let col = 2; col < headerRow.cells.length; col++) {
+      const label = headerRow.cells[col].innerText.trim();
+      if (!label) continue;
+      options.push({ index: col, label });
+    }
+
+    selectEl.innerHTML = "";
+    options.forEach((opt, idx) => {
+      const o = document.createElement("option");
+      o.value = String(opt.index);
+      o.textContent = opt.label;
+      if (idx === 0) o.selected = true;
+      selectEl.appendChild(o);
+    });
+  }
+
+  function renderCurrentChart(headerRow, tbody, questionSelect, chartTypeSelect) {
+    if (!tbody || !questionSelect) return;
+    const colIndex = parseInt(questionSelect.value, 10);
+    if (isNaN(colIndex)) return;
+
+    const { labels, counts, total } = aggregateColumn(tbody, colIndex);
+    const data = counts.map(c => total > 0 ? Math.round(c * 10000 / total) / 100 : 0);
+
+    const type = (chartTypeSelect && chartTypeSelect.value) || "bar";
+    drawChart(labels, data, type);
+  }
+
+  function aggregateColumn(tbody, colIndex) {
+    const map = new Map();
+    let total = 0;
+
+    for (const row of Array.from(tbody.rows)) {
+      const cell = row.cells[colIndex];
+      if (!cell) continue;
+      let txt = (cell.innerText || cell.textContent || "").trim();
+      if (!txt) continue;
+      total++;
+      map.set(txt, (map.get(txt) || 0) + 1);
+    }
+
+    const labels = Array.from(map.keys());
+    const counts = Array.from(map.values());
+    return { labels, counts, total };
+  }
+
+  function drawChart(labels, data, type) {
+    const canvas = document.getElementById("vizChart");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+
+    if (chartInstance) {
+      chartInstance.destroy();
+      chartInstance = null;
+    }
+
+    const cfg = {
+      type,
+      data: {
+        labels,
+        datasets: [{
+          label: "% Dağılım",
+          data,
+          borderWidth: 1,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: type === "pie" },
+          tooltip: {
+            callbacks: {
+              label: ctx => {
+                const label = ctx.label || "";
+                const v = ctx.parsed || 0;
+                return `${label}: ${v.toFixed(2)}%`;
+              }
+            }
+          }
+        },
+        scales: type === "bar"
+          ? {
+              y: {
+                beginAtZero: true,
+                max: 100,
+                ticks: {
+                  callback: v => v + "%"
+                }
+              }
+            }
+          : {}
+      }
+    };
+
+    chartInstance = new Chart(ctx, cfg);
   }
 })();
 </script>
