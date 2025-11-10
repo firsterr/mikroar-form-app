@@ -483,8 +483,9 @@
     for (const row of Array.from(tbody.rows)) {
       const cell = row.cells[colIndex];
       if (!cell) continue;
-      const txt = (cell.innerText || cell.textContent || "").trim();
-      if (txt) values.add(txt);
+      let txt = (cell.innerText || cell.textContent || "").trim();
+      if (!txt) txt = "Diğer"; // boşları Diğer yap
+      values.add(txt);
     }
 
     filterValueSelect.innerHTML = "";
@@ -567,17 +568,19 @@
       filterValue !== "";
 
     for (const row of Array.from(tbody.rows)) {
+      // Filtre kolonu
       if (useFilter) {
         const fcell = row.cells[filterColIndex];
         if (!fcell) continue;
-        const ftxt = (fcell.innerText || fcell.textContent || "").trim();
+        let ftxt = (fcell.innerText || fcell.textContent || "").trim();
+        if (!ftxt) ftxt = "Diğer";   // filtre tarafında da boş = Diğer
         if (ftxt !== filterValue) continue;
       }
 
       const cell = row.cells[targetColIndex];
       if (!cell) continue;
-      const txt = (cell.innerText || cell.textContent || "").trim();
-      if (!txt) continue;
+      let txt = (cell.innerText || cell.textContent || "").trim();
+      if (!txt) txt = "Diğer";       // ana soru tarafında da boş = Diğer
 
       total++;
       map.set(txt, (map.get(txt) || 0) + 1);
@@ -627,6 +630,7 @@
           legend: { display: type === "pie" },
           tooltip: {
             callbacks: {
+              // Tooltip: Adet (x10) + %
               label: (ctx) => {
                 const idx = ctx.dataIndex;
                 const pct = ctx.parsed || 0;
@@ -670,8 +674,8 @@
       rows.push({ label, scaled, pct });
     }
 
-    let html = `<div>Toplam (x${scale}): <b>${scaledTotal}</b></div>`;
-    html += `<table><thead><tr><th>Değer</th><th>Adet (x${scale})</th><th>%</th></tr></thead><tbody>`;
+    let html = `<div>Toplam: <b>${scaledTotal}</b></div>`;
+    html += `<table><thead><tr><th>Değer</th><th>Adet</th><th>%</th></tr></thead><tbody>`;
     rows.forEach((r) => {
       html += `<tr><td>${escapeHtml(r.label)}</td><td>${r.scaled}</td><td>${r.pct.toFixed(2)}%</td></tr>`;
     });
