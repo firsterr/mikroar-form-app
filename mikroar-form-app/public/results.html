@@ -349,28 +349,31 @@
   }
 })();
 </script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
+ <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 (function () {
   let chartInstance = null;
 
   document.addEventListener("DOMContentLoaded", () => {
-    const table = document.getElementById("grid");
+    const table     = document.getElementById("grid");
     const headerRow = document.getElementById("thead");
-    const tbody = document.getElementById("tbody");
+    const tbody     = document.getElementById("tbody");
     if (!table || !headerRow || !tbody) return;
 
-    const questionSelect = document.getElementById("vizQuestionSelect");
-    const chartTypeSelect = document.getElementById("vizChartType");
-    const refreshBtn = document.getElementById("vizRefreshBtn");
+    const questionSelect       = document.getElementById("vizQuestionSelect");
+    const chartTypeSelect      = document.getElementById("vizChartType");
+    const filterQuestionSelect = document.getElementById("vizFilterQuestionSelect");
+    const filterValueSelect    = document.getElementById("vizFilterValueSelect");
+    const refreshBtn           = document.getElementById("vizRefreshBtn");
 
-    // Tablon server'dan dolduruluyor; tbody dolduğunda tetikle
+    // Tablo async doldurulduğu için tbody’yi izliyoruz
     const observer = new MutationObserver(() => {
       if (tbody.rows.length > 0 && headerRow.cells.length > 0) {
         observer.disconnect();
         initQuestions(headerRow, questionSelect);
-        renderCurrentChart(headerRow, tbody, questionSelect, chartTypeSelect);
+        initQuestions(headerRow, filterQuestionSelect, { includeEmptyFirst: true });
+        populateFilterValues(tbody, filterQuestionSelect, filterValueSelect);
+        renderCurrentChart(headerRow, tbody, questionSelect, chartTypeSelect, filterQuestionSelect, filterValueSelect);
       }
     });
     observer.observe(tbody, { childList: true });
@@ -379,31 +382,41 @@
     if (tbody.rows.length > 0 && headerRow.cells.length > 0) {
       observer.disconnect();
       initQuestions(headerRow, questionSelect);
-      renderCurrentChart(headerRow, tbody, questionSelect, chartTypeSelect);
+      initQuestions(headerRow, filterQuestionSelect, { includeEmptyFirst: true });
+      populateFilterValues(tbody, filterQuestionSelect, filterValueSelect);
+      renderCurrentChart(headerRow, tbody, questionSelect, chartTypeSelect, filterQuestionSelect, filterValueSelect);
     }
 
-    if (questionSelect) {
-      questionSelect.addEventListener("change", () => {
-        renderCurrentChart(headerRow, tbody, questionSelect, chartTypeSelect);
-      });
-    }
-    if (chartTypeSelect) {
-      chartTypeSelect.addEventListener("change", () => {
-        renderCurrentChart(headerRow, tbody, questionSelect, chartTypeSelect);
-      });
-    }
-    if (refreshBtn) {
-      refreshBtn.addEventListener("click", () => {
-        renderCurrentChart(headerRow, tbody, questionSelect, chartTypeSelect, { forceReload: true });
-      });
-    }
+    questionSelect?.addEventListener("change", () => {
+      renderCurrentChart(headerRow, tbody, questionSelect, chartTypeSelect, filterQuestionSelect, filterValueSelect);
+    });
+
+    chartTypeSelect?.addEventListener("change", () => {
+      renderCurrentChart(headerRow, tbody, questionSelect, chartTypeSelect, filterQuestionSelect, filterValueSelect);
+    });
+
+    filterQuestionSelect?.addEventListener("change", () => {
+      populateFilterValues(tbody, filterQuestionSelect, filterValueSelect);
+      renderCurrentChart(headerRow, tbody, questionSelect, chartTypeSelect, filterQuestionSelect, filterValueSelect);
+    });
+
+    filterValueSelect?.addEventListener("change", () => {
+      renderCurrentChart(headerRow, tbody, questionSelect, chartTypeSelect, filterQuestionSelect, filterValueSelect);
+    });
+
+    refreshBtn?.addEventListener("click", () => {
+      populateFilterValues(tbody, filterQuestionSelect, filterValueSelect);
+      renderCurrentChart(headerRow, tbody, questionSelect, chartTypeSelect, filterQuestionSelect, filterValueSelect);
+    });
   });
 
-  function initQuestions(headerRow, selectEl) {
+  // headerRow: <tr id="thead">
+  function initQuestions(headerRow, selectEl, opts) {
     if (!headerRow || !selectEl) return;
+    const includeEmptyFirst = opts && opts.includeEmptyFirst;
 
     const options = [];
-    // 0: created_at, 1: ip → bunları atlıyoruz
+    // 0: created_at, 1: ip sütunlarını atla
     for (let col = 2; col < headerRow.cells.length; col++) {
       const label = headerRow.cells[col].innerText.trim();
       if (!label) continue;
@@ -411,36 +424,134 @@
     }
 
     selectEl.innerHTML = "";
+    if (includeEmptyFirst) {
+      const emptyOpt = document.createElement("option");
+      emptyOpt.value = "";
+      emptyOpt.textContent = "— Seçilmedi —";
+      selectEl.appendChild(emptyOpt);
+    }
+
     options.forEach((opt, idx) => {
       const o = document.createElement("option");
       o.value = String(opt.index);
       o.textContent = opt.label;
-      if (idx === 0) o.selected = true;
+      if (!includeEmptyFirst && idx === 0) o.selected = true;
       selectEl.appendChild(o);
     });
+
+    // Eğer includeEmptyFirst ise default "seçilmedi" kalsın
+    if (!includeEmptyFirst && options.length && !selectEl.value) {
+      selectEl.value = String(options[0].index);
+    }
   }
 
-  function renderCurrentChart(headerRow, tbody, questionSelect, chartTypeSelect) {
-    if (!tbody || !questionSelect) return;
-    const colIndex = parseInt(questionSelect.value, 10);
+  function populateFilterValues(tbody, filterQuestionSelect, filterValueSelect) {
+    if (!filterQuestionSelect || !filterValueSelect) return;
+
+    const val = filterQuestionSelect.value;
+    if (!val) {
+      filterValueSelect.innerHTML = "";
+      const allOpt = document.createElement("option");
+      allOpt.value = "";
+      allOpt.textContent = "Tümü";
+      filterValueSelect.appendChild(allOpt);
+      return;
+    }
+
+    const colIndex = parseInt(val, 10);
     if (isNaN(colIndex)) return;
 
-    const { labels, counts, total } = aggregateColumn(tbody, colIndex);
-    const data = counts.map(c => total > 0 ? Math.round(c * 10000 / total) / 100 : 0);
-
-    const type = (chartTypeSelect && chartTypeSelect.value) || "bar";
-    drawChart(labels, data, type);
-  }
-
-  function aggregateColumn(tbody, colIndex) {
-    const map = new Map();
-    let total = 0;
-
+    const values = new Set();
     for (const row of Array.from(tbody.rows)) {
       const cell = row.cells[colIndex];
       if (!cell) continue;
-      let txt = (cell.innerText || cell.textContent || "").trim();
+      const txt = (cell.innerText || cell.textContent || "").trim();
+      if (txt) values.add(txt);
+    }
+
+    filterValueSelect.innerHTML = "";
+    const allOpt = document.createElement("option");
+    allOpt.value = "";
+    allOpt.textContent = "Tümü";
+    filterValueSelect.appendChild(allOpt);
+
+    Array.from(values).sort().forEach((v) => {
+      const o = document.createElement("option");
+      o.value = v;
+      o.textContent = v;
+      filterValueSelect.appendChild(o);
+    });
+  }
+
+  function renderCurrentChart(headerRow, tbody, questionSelect, chartTypeSelect, filterQuestionSelect, filterValueSelect) {
+    if (!tbody || !questionSelect) return;
+
+    const targetColIndex = parseInt(questionSelect.value, 10);
+    if (isNaN(targetColIndex)) return;
+
+    let filterColIndex = null;
+    let filterValue = "";
+    let filterLabel = "";
+
+    if (filterQuestionSelect && filterQuestionSelect.value) {
+      filterColIndex = parseInt(filterQuestionSelect.value, 10);
+      if (!isNaN(filterColIndex)) {
+        filterValue = filterValueSelect ? filterValueSelect.value : "";
+        const hcell = headerRow.cells[filterColIndex];
+        filterLabel = hcell ? hcell.innerText.trim() : "";
+      }
+    }
+
+    const { labels, counts, total } = aggregateColumn(
+      tbody,
+      targetColIndex,
+      filterColIndex,
+      filterValue
+    );
+
+    const data = counts.map((c) =>
+      total > 0 ? Math.round((c * 10000) / total) / 100 : 0
+    );
+
+    const type = (chartTypeSelect && chartTypeSelect.value) || "bar";
+
+    const targetHeaderCell = headerRow.cells[targetColIndex];
+    const mainQuestion = targetHeaderCell
+      ? targetHeaderCell.innerText.trim()
+      : "";
+
+    let titleText = mainQuestion || "";
+    if (filterColIndex != null && filterValue) {
+      titleText += ` — Filtre: ${filterLabel} = ${filterValue} (n=${total})`;
+    } else if (total) {
+      titleText += ` (n=${total})`;
+    }
+
+    drawChart(labels, data, type, { titleText });
+  }
+
+  function aggregateColumn(tbody, targetColIndex, filterColIndex, filterValue) {
+    const map = new Map();
+    let total = 0;
+    const useFilter =
+      filterColIndex != null &&
+      !isNaN(filterColIndex) &&
+      filterValue !== undefined &&
+      filterValue !== "";
+
+    for (const row of Array.from(tbody.rows)) {
+      if (useFilter) {
+        const fcell = row.cells[filterColIndex];
+        if (!fcell) continue;
+        const ftxt = (fcell.innerText || fcell.textContent || "").trim();
+        if (ftxt !== filterValue) continue;
+      }
+
+      const cell = row.cells[targetColIndex];
+      if (!cell) continue;
+      const txt = (cell.innerText || cell.textContent || "").trim();
       if (!txt) continue;
+
       total++;
       map.set(txt, (map.get(txt) || 0) + 1);
     }
@@ -450,7 +561,7 @@
     return { labels, counts, total };
   }
 
-  function drawChart(labels, data, type) {
+  function drawChart(labels, data, type, meta) {
     const canvas = document.getElementById("vizChart");
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -460,48 +571,55 @@
       chartInstance = null;
     }
 
-    const cfg = {
+    const titleText = meta && meta.titleText ? meta.titleText : "";
+
+    chartInstance = new Chart(ctx, {
       type,
       data: {
         labels,
-        datasets: [{
-          label: "% Dağılım",
-          data,
-          borderWidth: 1,
-        }]
+        datasets: [
+          {
+            label: "% Dağılım",
+            data,
+            borderWidth: 1,
+          },
+        ],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
+          title: {
+            display: !!titleText,
+            text: titleText,
+            font: { size: 13 },
+          },
           legend: { display: type === "pie" },
           tooltip: {
             callbacks: {
-              label: ctx => {
+              label: (ctx) => {
                 const label = ctx.label || "";
                 const v = ctx.parsed || 0;
                 return `${label}: ${v.toFixed(2)}%`;
-              }
-            }
-          }
+              },
+            },
+          },
         },
-        scales: type === "bar"
-          ? {
-              y: {
-                beginAtZero: true,
-                max: 100,
-                ticks: {
-                  callback: v => v + "%"
-                }
+        scales:
+          type === "bar"
+            ? {
+                y: {
+                  beginAtZero: true,
+                  max: 100,
+                  ticks: { callback: (v) => v + "%" },
+                },
               }
-            }
-          : {}
-      }
-    };
-
-    chartInstance = new Chart(ctx, cfg);
+            : {},
+      },
+    });
   }
 })();
+
 </script>
 </body>
 </html>
