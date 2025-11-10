@@ -129,15 +129,16 @@
 
       <div class="space"></div>
       <div class="table-wrap">
-        <section id="vizPanel" class="viz-panel">
+       <section id="vizPanel" class="viz-panel">
   <div class="viz-header">
     <h2>Analiz Paneli</h2>
     <span class="viz-subtitle">Tablodan canlı yüzde dağılım grafiği</span>
   </div>
 
+  <!-- Ana analiz edilen soru -->
   <div class="viz-controls">
     <label>
-      Soru:
+      Analiz edilen soru:
       <select id="vizQuestionSelect"></select>
     </label>
 
@@ -150,6 +151,21 @@
     </label>
 
     <button id="vizRefreshBtn" type="button">Güncelle</button>
+  </div>
+
+  <!-- Filtreli analiz: örn. "1. soruda Ahmet Akın diyenler" -->
+  <div class="viz-controls viz-controls-secondary">
+    <label>
+      Filtre soru (opsiyonel):
+      <select id="vizFilterQuestionSelect"></select>
+    </label>
+
+    <label>
+      Değer:
+      <select id="vizFilterValueSelect">
+        <option value="">Tümü</option>
+      </select>
+    </label>
   </div>
 
   <div class="viz-chart-wrap">
