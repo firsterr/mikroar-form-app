@@ -507,61 +507,81 @@
     });
   }
 
-  function renderCurrentChart(headerRow, tbody, questionSelect, chartTypeSelect, filterQuestionSelect, filterValueSelect) {
-    if (!tbody || !questionSelect) return;
+ function renderCurrentChart(
+  headerRow,
+  tbody,
+  questionSelect,
+  chartTypeSelect,
+  filterQuestionSelect,
+  filterValueSelect
+) {
+  if (!tbody || !questionSelect) return;
 
-    const targetColIndex = parseInt(questionSelect.value, 10);
-    if (isNaN(targetColIndex)) return;
+  const targetColIndex = parseInt(questionSelect.value, 10);
+  if (isNaN(targetColIndex)) return;
 
-    let filterColIndex = null;
-    let filterValue = "";
-    let filterLabel = "";
+  let filterColIndex = null;
+  let filterValue = "";
+  let filterLabel = "";
 
-    if (filterQuestionSelect && filterQuestionSelect.value) {
-      filterColIndex = parseInt(filterQuestionSelect.value, 10);
-      if (!isNaN(filterColIndex)) {
-        filterValue = filterValueSelect ? filterValueSelect.value : "";
-        const hcell = headerRow.cells[filterColIndex];
-        filterLabel = hcell ? hcell.innerText.trim() : "";
-      }
+  if (filterQuestionSelect && filterQuestionSelect.value) {
+    filterColIndex = parseInt(filterQuestionSelect.value, 10);
+    if (!isNaN(filterColIndex)) {
+      filterValue = filterValueSelect ? filterValueSelect.value : "";
+      const hcell = headerRow.cells[filterColIndex];
+      filterLabel = hcell ? hcell.innerText.trim() : "";
     }
-
-    const { labels, counts, total } = aggregateColumn(
-      tbody,
-      targetColIndex,
-      filterColIndex,
-      filterValue
-    );
-
-    const pctData = counts.map((c) =>
-      total > 0 ? Math.round((c * 10000) / total) / 100 : 0
-    );
-
-    const type = (chartTypeSelect && chartTypeSelect.value) || "bar";
-
-    const targetHeaderCell = headerRow.cells[targetColIndex];
-    const mainQuestion = targetHeaderCell
-      ? targetHeaderCell.innerText.trim()
-      : "";
-
-    const scaledTotal = total * SCALE;
-
-    let titleText = mainQuestion || "";
-    if (filterColIndex != null && filterValue) {
-      titleText += ` — Filtre: ${filterLabel} = ${filterValue} (n=${scaledTotal})`;
-    } else if (total) {
-      titleText += ` (n=${scaledTotal})`;
-    }
-
-    drawChart(labels, pctData, type, {
-      titleText,
-      counts,
-      total,
-      scale: SCALE,
-    });
-
-    updateSummary(labels, counts, pctData, total, SCALE);
   }
+
+  // Ham veriyi topla
+  let { labels, counts, total } = aggregateColumn(
+    tbody,
+    targetColIndex,
+    filterColIndex,
+    filterValue
+  );
+
+  // Yüzdeleri hesapla (ham sırada)
+  let pctData = counts.map((c) =>
+    total > 0 ? Math.round((c * 10000) / total) / 100 : 0
+  );
+
+  // === YENİ: en büyükten en küçüğe sırala ===
+  const order = counts
+    .map((c, idx) => ({ c, idx }))
+    .sort((a, b) => b.c - a.c) // büyükten küçüğe
+    .map((x) => x.idx);
+
+  labels  = order.map((i) => labels[i]);
+  counts  = order.map((i) => counts[i]);
+  pctData = order.map((i) => pctData[i]);
+  // ==========================================
+
+  const type = (chartTypeSelect && chartTypeSelect.value) || "bar";
+
+  const targetHeaderCell = headerRow.cells[targetColIndex];
+  const mainQuestion = targetHeaderCell
+    ? targetHeaderCell.innerText.trim()
+    : "";
+
+  const scaledTotal = total * SCALE;
+
+  let titleText = mainQuestion || "";
+  if (filterColIndex != null && filterValue) {
+    titleText += ` — Filtre: ${filterLabel} = ${filterValue} (n=${scaledTotal})`;
+  } else if (total) {
+    titleText += ` (n=${scaledTotal})`;
+  }
+
+  drawChart(labels, pctData, type, {
+    titleText,
+    counts,
+    total,
+    scale: SCALE,
+  });
+
+  updateSummary(labels, counts, pctData, total, SCALE);
+}
 
   function aggregateColumn(tbody, targetColIndex, filterColIndex, filterValue) {
     const map = new Map();
