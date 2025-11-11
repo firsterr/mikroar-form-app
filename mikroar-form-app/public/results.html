@@ -370,11 +370,16 @@
 })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
 <script>
 (function () {
   // Adetleri büyütmek için çarpan
   const SCALE = 10;
   let chartInstance = null;
+// Data labels plugin
+  if (window.Chart && window.ChartDataLabels) {
+    Chart.register(window.ChartDataLabels);
+  }
 
   document.addEventListener("DOMContentLoaded", () => {
     const table     = document.getElementById("grid");
@@ -591,69 +596,82 @@
     return { labels, counts, total };
   }
 
-  function drawChart(labels, pctData, type, meta) {
-    const canvas = document.getElementById("vizChart");
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
+ function drawChart(labels, pctData, type, meta) {
+  const canvas = document.getElementById("vizChart");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
 
-    if (chartInstance) {
-      chartInstance.destroy();
-      chartInstance = null;
-    }
+  if (chartInstance) {
+    chartInstance.destroy();
+    chartInstance = null;
+  }
 
-    const titleText = meta && meta.titleText ? meta.titleText : "";
-    const counts    = meta && meta.counts ? meta.counts : [];
-    const total     = meta && meta.total ? meta.total : 0;
-    const scale     = meta && meta.scale ? meta.scale : 1;
+  const titleText = meta && meta.titleText ? meta.titleText : "";
+  const counts    = meta && meta.counts ? meta.counts : [];
+  const total     = meta && meta.total ? meta.total : 0;
+  const scale     = meta && meta.scale ? meta.scale : 1;
 
-    chartInstance = new Chart(ctx, {
-      type,
-      data: {
-        labels,
-        datasets: [
-          {
-            label: "% Dağılım",
-            data: pctData,
-            borderWidth: 1,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          title: {
-            display: !!titleText,
-            text: titleText,
-            font: { size: 13 },
-          },
-          legend: { display: type === "pie" },
-          tooltip: {
-            callbacks: {
-              // Tooltip: Adet (x10) + %
-              label: (ctx) => {
-                const idx = ctx.dataIndex;
-                const pct = ctx.parsed || 0;
-                const cnt = counts[idx] || 0;
-                const scaled = cnt * scale;
-                return `${ctx.label}: ${scaled} (${pct.toFixed(2)}%)`;
-              },
+  chartInstance = new Chart(ctx, {
+    type,
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "% Dağılım",
+          data: pctData,
+          borderWidth: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        title: {
+          display: !!titleText,
+          text: titleText,
+          font: { size: 13 },
+        },
+        legend: { display: type === "pie" },
+        tooltip: {
+          callbacks: {
+            // Tooltip: Adet (x10) + %
+            label: (ctx) => {
+              const idx = ctx.dataIndex;
+              const pct = ctx.parsed || 0;
+              const cnt = counts[idx] || 0;
+              const scaled = cnt * scale;
+              return `${ctx.label}: ${scaled} (${pct.toFixed(2)}%)`;
             },
           },
         },
-        scales:
-          type === "bar"
-            ? {
-                y: {
-                  beginAtZero: true,
-                  max: 100,
-                  ticks: { callback: (v) => v + "%" },
-                },
-              }
-            : {},
+        // === BURASI YENİ: veri etiketleri ===
+        datalabels: {
+          display: true,
+          anchor: type === "bar" ? "end" : "center",
+          align:  type === "bar" ? "end" : "center",
+          formatter: (v) => `${v.toFixed(2)}%`,
+          color: "#111827",
+          font: {
+            size: 11,
+            weight: "600",
+          },
+          clamp: true,
+        },
       },
-    });
-  }
+      scales:
+        type === "bar"
+          ? {
+              y: {
+                beginAtZero: true,
+                max: 100,
+                ticks: { callback: (v) => v + "%" },
+              },
+            }
+          : {},
+    },
+  });
+}
 
   function updateSummary(labels, counts, pctData, total, scale) {
     const el = document.getElementById("vizSummary");
