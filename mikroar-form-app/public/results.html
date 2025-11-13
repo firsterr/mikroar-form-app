@@ -350,7 +350,8 @@
     });
     tbody.innerHTML=""; tbody.appendChild(frag);
 
-    meta.textContent = `${d.title || d.slug} • ${d.count*10} satır`;
+   const scale = window.MIKROAR_SCALE || 1;
+meta.textContent = `${d.title || d.slug} • ${(d.count * scale).toLocaleString('tr-TR')} satır`;
     meta.classList.remove("error");
     refreshBtn.disabled=false; csvBtn.disabled=(d.count===0);
   }
@@ -374,7 +375,7 @@
 <script>
 (function () {
   // Adetleri büyütmek için çarpan
-  const SCALE = 13;
+  const SCALE = window.MIKROAR_SCALE || 1;
   let chartInstance = null;
 // Data labels plugin
   if (window.Chart && window.ChartDataLabels) {
@@ -727,6 +728,9 @@
     );
   }
 })();
+</script>
+  <script>
+  window.MIKROAR_SCALE = 13;
 </script>
 </body>
 </html>
