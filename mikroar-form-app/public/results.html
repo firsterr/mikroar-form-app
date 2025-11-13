@@ -350,7 +350,7 @@
     });
     tbody.innerHTML=""; tbody.appendChild(frag);
 
-  meta.textContent = `${d.title || d.slug} • ${d.count*10} satır`;
+  meta.textContent = `${d.title || d.slug} • ${d.count*13} satır`;
     meta.classList.remove("error");
     refreshBtn.disabled=false; csvBtn.disabled=(d.count===0);
   }
