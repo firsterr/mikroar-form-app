@@ -559,28 +559,42 @@
     return null;
   }
 
-  function collectAnswers() {
+   function collectAnswers() {
     const answers = {};
     const blocks = Array.from(app.querySelectorAll(".q"));
     for (const b of blocks) {
       const name = b.getAttribute("data-name");
+      if (!name) continue;
+
       const inputs = Array.from(b.querySelectorAll(".ctl"));
       const radios = inputs.filter((x) => x.type === "radio");
-      if (radios.length) {
-        const c = radios.find((x) => x.checked);
-        if (c) {
-          const v = c.value;
-          if (v === "__OTHER__") {
-            const oi = b.querySelector(
-              `.other-input[data-other-for="${name}"]`
-            );
-            answers[name] = oi ? oi.value || "" : "";
-          } else {
-            answers[name] = v;
-          }
-        }
+      const others = inputs.filter(
+        (x) => x.classList.contains("other-toggle") || x.value === "__OTHER__
+      );
+
+      let chosen = null;
+      // Öncelik: normal seçenek (radio)
+      const radioChecked = radios.find((x) => x.checked);
+      if (radioChecked) {
+        chosen = radioChecked;
+      } else {
+        const otherChecked = others.find((x) => x.checked);
+        if (otherChecked) chosen = otherChecked;
       }
-      // ileride checkbox/text için genişletilebilir
+
+      if (!chosen) continue;
+
+      if (
+        chosen.classList.contains("other-toggle") ||
+        chosen.value === "__OTHER__"
+      ) {
+        const oi = b.querySelector(
+          `.other-input[data-other-for="${name}"]`
+        );
+        answers[name] = oi && oi.value ? oi.value.trim() : "";
+      } else {
+        answers[name] = chosen.value;
+      }
     }
     return answers;
   }
