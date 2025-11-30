@@ -36,7 +36,8 @@
       if (form && form.active === false) {
         skeleton.style.display = "none";
         if (errorBox) {
-          errorBox.textContent = "Bu anket şu anda pasif. Lütfen daha sonra tekrar deneyin.";
+          errorBox.textContent =
+            "Bu anket şu anda pasif. Lütfen daha sonra tekrar deneyin.";
           errorBox.style.display = "block";
         }
         return;
@@ -99,9 +100,7 @@
     if (!r.ok) {
       console.error("FORMS_BAD_STATUS:", r.status, d);
       if (d && d.error === "inactive_form") {
-        showError(
-          "Bu anket şu anda pasif. Lütfen daha sonra tekrar deneyin."
-        );
+        showError("Bu anket şu anda pasif. Lütfen daha sonra tekrar deneyin.");
       } else {
         showError("Form yüklenemedi.");
       }
@@ -547,104 +546,96 @@
     return String(s).replace(/"/g, "&quot;");
   }
 
-    function findFirstInvalid() {
+  // ---- unified state helper ----
+  function getBlockState(b) {
+    const name = b.getAttribute("data-name");
+    if (!name) return { hasAnswer: false, value: undefined };
+
+    const controls = Array.from(b.querySelectorAll(".ctl"));
+    if (!controls.length) return { hasAnswer: false, value: undefined };
+
+    const radios = controls.filter((x) => x.type === "radio");
+    const others = controls.filter(
+      (x) => x.classList.contains("other-toggle") || x.value === "__OTHER__"
+    );
+
+    // Tek seçim (radio) tipi sorular
+    if (radios.length) {
+      const chosenRadio = radios.find((x) => x.checked);
+      if (chosenRadio && chosenRadio.value !== "__OTHER__") {
+        return { hasAnswer: true, value: chosenRadio.value };
+      }
+
+      const chosenOther = others.find((x) => x.checked);
+      if (chosenOther) {
+        const oi = b.querySelector(
+          `.other-input[data-other-for="${name}"]`
+        );
+        const text = oi && oi.value ? oi.value.trim() : "";
+        return { hasAnswer: !!text, value: text };
+      }
+
+      return { hasAnswer: false, value: undefined };
+    }
+
+    // Checkbox vb. çoklu seçimler için genel durum (ileride lazım olur diye generic bırakıldı)
+    const checked = controls.filter((x) => x.checked);
+    if (!checked.length) return { hasAnswer: false, value: undefined };
+
+    const values = [];
+    checked.forEach((c) => {
+      if (
+        c.classList.contains("other-toggle") ||
+        c.value === "__OTHER__"
+      ) {
+        const oi = b.querySelector(
+          `.other-input[data-other-for="${name}"]`
+        );
+        const text = oi && oi.value ? oi.value.trim() : "";
+        if (text) values.push(text);
+      } else {
+        values.push(c.value);
+      }
+    });
+
+    return { hasAnswer: values.length > 0, value: values };
+  }
+
+  function findFirstInvalid() {
     const blocks = Array.from(app.querySelectorAll(".q"));
     for (const b of blocks) {
       const req = b.getAttribute("data-required") === "1";
       if (!req) continue;
 
-      const name = b.getAttribute("data-name");
-      if (!name) continue;
-
-      const controls = Array.from(
-        b.querySelectorAll(`.ctl[name="${name}"]`)
-      );
-      const checked = controls.filter((x) => x.checked);
-
-      // Hiçbir seçenek işaretlenmemişse
-      if (!checked.length) return b;
-
-      // Diğer seçeneği işaretliyse ama metin boşsa
-      const otherCtl = checked.find(
-        (x) => x.classList.contains("other-toggle") || x.value === "__OTHER__"
-      );
-      if (otherCtl) {
-        const oi = b.querySelector(
-          `.other-input[data-other-for="${name}"]`
-        );
-        if (!oi || !oi.value || !oi.value.trim()) return b;
-      }
+      const state = getBlockState(b);
+      if (!state.hasAnswer) return b;
     }
     return null;
   }
 
-   function collectAnswers() {
+  function collectAnswers() {
     const answers = {};
     const blocks = Array.from(app.querySelectorAll(".q"));
     for (const b of blocks) {
       const name = b.getAttribute("data-name");
       if (!name) continue;
 
-      const inputs = Array.from(b.querySelectorAll(".ctl"));
-      const radios = inputs.filter((x) => x.type === "radio");
-      const others = inputs.filter(
-        (x) => x.classList.contains("other-toggle") || x.value === "__OTHER__
-      );
-
-      let chosen = null;
-      // Öncelik: normal seçenek (radio)
-      const radioChecked = radios.find((x) => x.checked);
-      if (radioChecked) {
-        chosen = radioChecked;
-      } else {
-        const otherChecked = others.find((x) => x.checked);
-        if (otherChecked) chosen = otherChecked;
-      }
-
-      if (!chosen) continue;
-
-      if (
-        chosen.classList.contains("other-toggle") ||
-        chosen.value === "__OTHER__"
-      ) {
-        const oi = b.querySelector(
-          `.other-input[data-other-for="${name}"]`
-        );
-        answers[name] = oi && oi.value ? oi.value.trim() : "";
-      } else {
-        answers[name] = chosen.value;
+      const state = getBlockState(b);
+      if (state.hasAnswer) {
+        answers[name] = state.value;
       }
     }
     return answers;
   }
 
-    function updateProgress() {
+  function updateProgress() {
     const total = (CURRENT_QUESTIONS || []).length;
     const blocks = Array.from(app.querySelectorAll(".q"));
     let answered = 0;
 
     blocks.forEach((b) => {
-      const name = b.getAttribute("data-name");
-      if (!name) return;
-
-      const controls = Array.from(
-        b.querySelectorAll(`.ctl[name="${name}"]`)
-      );
-      const checked = controls.filter((x) => x.checked);
-
-      if (!checked.length) return;
-
-      const otherCtl = checked.find(
-        (x) => x.classList.contains("other-toggle") || x.value === "__OTHER__"
-      );
-      if (otherCtl) {
-        const oi = b.querySelector(
-          `.other-input[data-other-for="${name}"]`
-        );
-        if (!oi || !oi.value || !oi.value.trim()) return;
-      }
-
-      answered++;
+      const state = getBlockState(b);
+      if (state.hasAnswer) answered++;
     });
 
     const pct = total ? Math.round((answered * 100) / total) : 0;
@@ -655,6 +646,7 @@
     if (pctEl) pctEl.textContent = `${pct}%`;
     if (barEl) barEl.style.width = `${pct}%`;
   }
+
   function setupProgress() {
     updateProgress();
   }
