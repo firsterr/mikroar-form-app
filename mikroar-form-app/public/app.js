@@ -317,7 +317,7 @@
         if (showOther) {
           h.push(
             `<label class="other-wrap">
-              <input class="ctl other-toggle" type="checkbox" name="${name}" value="__OTHER__">
+                    <input class="ctl other-toggle" type="radio" name="${name}" value="__OTHER__">
               Diğer:
               <input type="text" class="other-input" data-other-for="${name}" placeholder="Yazınız" disabled>
             </label>`
