@@ -618,14 +618,35 @@
     return answers;
   }
 
-  function updateProgress() {
+    function updateProgress() {
     const total = (CURRENT_QUESTIONS || []).length;
     const blocks = Array.from(app.querySelectorAll(".q"));
     let answered = 0;
+
     blocks.forEach((b) => {
       const name = b.getAttribute("data-name");
-      if (document.querySelector(`[name="${name}"]:checked`)) answered++;
+      if (!name) return;
+
+      const controls = Array.from(
+        b.querySelectorAll(`.ctl[name="${name}"]`)
+      );
+      const checked = controls.filter((x) => x.checked);
+
+      if (!checked.length) return;
+
+      const otherCtl = checked.find(
+        (x) => x.classList.contains("other-toggle") || x.value === "__OTHER__"
+      );
+      if (otherCtl) {
+        const oi = b.querySelector(
+          `.other-input[data-other-for="${name}"]`
+        );
+        if (!oi || !oi.value || !oi.value.trim()) return;
+      }
+
+      answered++;
     });
+
     const pct = total ? Math.round((answered * 100) / total) : 0;
     const txtEl = document.getElementById("progressTxt");
     const pctEl = document.getElementById("progressPct");
@@ -634,7 +655,6 @@
     if (pctEl) pctEl.textContent = `${pct}%`;
     if (barEl) barEl.style.width = `${pct}%`;
   }
-
   function setupProgress() {
     updateProgress();
   }
