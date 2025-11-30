@@ -547,14 +547,33 @@
     return String(s).replace(/"/g, "&quot;");
   }
 
-  function findFirstInvalid() {
+    function findFirstInvalid() {
     const blocks = Array.from(app.querySelectorAll(".q"));
     for (const b of blocks) {
       const req = b.getAttribute("data-required") === "1";
       if (!req) continue;
+
       const name = b.getAttribute("data-name");
-      const anyChecked = !!app.querySelector(`[name="${name}"]:checked`);
-      if (!anyChecked) return b;
+      if (!name) continue;
+
+      const controls = Array.from(
+        b.querySelectorAll(`.ctl[name="${name}"]`)
+      );
+      const checked = controls.filter((x) => x.checked);
+
+      // Hiçbir seçenek işaretlenmemişse
+      if (!checked.length) return b;
+
+      // Diğer seçeneği işaretliyse ama metin boşsa
+      const otherCtl = checked.find(
+        (x) => x.classList.contains("other-toggle") || x.value === "__OTHER__"
+      );
+      if (otherCtl) {
+        const oi = b.querySelector(
+          `.other-input[data-other-for="${name}"]`
+        );
+        if (!oi || !oi.value || !oi.value.trim()) return b;
+      }
     }
     return null;
   }
