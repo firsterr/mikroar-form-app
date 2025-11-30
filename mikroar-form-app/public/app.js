@@ -399,8 +399,13 @@
             }
           }
 
-          // AUTO-ADVANCE: radio seçildiyse bir alt soruya kaydır
+                   // AUTO-ADVANCE: sadece normal radio için (Diğer hariç)
           if (t.type === "radio") {
+            // Diğer seçeneği ise auto-advance yapma, text inputta kal
+            if (t.classList.contains("other-toggle") || t.value === "__OTHER__") {
+              return;
+            }
+
             const idx = blocks.indexOf(block);
             const next = blocks[idx + 1];
             if (next) {
