@@ -52,7 +52,6 @@ const meta = payload.meta || {};
 if (!form_slug || !answers || typeof answers !== "object") {
   return resp(400, { ok: false, error: "missing_fields" });
 }
-
     // Header'ları normalize et, IP ve UA çek
     const headersLower = lower(event.headers || {});
     const ip = pickIp(headersLower);
