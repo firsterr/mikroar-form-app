@@ -45,12 +45,13 @@ exports.handler = async (event) => {
     }
 
     const form_slug = (payload.form_slug || "").trim();
-    const answers = payload.answers;
-    const meta = payload.meta || {};
+const answers = payload.answers;
+const meta = payload.meta || {};
 
-    if (!form_slug || !Array.isArray(answers)) {
-      return resp(400, { ok: false, error: "missing_fields" });
-    }
+// answers: object veya array olabilir; sadece dolu olsun yeter
+if (!form_slug || !answers || typeof answers !== "object") {
+  return resp(400, { ok: false, error: "missing_fields" });
+}
 
     // Header'ları normalize et, IP ve UA çek
     const headersLower = lower(event.headers || {});
