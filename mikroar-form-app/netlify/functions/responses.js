@@ -80,15 +80,19 @@ if (!form_slug || !answers || typeof answers !== "object") {
 
     if (ins.ok) {
       // CAPI'yi fire-and-forget tetikle (kullanıcıyı bekletme)
-      sendToFacebookCAPI({
-        eventName: "FormSubmit",
-        ip,
-        ua,
-        href,
-        form_slug,
-      }).catch((err) => console.error("FB_CAPI_async_error:", err));
+      try {
+  await sendToFacebookCAPI({
+    eventName: "FormSubmit",
+    ip,
+    ua,
+    href,
+    form_slug,
+  });
+} catch (err) {
+  console.error("FB_CAPI_async_error:", err);
+}
 
-      return resp(200, { ok: true });
+return resp(200, { ok: true });
     }
 
     // Meta kolonu yoksa meta'yı çıkarıp tekrar dene (şema uyumsuzluğu için)
@@ -98,14 +102,19 @@ if (!form_slug || !answers || typeof answers !== "object") {
       const rowNoMeta = { form_slug, answers, ip };
       ins = await insertRow(SUPABASE_URL, KEY, rowNoMeta);
       if (ins.ok) {
-        sendToFacebookCAPI({
-          eventName: "FormSubmit",
-          ip,
-          ua,
-          href,
-          form_slug,
-        }).catch((err) => console.error("FB_CAPI_async_error:", err));
-        return resp(200, { ok: true });
+        try {
+  await sendToFacebookCAPI({
+    eventName: "FormSubmit",
+    ip,
+    ua,
+    href,
+    form_slug,
+  });
+} catch (err) {
+  console.error("FB_CAPI_async_error:", err);
+}
+
+return resp(200, { ok: true });
       }
     }
 
