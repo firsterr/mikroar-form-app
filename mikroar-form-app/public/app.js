@@ -610,6 +610,7 @@
   }
 
   // ---- unified state helper ----
+    // override: tüm soru tipleri için cevap okuma
   function getBlockState(b) {
     const name = b.getAttribute("data-name");
     if (!name) return { hasAnswer: false, value: undefined };
@@ -618,11 +619,21 @@
     if (!controls.length) return { hasAnswer: false, value: undefined };
 
     const radios = controls.filter((x) => x.type === "radio");
+    const checkboxes = controls.filter((x) => x.type === "checkbox");
     const others = controls.filter(
       (x) => x.classList.contains("other-toggle") || x.value === "__OTHER__"
     );
+    const textInputs = controls.filter(
+      (x) => x.type === "text" && !x.classList.contains("other-input")
+    );
+    const textareas = controls.filter(
+      (x) => x.tagName === "TEXTAREA"
+    );
+    const selects = controls.filter(
+      (x) => x.tagName === "SELECT"
+    );
 
-    // Tek seçim (radio) tipi sorular
+    // Tek seçim (radio)
     if (radios.length) {
       const chosenRadio = radios.find((x) => x.checked);
       if (chosenRadio && chosenRadio.value !== "__OTHER__") {
@@ -641,27 +652,49 @@
       return { hasAnswer: false, value: undefined };
     }
 
-    // Checkbox vb. çoklu seçimler için genel durum (ileride lazım olur diye generic bırakıldı)
-    const checked = controls.filter((x) => x.checked);
-    if (!checked.length) return { hasAnswer: false, value: undefined };
+    // Çoklu seçim (checkbox)
+    if (checkboxes.length) {
+      const checked = checkboxes.filter((x) => x.checked);
+      if (!checked.length) return { hasAnswer: false, value: undefined };
 
-    const values = [];
-    checked.forEach((c) => {
-      if (
-        c.classList.contains("other-toggle") ||
-        c.value === "__OTHER__"
-      ) {
-        const oi = b.querySelector(
-          `.other-input[data-other-for="${name}"]`
-        );
-        const text = oi && oi.value ? oi.value.trim() : "";
-        if (text) values.push(text);
-      } else {
-        values.push(c.value);
-      }
-    });
+      const values = [];
+      checked.forEach((c) => {
+        if (
+          c.classList.contains("other-toggle") ||
+          c.value === "__OTHER__"
+        ) {
+          const oi = b.querySelector(
+            `.other-input[data-other-for="${name}"]`
+          );
+          const text = oi && oi.value ? oi.value.trim() : "";
+          if (text) values.push(text);
+        } else {
+          values.push(c.value);
+        }
+      });
 
-    return { hasAnswer: values.length > 0, value: values };
+      return { hasAnswer: values.length > 0, value: values };
+    }
+
+    // Kısa yanıt
+    if (textInputs.length) {
+      const v = textInputs[0].value ? textInputs[0].value.trim() : "";
+      return { hasAnswer: !!v, value: v };
+    }
+
+    // Paragraf
+    if (textareas.length) {
+      const v = textareas[0].value ? textareas[0].value.trim() : "";
+      return { hasAnswer: !!v, value: v };
+    }
+
+    // Açılır menü
+    if (selects.length) {
+      const v = selects[0].value || "";
+      return { hasAnswer: !!v, value: v };
+    }
+
+    return { hasAnswer: false, value: undefined };
   }
 
   function findFirstInvalid() {
