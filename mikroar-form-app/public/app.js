@@ -285,7 +285,7 @@
             <div><strong>${esc(label)}</strong></div>`
       );
 
-      if (it.type === "radio" && Array.isArray(it.options)) {
+            if (it.type === "radio" && Array.isArray(it.options)) {
         const options = it.options.map(normalizeOption);
 
         for (const o of options) {
@@ -296,17 +296,13 @@
           h.push(
             `<label class="opt-row ripple">
                <span class="opt-main">
-                 <input class="ctl" type="radio" name="${name}" value="${attr(
-              val
-            )}">
+                 <input class="ctl" type="radio" name="${name}" value="${attr(val)}">
                  <span class="opt-text">${esc(txt)}</span>
                </span>
                ${
                  img
                    ? `<span class="opt-media">
-                        <img src="${attr(
-                          img
-                        )}" alt="${esc(txt)} görseli" class="opt-img">
+                        <img src="${attr(img)}" alt="${esc(txt)} görseli" class="opt-img">
                       </span>`
                    : ""
                }
@@ -317,14 +313,76 @@
         if (showOther) {
           h.push(
             `<label class="other-wrap">
-                    <input class="ctl other-toggle" type="radio" name="${name}" value="__OTHER__">
+              <input class="ctl other-toggle" type="radio" name="${name}" value="__OTHER__">
               Diğer:
               <input type="text" class="other-input" data-other-for="${name}" placeholder="Yazınız" disabled>
             </label>`
           );
         }
+      } else if (it.type === "checkbox" && Array.isArray(it.options)) {
+        const options = it.options.map(normalizeOption);
+
+        for (const o of options) {
+          const val = o.value;
+          const txt = o.label;
+          const img = o.imageUrl;
+
+          h.push(
+            `<label class="opt-row ripple">
+               <span class="opt-main">
+                 <input class="ctl" type="checkbox" name="${name}" value="${attr(val)}">
+                 <span class="opt-text">${esc(txt)}</span>
+               </span>
+               ${
+                 img
+                   ? `<span class="opt-media">
+                        <img src="${attr(img)}" alt="${esc(txt)} görseli" class="opt-img">
+                      </span>`
+                   : ""
+               }
+             </label>`
+          );
+        }
+
+        if (showOther) {
+          h.push(
+            `<label class="other-wrap">
+              <input class="ctl other-toggle" type="checkbox" name="${name}" value="__OTHER__">
+              Diğer:
+              <input type="text" class="other-input" data-other-for="${name}" placeholder="Yazınız" disabled>
+            </label>`
+          );
+        }
+      } else if (it.type === "select" && Array.isArray(it.options)) {
+        const options = it.options.map(normalizeOption);
+        h.push(
+          `<div class="select-wrap">
+             <select class="ctl" name="${name}">
+               <option value="">Seçiniz</option>
+               ${
+                 options
+                   .map(
+                     (o) =>
+                       `<option value="${attr(o.value)}">${esc(o.label)}</option>`
+                   )
+                   .join("")
+               }
+             </select>
+           </div>`
+        );
+      } else if (it.type === "text") {
+        h.push(
+          `<div class="input-wrap">
+             <input class="ctl" type="text" name="${name}" placeholder="Yanıtınızı yazınız">
+           </div>`
+        );
+      } else if (it.type === "textarea") {
+        h.push(
+          `<div class="input-wrap">
+             <textarea class="ctl" name="${name}" rows="3" placeholder="Yanıtınızı yazınız"></textarea>
+           </div>`
+        );
       }
-      // (ileride checkbox/select/text/textarea da eklenebilir)
 
       h.push(`</div>`); // .field
       h.push(
