@@ -30,30 +30,30 @@ export default async (request) => {
       }
     }
 
-    // ?i= ile override, yoksa DB, o da yoksa default
-    const paramImg = url.searchParams.get("i");
-    const meta = {
-      title: form?.title || "Mikroar Anket",
-      description: form?.description || "Ankete katılın.",
-     const imgFromDb =
+   // ?i= ile override, yoksa DB, o da yoksa default
+const paramImg = url.searchParams.get("i");
+
+// DB'den gelebilecek alan adlarını yakala (snake_case + camelCase)
+const imgFromDb =
   form?.share_image_url ||
   form?.shareImageUrl ||
-  form?.shareImageURL ||
-  form?.shareimageurl ||
   "";
 
-let finalImg =
-  (paramImg && /^https?:\/\//i.test(paramImg)) ? paramImg : imgFromDb;
+// Önce parametre override, yoksa DB
+let finalImg = (paramImg && /^https?:\/\//i.test(paramImg)) ? paramImg : imgFromDb;
 
-// relative ise absolute yap
-if (finalImg && finalImg.startsWith("/")) finalImg = `${origin}${finalImg}`;
+// Relative geldiyse absolute yap
+if (finalImg && finalImg.startsWith("/")) {
+  finalImg = `${origin}${finalImg}`;
+}
 
-// boşsa ya da http değilse sağlam fallback
+// Hâlâ boşsa veya URL değilse sağlam fallback
+// NOT: sende default.jpg yok. O yüzden 3.png gibi gerçekten var olan bir dosya kullanıyoruz.
 if (!finalImg || !/^https?:\/\//i.test(finalImg)) {
   finalImg = `${origin}/og/3.png`;
 }
 
-// WhatsApp cache kırmak için küçük versiyon
+// WhatsApp cache kırmak için minik versiyon paramı
 finalImg = finalImg.includes("?") ? `${finalImg}&v=1` : `${finalImg}?v=1`;
 
 const meta = {
