@@ -55,7 +55,14 @@ if (!finalImg || !/^https?:\/\//i.test(finalImg)) {
 
 // WhatsApp cache kırmak için minik versiyon paramı
 finalImg = finalImg.includes("?") ? `${finalImg}&v=1` : `${finalImg}?v=1`;
-
+// WhatsApp için: GitHub blob linkleri sorun çıkarıyor.
+// Eğer görsel GitHub blob üzerinden geliyorsa, dosya adını çekip kendi domainimizden /og/ ile servis ediyoruz.
+if (finalImg && finalImg.includes("github.com/") && finalImg.includes("/public/og/")) {
+  const m = finalImg.match(/\/public\/og\/([^?]+)\?/i);
+  if (m && m[1]) {
+    finalImg = `${origin}/og/${m[1]}?v=1`;
+  }
+}
 const meta = {
   title: form?.title || "Mikroar Anket",
   description: form?.description || "Ankete katılın.",
