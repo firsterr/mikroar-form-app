@@ -25,18 +25,18 @@ exports.handler = async (event) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // 1) short_links tablosundan çöz (varsa)
+    // 1) shortlinks tablosundan çöz (varsa)
     let slug = null;
 
     const { data: slRow } = await supabase
-      .from("short_links")
+      .from("shortlinks")
       .select("slug")
       .eq("code", code)
       .maybeSingle();
 
     if (slRow?.slug) slug = slRow.slug;
 
-    // 2) short_links yoksa forms.short_code üzerinden dene
+    // 2) shortlinks yoksa forms.short_code üzerinden dene
     if (!slug) {
       const { data: fRow } = await supabase
         .from("forms")
