@@ -30,12 +30,16 @@ export default async (request) => {
       }
     }
 
-   image: (paramImg && /^https?:\/\//i.test(paramImg))
-       ? paramImg
-       : (form?.shareImageUrl && /^https?:\/\//i.test(form.shareImageUrl))
-         ? form.shareImageUrl
-         : `${origin}/og/default.jpg`,
-     
+    // ?i= ile override, yoksa DB, o da yoksa default
+    const paramImg = url.searchParams.get("i");
+    const meta = {
+      title: form?.title || "Mikroar Anket",
+      description: form?.description || "Ankete katılın.",
+      image: (paramImg && /^https?:\/\//i.test(paramImg))
+             ? paramImg
+             : (form?.shareImageUrl && /^https?:\/\//i.test(form.shareImageUrl))
+               ? form.shareImageUrl
+               : `${origin}/og/default.jpg`,
       url: origin + url.pathname
     };
 
