@@ -2,3 +2,4 @@ https://anket.mikroar.com/    /admin.html    302!
 /api/*                   /.netlify/functions/:splat  200
 /f/*                     /form.html                   200
 /*                       /form.html                   200
+/f/*  /.netlify/functions/share?code=:splat  200
